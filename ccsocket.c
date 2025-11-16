@@ -9,6 +9,9 @@
   #include <winsock2.h>
   #include <mstcpip.h>
   #include <WS2tcpip.h>
+#if defined(HAS_AF_UNIX)
+  #include <afunix.h>
+#endif
   #pragma comment(lib, "Ws2_32.lib")
   BOOL WINAPI DllMain(
     _In_ HINSTANCE hinstDLL,
@@ -23,8 +26,6 @@
     }
     return true;
   }
-  #define cc_fd2socket(fd)  (SOCKET)_get_osfhandle(fd)
-  #define cc_socket2fd(sock) _open_osfhandle(sock)
 #else
   #include <fcntl.h>
   #include <unistd.h>
@@ -33,8 +34,6 @@
   #include <netinet/in.h>
   #include <netinet/tcp.h>
   #include <sys/socket.h>
-  #define cc_fd2socket(fd)   (fd)
-  #define cc_socket2fd(sock) (sock)
 #endif
 
 typedef enum {
@@ -47,7 +46,7 @@ int ccsizeof(const struct sockaddr_storage *sa)
 {
   switch (sa->ss_family)
   {
-    case AF_LOCAL:
+    case AF_UNIX:
       return sizeof (struct sockaddr_un);
     case AF_INET:
       return sizeof (struct sockaddr_in);
@@ -69,7 +68,7 @@ int ccsocket_wrap_ip_and_port(ccsocket_t s, struct sockaddr_storage *sa, const c
     return r;
   switch (sa->ss_family)
   {
-    case AF_LOCAL:
+    case AF_UNIX:
     {
       struct sockaddr_un* in = (struct sockaddr_un*)sa;
       memcpy(in->sun_path, ip, strlen(ip));
@@ -125,7 +124,7 @@ ccsocket_t ccsocket1(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsock
 #if WIN32
   // TODO
 #else
-  int domain_r = AF_LOCAL; 
+  int domain_r = AF_UNIX;
   if (domain == CC_INET4) domain_r = AF_INET;
   if (domain == CC_INET6) domain_r = AF_INET6;
 
@@ -176,11 +175,11 @@ bool ccsocket_listen(ccsocket_t s, const char ip[], uint16_t port)
 #else
   errno = 0; int r;
   struct sockaddr_storage sa; memset(&sa, 0x0, sizeof(sa));
-  r = ccsocket_wrap_ip_and_port(cc_fd2socket(s), &sa, ip, port);
+  r = ccsocket_wrap_ip_and_port(s, &sa, ip, port);
   if (r)
     return false;
 
-  r = bind(cc_fd2socket(s), (const struct sockaddr *)&sa, ccsizeof(&sa));
+  r = bind(s, (const struct sockaddr *)&sa, ccsizeof(&sa));
   if (r < 0)
     return false;
   r = listen(s, SOMAXCONN);
@@ -198,10 +197,10 @@ bool ccsocket_connect(ccsocket_t s, const char ip[], uint16_t port)
 #else
   errno = 0; int r;
   struct sockaddr_storage sa;
-  r = ccsocket_wrap_ip_and_port(cc_fd2socket(s), &sa, ip, port);
+  r = ccsocket_wrap_ip_and_port(s, &sa, ip, port);
   if (r)
     return false;
-  r = connect(cc_fd2socket(s), (const struct sockaddr *)&sa, ccsizeof(&sa));
+  r = connect(s, (const struct sockaddr *)&sa, ccsizeof(&sa));
   // printf("r = %d, errno = %d\n", r, errno);
   if (r < 0)
     return false;
@@ -212,20 +211,20 @@ bool ccsocket_connect(ccsocket_t s, const char ip[], uint16_t port)
 /* 发送 ccsocket */
 int ccsocket_send(ccsocket_t s, const void *buf, size_t bsize)
 {
-  return send(cc_fd2socket(s), buf, bsize, 0);
+  return send((SOCKET)s, buf, bsize, 0);
 }
 
 /* 接收 ccsocket */
 int ccsocket_recv(ccsocket_t s, char *buf, size_t bsize)
 {
-  return recv(cc_fd2socket(s), buf, bsize, 0);
+  return recv((SOCKET)s, buf, bsize, 0);
 }
 
 /* 开启/关闭 nodelay */
 bool ccsocket_set_nodelay(ccsocket_t s, bool on)
 {
   int Enable = on;
-  if(setsockopt(cc_fd2socket(s), IPPROTO_TCP, TCP_NODELAY, (char*)&Enable, sizeof(Enable))) {
+  if(setsockopt((SOCKET)s, IPPROTO_TCP, TCP_NODELAY, (char*)&Enable, sizeof(Enable))) {
     return false;
   }
   return true;

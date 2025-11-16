@@ -7,16 +7,16 @@
 
 #if WIN32
   #define CCSOCKET_EXPORT __declspec(dllexport)
-  typedef void* SOCKET;
+  typedef intptr_t ccsocket_t;
 #else
   #define CCSOCKET_EXPORT __attribute__((visibility("default")))
+  typedef int ccsocket_t;
   typedef int SOCKET;
 #endif
 
 #ifndef INVALID_SOCKET
   #define INVALID_SOCKET (-1)
 #endif
-typedef int ccsocket_t;
 
 typedef enum {
   CC_CLOEXEC  = 1,
