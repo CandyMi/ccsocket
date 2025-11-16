@@ -5,15 +5,36 @@
 #include <string.h>
 
 #if WIN32
+  #include <windows.h>
   #include <winsock2.h>
+  #include <mstcpip.h>
   #include <WS2tcpip.h>
+  #pragma comment(lib, "Ws2_32.lib")
+  BOOL WINAPI DllMain(
+    _In_ HINSTANCE hinstDLL,
+    _In_ DWORD     fdwReason,
+    _In_ LPVOID    lpvReserved
+  ) {
+    if (fdwReason == DLL_PROCESS_ATTACH) {
+      WSADATA wsaData; // 用于初始化套接字
+      if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        exit(1);
+      }
+    }
+    return true;
+  }
+  #define cc_fd2socket(fd)  (SOCKET)_get_osfhandle(fd)
+  #define cc_socket2fd(sock) _open_osfhandle(sock)
 #else
   #include <fcntl.h>
   #include <unistd.h>
   #include <sys/un.h>
   #include <arpa/inet.h>
   #include <netinet/in.h>
+  #include <netinet/tcp.h>
   #include <sys/socket.h>
+  #define cc_fd2socket(fd)   (fd)
+  #define cc_socket2fd(sock) (sock)
 #endif
 
 typedef enum {
@@ -127,8 +148,8 @@ ccsocket_t ccsocket1(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsock
   }
   // 创建
   ccsocket_t s = socket(domain_r, proto_r, 0);
-  if (s == INVALIDE_SOCKET)
-    return INVALIDE_SOCKET;
+  if (s == INVALID_SOCKET)
+    return INVALID_SOCKET;
   /**
    * 如果之前没有设置, 则再这里完成.
    * 但是在多线程环境下这不能绝对保证.
@@ -140,7 +161,7 @@ ccsocket_t ccsocket1(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsock
     if (flags & CC_NONBLOCK)
       r = fcntl(s, F_SETFL, O_NONBLOCK | fcntl(s, F_GETFL));
     if (r == -1) {
-      close(s); s = INVALIDE_SOCKET;
+      close(s); s = INVALID_SOCKET;
     }
   }
   return s;
@@ -155,11 +176,11 @@ bool ccsocket_listen(ccsocket_t s, const char ip[], uint16_t port)
 #else
   errno = 0; int r;
   struct sockaddr_storage sa; memset(&sa, 0x0, sizeof(sa));
-  r = ccsocket_wrap_ip_and_port(s, &sa, ip, port);
+  r = ccsocket_wrap_ip_and_port(cc_fd2socket(s), &sa, ip, port);
   if (r)
     return false;
 
-  r = bind(s, (const struct sockaddr *)&sa, ccsizeof(&sa));
+  r = bind(cc_fd2socket(s), (const struct sockaddr *)&sa, ccsizeof(&sa));
   if (r < 0)
     return false;
   r = listen(s, SOMAXCONN);
@@ -177,10 +198,10 @@ bool ccsocket_connect(ccsocket_t s, const char ip[], uint16_t port)
 #else
   errno = 0; int r;
   struct sockaddr_storage sa;
-  r = ccsocket_wrap_ip_and_port(s, &sa, ip, port);
+  r = ccsocket_wrap_ip_and_port(cc_fd2socket(s), &sa, ip, port);
   if (r)
     return false;
-  r = connect(s, (const struct sockaddr *)&sa, ccsizeof(&sa));
+  r = connect(cc_fd2socket(s), (const struct sockaddr *)&sa, ccsizeof(&sa));
   // printf("r = %d, errno = %d\n", r, errno);
   if (r < 0)
     return false;
@@ -191,11 +212,21 @@ bool ccsocket_connect(ccsocket_t s, const char ip[], uint16_t port)
 /* 发送 ccsocket */
 int ccsocket_send(ccsocket_t s, const void *buf, size_t bsize)
 {
-  return send(s, buf, bsize, 0);
+  return send(cc_fd2socket(s), buf, bsize, 0);
 }
 
 /* 接收 ccsocket */
 int ccsocket_recv(ccsocket_t s, char *buf, size_t bsize)
 {
-  return recv(s, buf, bsize, 0);
+  return recv(cc_fd2socket(s), buf, bsize, 0);
+}
+
+/* 开启/关闭 nodelay */
+bool ccsocket_set_nodelay(ccsocket_t s, bool on)
+{
+  int Enable = on;
+  if(setsockopt(cc_fd2socket(s), IPPROTO_TCP, TCP_NODELAY, (char*)&Enable, sizeof(Enable))) {
+    return false;
+  }
+  return true;
 }

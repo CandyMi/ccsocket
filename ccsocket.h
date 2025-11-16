@@ -13,7 +13,9 @@
   typedef int SOCKET;
 #endif
 
-#define INVALIDE_SOCKET (-1)
+#ifndef INVALID_SOCKET
+  #define INVALID_SOCKET (-1)
+#endif
 typedef int ccsocket_t;
 
 typedef enum {
@@ -59,7 +61,7 @@ CCSOCKET_EXPORT int ccsocket_recv(ccsocket_t s, char *buf, size_t bsize);
 /* 修改一些标准/平台特有的标志来变更交互行为 */
 
 /* 设置非延迟发送 */
-// CCSOCKET_EXPORT void ccsocket_set_nodelay(ccsocket_t s, bool on);
+CCSOCKET_EXPORT bool ccsocket_set_nodelay(ccsocket_t s, bool on);
 
 #ifdef __cplusplus
 }
