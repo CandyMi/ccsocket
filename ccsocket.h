@@ -34,6 +34,12 @@ typedef enum {
 	CC_UDP = 2,
 } ccsocket_protocol_t;
 
+typedef enum {
+	CC_CONNECTING = 0,
+	CC_CONNECTED  = 1,
+	CC_CONNERROR  = 2,
+} ccsocket_conn_t;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -54,6 +60,9 @@ CCSOCKET_EXPORT bool ccsocket_listen(ccsocket_t s, const char ip[], uint16_t por
 
 /* 连接 ccsocket */
 CCSOCKET_EXPORT bool ccsocket_connect(ccsocket_t s, const char ip[], uint16_t port);
+
+/* 检查 ccsocket */
+CCSOCKET_EXPORT ccsocket_conn_t ccsocket_is_connected(ccsocket_t s);
 
 /* 发送 ccsocket */
 CCSOCKET_EXPORT int ccsocket_send(ccsocket_t s, const void* buf, size_t bsize);
