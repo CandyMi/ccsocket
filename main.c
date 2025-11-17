@@ -23,6 +23,10 @@ int main(int argc, char const *argv[])
   int rr = ccsocket_recv(sock, buf, 1024);
   printf("recv r = %d, ['%s']\n", rr, buf);
 
+  char addr[MAX_ADDRLEN]; int port;
+  int r = ccsocket_get_sockname(sock, addr, &port);
+  printf("client = {'%s', %d}, r = %d", addr, port, r);
+
   printf("close fd = %d\n", ccsocket_close(sock));
 
   return 0;
