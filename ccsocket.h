@@ -6,32 +6,28 @@
 #include <stdbool.h>
 
 #if WIN32
-  #define CCSOCKET_EXPORT __declspec(dllexport)
-  typedef intptr_t ccsocket_t;
+	#define CCSOCKET_EXPORT __declspec(dllexport)
+	typedef intptr_t ccsocket_t;
 #else
-  #define CCSOCKET_EXPORT __attribute__((visibility("default")))
-  typedef int ccsocket_t;
-  typedef int SOCKET;
-#endif
-
-#ifndef INVALID_SOCKET
-  #define INVALID_SOCKET (-1)
+	#define CCSOCKET_EXPORT __attribute__((visibility("default")))
+	typedef int ccsocket_t;
+	#define INVALID_SOCKET (~0)
 #endif
 
 typedef enum {
-  CC_CLOEXEC  = 1,
-  CC_NONBLOCK = 2,
+	CC_CLOEXEC  = 1,
+	CC_NONBLOCK = 2,
 } ccsocket_flags_t;
 
 typedef enum {
-  CC_LOCAL = 0,
-  CC_INET4 = 1,
-  CC_INET6 = 2,
+	CC_LOCAL = 0,
+	CC_INET4 = 1,
+	CC_INET6 = 2,
 } ccsocket_domain_t;
 
 typedef enum {
-  CC_TCP = 1,
-  CC_UDP = 2,
+	CC_TCP = 1,
+	CC_UDP = 2,
 } ccsocket_protocol_t;
 
 #ifdef __cplusplus
