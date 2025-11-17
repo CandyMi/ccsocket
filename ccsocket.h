@@ -14,8 +14,12 @@
 	#define INVALID_SOCKET (~0)
 #endif
 
+#ifndef MAX_ADDRLEN
+	#define MAX_ADDRLEN 255
+#endif
+
 typedef enum {
-	CC_CLOEXEC  = 1,
+	CC_CLOEXEC = 1,
 	CC_NONBLOCK = 2,
 } ccsocket_flags_t;
 
@@ -42,6 +46,9 @@ CCSOCKET_EXPORT ccsocket_t ccsocket(ccsocket_domain_t domain, ccsocket_protocol_
 /* 创建 ccsocket */
 CCSOCKET_EXPORT ccsocket_t ccsocket1(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsocket_flags_t flags);
 
+/* 准入 ccsocket */
+CCSOCKET_EXPORT ccsocket_t ccsocket_accept(ccsocket_t s, ccsocket_flags_t flags);
+
 /* 监听 ccsocket */
 CCSOCKET_EXPORT bool ccsocket_listen(ccsocket_t s, const char ip[], uint16_t port);
 
@@ -49,15 +56,23 @@ CCSOCKET_EXPORT bool ccsocket_listen(ccsocket_t s, const char ip[], uint16_t por
 CCSOCKET_EXPORT bool ccsocket_connect(ccsocket_t s, const char ip[], uint16_t port);
 
 /* 发送 ccsocket */
-CCSOCKET_EXPORT int ccsocket_send(ccsocket_t s, const void *buf, size_t bsize);
+CCSOCKET_EXPORT int ccsocket_send(ccsocket_t s, const void* buf, size_t bsize);
 
 /* 接收 ccsocket */
-CCSOCKET_EXPORT int ccsocket_recv(ccsocket_t s, char *buf, size_t bsize);
+CCSOCKET_EXPORT int ccsocket_recv(ccsocket_t s, char* buf, size_t bsize);
 
-/* 修改一些标准/平台特有的标志来变更交互行为 */
+/* ********** 下面是一些标准/平台特有的标志来变更交互行为 ********** */
+
+CCSOCKET_EXPORT bool ccsocket_get_sockname(ccsocket_t s, char addr[MAX_ADDRLEN], int* port);
 
 /* 设置非延迟发送 */
 CCSOCKET_EXPORT bool ccsocket_set_nodelay(ccsocket_t s, bool on);
+
+/* 设置非延迟发送 */
+CCSOCKET_EXPORT bool ccsocket_set_nonblock(ccsocket_t s);
+
+/* 设置非延迟发送 */
+CCSOCKET_EXPORT bool ccsocket_set_cloexec(ccsocket_t s);
 
 #ifdef __cplusplus
 }

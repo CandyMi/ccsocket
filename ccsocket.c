@@ -1,3 +1,7 @@
+#ifndef _GNU_SOURCE
+	#define _GNU_SOURCE
+#endif
+
 #include "ccsocket.h"
 
 #include <errno.h>
@@ -5,38 +9,38 @@
 #include <string.h>
 
 #if WIN32
-  #include <winsock2.h>
-  #include <mstcpip.h>
-  #include <WS2tcpip.h>
-#if defined(HAS_AF_UNIX)
-  #include <afunix.h>
-#endif
-  #include <Windows.h>
-  #pragma comment(lib, "Ws2_32.lib")
-  BOOL WINAPI DllMain(
-    _In_ HINSTANCE hinstDLL,
-    _In_ DWORD     fdwReason,
-    _In_ LPVOID    lpvReserved
-  ) {
-    if (fdwReason == DLL_PROCESS_ATTACH) {
-        //printf("init.\n");
-        WSADATA wsaData; // 用于初始化套接字
-        if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-            WSACleanup();
-            exit(1);
+    #include <winsock2.h>
+    #include <mstcpip.h>
+    #include <WS2tcpip.h>
+    #if defined(HAS_AF_UNIX)
+    #include <afunix.h>
+    #endif
+    #include <Windows.h>
+    #pragma comment(lib, "Ws2_32.lib")
+    BOOL WINAPI DllMain(
+        _In_ HINSTANCE hinstDLL,
+        _In_ DWORD     fdwReason,
+        _In_ LPVOID    lpvReserved
+    ) {
+        if (fdwReason == DLL_PROCESS_ATTACH) {
+            //printf("init.\n");
+            WSADATA wsaData; // 用于初始化套接字
+            if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+                WSACleanup();
+                exit(1);
+            }
         }
+        return true;
     }
-    return true;
-  }
 #else
-  #include <fcntl.h>
-  #include <unistd.h>
-  #include <sys/un.h>
-  #include <arpa/inet.h>
-  #include <netinet/in.h>
-  #include <netinet/tcp.h>
-  #include <sys/socket.h>
-  typedef int SOCKET;
+    #include <fcntl.h>
+    #include <unistd.h>
+    #include <sys/un.h>
+    #include <arpa/inet.h>
+    #include <netinet/in.h>
+    #include <netinet/tcp.h>
+    #include <sys/socket.h>
+    typedef int SOCKET;
 #endif
 
 typedef enum {
@@ -45,23 +49,42 @@ typedef enum {
 } cc_socket_t;
 
 static inline
-int ccsizeof(const struct sockaddr_storage *sa)
+int ccsizeof(const struct sockaddr_storage* sa)
 {
     switch (sa->ss_family)
     {
 #if defined(HAS_AF_UNIX)
         case AF_UNIX:
-            return sizeof (struct sockaddr_un);
+            return sizeof(struct sockaddr_un);
 #endif
         case AF_INET:
-            return sizeof (struct sockaddr_in);
+            return sizeof(struct sockaddr_in);
         case AF_INET6:
-            return sizeof (struct sockaddr_in6);
+            return sizeof(struct sockaddr_in6);
     }
     return 0;
 }
 
-static inline 
+static inline
+int ccsocket_set_flags(ccsocket_t s, ccsocket_flags_t flags)
+{
+    int r = -1;
+#if WIN32
+    u_long mode = 0;
+    if (flags & CC_CLOEXEC)
+        r = SetHandleInformation((HANDLE)s, HANDLE_FLAG_INHERIT, 0) ? 0 : -1;
+    if (flags & CC_NONBLOCK)
+        r = ioctlsocket(s, FIONBIO, &mode);
+#else
+    if (flags & CC_CLOEXEC)
+        r = fcntl(s, F_SETFD, FD_CLOEXEC | fcntl(s, F_GETFD));
+    if (flags & CC_NONBLOCK)
+        r = fcntl(s, F_SETFL, O_NONBLOCK | fcntl(s, F_GETFL));
+#endif
+    return r;
+}
+
+static inline
 int ccsocket_get_family(ccsocket_t s, struct sockaddr_storage* sa)
 {
     socklen_t addrlen = sizeof(*sa); memset(sa, 0x0, sizeof(*sa));
@@ -76,7 +99,7 @@ int ccsocket_get_family(ccsocket_t s, struct sockaddr_storage* sa)
 }
 
 static inline
-int ccsocket_wrap_ip_and_port(ccsocket_t s, struct sockaddr_storage *sa, const char ip[], uint16_t port)
+int ccsocket_wrap_ip_and_port(ccsocket_t s, struct sockaddr_storage* sa, const char ip[], uint16_t port)
 {
     int r = ccsocket_get_family(s, sa);
     if (r)
@@ -84,32 +107,32 @@ int ccsocket_wrap_ip_and_port(ccsocket_t s, struct sockaddr_storage *sa, const c
     // 根据协议转换IP与端口
     //struct sockaddr_in*  in;
     //struct sockaddr_in6* in6;
-    switch((int)sa->ss_family)
+    switch ((int)sa->ss_family)
     {
 #if defined(HAS_AF_UNIX)
-        case AF_UNIX:
-        {
-            struct sockaddr_un* in = (struct sockaddr_un*)sa;
-            memcpy(in->sun_path, ip, strlen(ip));
-            break;
-        }
+    case AF_UNIX:
+    {
+        struct sockaddr_un* in = (struct sockaddr_un*)sa;
+        memcpy(in->sun_path, ip, strlen(ip));
+        break;
+    }
 #endif
-        case AF_INET:
-        {
-            struct sockaddr_in* in = (struct sockaddr_in*)sa;
-            in->sin_port = htons(port);
-            if (1 != inet_pton(AF_INET, ip, &in->sin_addr))
-                return -1;
-            break;
-        }
-        case AF_INET6:
-        {
-            struct sockaddr_in6* in6 = (struct sockaddr_in6*)sa;
-            in6->sin6_port = htons(port);
-            if (1 != inet_pton(AF_INET6, ip, &in6->sin6_addr))
-                return -1;
-            break;
-        }
+    case AF_INET:
+    {
+        struct sockaddr_in* in = (struct sockaddr_in*)sa;
+        in->sin_port = htons(port);
+        if (1 != inet_pton(AF_INET, ip, &in->sin_addr))
+            return -1;
+        break;
+    }
+    case AF_INET6:
+    {
+        struct sockaddr_in6* in6 = (struct sockaddr_in6*)sa;
+        in6->sin6_port = htons(port);
+        if (1 != inet_pton(AF_INET6, ip, &in6->sin6_addr))
+            return -1;
+        break;
+    }
     }
     return 0;
 }
@@ -174,25 +197,37 @@ ccsocket_t ccsocket1(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsock
     * 但是在多线程环境下这不能绝对保证.
     */
     if (!isset && flags) {
-        int r = 0;
-#if WIN32
-        u_long mode = 0;
-        if (flags & CC_CLOEXEC)
-            r = SetHandleInformation((HANDLE)s, HANDLE_FLAG_INHERIT, 0) ? 0 : -1;
-        if (flags & CC_NONBLOCK)
-            r = ioctlsocket(s, FIONBIO, &mode);
-#else
-        if (flags & CC_CLOEXEC)
-            r = fcntl(s, F_SETFD, FD_CLOEXEC | fcntl(s, F_GETFD));
-        if (flags & CC_NONBLOCK)
-            r = fcntl(s, F_SETFL, O_NONBLOCK | fcntl(s, F_GETFL));
-#endif
+        int r = ccsocket_set_flags(s, flags);
         if (r == -1) {
             ccsocket_close(s);
             s = INVALID_SOCKET;
         }
-  }
-  return s;
+    }
+    return s;
+}
+
+/* 准入 ccsocket */
+ccsocket_t ccsocket_accept(ccsocket_t s, ccsocket_flags_t flags)
+{
+    errno = 0;
+#if defined(SOCK_NONBLOCK) && defined(SOCK_CLOEXEC)
+    int flags_r = 0;
+    if (flags & CC_NONBLOCK)
+        flags |= SOCK_NONBLOCK;
+    if (flags & CC_CLOEXEC)
+        flags |= SOCK_CLOEXEC;
+    return accept4(s, NULL, NULL, flags_r);
+#else
+    SOCKET c = accept(s, NULL, NULL);
+    if (c == INVALID_SOCKET)
+        return INVALID_SOCKET;
+    int r = ccsocket_set_flags(c, flags);
+    if (r == -1) {
+        ccsocket_close(c);
+        c = INVALID_SOCKET;
+    }
+    return c;
+#endif
 }
 
 /* 监听 ccsocket */
@@ -229,13 +264,13 @@ bool ccsocket_connect(ccsocket_t s, const char ip[], uint16_t port)
 }
 
 /* 发送 ccsocket */
-int ccsocket_send(ccsocket_t s, const void *buf, size_t bsize)
+int ccsocket_send(ccsocket_t s, const void* buf, size_t bsize)
 {
     return send((SOCKET)s, buf, (int)bsize, 0);
 }
 
 /* 接收 ccsocket */
-int ccsocket_recv(ccsocket_t s, char *buf, size_t bsize)
+int ccsocket_recv(ccsocket_t s, char* buf, size_t bsize)
 {
     return recv((SOCKET)s, buf, (int)bsize, 0);
 }
@@ -244,8 +279,50 @@ int ccsocket_recv(ccsocket_t s, char *buf, size_t bsize)
 bool ccsocket_set_nodelay(ccsocket_t s, bool on)
 {
     int Enable = on ? 1 : 0;
-    if(setsockopt((SOCKET)s, IPPROTO_TCP, TCP_NODELAY, (char*)&Enable, sizeof(Enable))) {
+    if (setsockopt((SOCKET)s, IPPROTO_TCP, TCP_NODELAY, (char*)&Enable, sizeof(Enable))) {
         return false;
     }
     return true;
+}
+
+bool ccsocket_get_sockname(ccsocket_t s, char addr[MAX_ADDRLEN], int *port)
+{
+    struct sockaddr_storage sa;
+    socklen_t addrlen = sizeof(sa); memset(&sa, 0x0, sizeof(sa));
+    int r = getsockname((SOCKET)s, (struct sockaddr*)&sa, (socklen_t*)&addrlen);
+    if (r == -1)
+        return false;
+    // struct2addr
+    switch ((int)sa.ss_family)
+    {
+#if defined(HAS_AF_UNIX)
+        case AF_UNIX:
+            return false;
+#endif
+        case AF_INET:
+        {
+            const struct sockaddr_in* in = (const struct sockaddr_in*)&sa;
+            inet_ntop(AF_INET, &in->sin_addr, addr, MAX_ADDRLEN);
+            *port = ntohs(in->sin_port);
+            break;
+        }
+        case AF_INET6:
+        {
+            const struct sockaddr_in6* in = (const struct sockaddr_in6*)&sa;
+            inet_ntop(AF_INET6, &in->sin6_addr, addr, MAX_ADDRLEN);
+            *port = ntohs(in->sin6_port);
+            break;
+        }
+    }
+    return true;
+}
+
+bool ccsocket_set_nonblock(ccsocket_t s)
+{
+    return ccsocket_set_flags(s, CC_NONBLOCK) == 0;
+}
+
+bool ccsocket_set_cloexec(ccsocket_t s)
+{
+    return ccsocket_set_flags(s, CC_CLOEXEC) == 0;
 }
