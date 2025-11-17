@@ -42,6 +42,7 @@
 	#include <sys/socket.h>
 	#define closesocket(s) close(s)
 	typedef int SOCKET;
+	#define SOCKET_ERROR (~0)
 #endif
 
 typedef enum {
@@ -52,7 +53,7 @@ typedef enum {
 static inline
 int ccsizeof(const struct sockaddr_storage* sa)
 {
-	switch (sa->ss_family)
+	switch ((int)sa->ss_family)
 	{
 #if defined(AF_UNIX)
 		case AF_UNIX:
@@ -64,6 +65,41 @@ int ccsizeof(const struct sockaddr_storage* sa)
 				return sizeof(struct sockaddr_in6);
 	}
 	return 0;
+}
+
+static inline
+bool ccsocket2addr(const struct sockaddr_storage* sa, char addr[MAX_ADDRLEN], int *port)
+{
+	switch ((int)sa->ss_family)
+	{
+#if defined(AF_UNIX)
+			case AF_UNIX:
+			{
+				const struct sockaddr_un* in = (const struct sockaddr_un*)sa;
+				strncpy(addr, in->sun_path, strlen(in->sun_path));
+				*port = 0;
+				break;
+			}
+				// return false;
+#endif
+			case AF_INET:
+			{
+				const struct sockaddr_in* in = (const struct sockaddr_in*)sa;
+				inet_ntop(AF_INET, &in->sin_addr, addr, MAX_ADDRLEN);
+				*port = ntohs(in->sin_port);
+				break;
+			}
+			case AF_INET6:
+			{
+				const struct sockaddr_in6* in = (const struct sockaddr_in6*)sa;
+				inet_ntop(AF_INET6, &in->sin6_addr, addr, MAX_ADDRLEN);
+				*port = ntohs(in->sin6_port);
+				break;
+			}
+			default:
+				return false;
+	}
+	return true;
 }
 
 static inline
@@ -196,8 +232,8 @@ ccsocket_t ccsocket1(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsock
 	if (!isset && flags) {
 			int r = ccsocket_set_flags(s, flags);
 			if (r == -1) {
-					ccsocket_close(s);
-					s = INVALID_SOCKET;
+				ccsocket_close(s);
+				s = INVALID_SOCKET;
 			}
 	}
 	return s;
@@ -210,18 +246,18 @@ ccsocket_t ccsocket_accept(ccsocket_t s, ccsocket_flags_t flags)
 #if defined(SOCK_NONBLOCK) && defined(SOCK_CLOEXEC)
 	int flags_r = 0;
 	if (flags & CC_NONBLOCK)
-			flags |= SOCK_NONBLOCK;
+		flags |= SOCK_NONBLOCK;
 	if (flags & CC_CLOEXEC)
-			flags |= SOCK_CLOEXEC;
+		flags |= SOCK_CLOEXEC;
 	return accept4(s, NULL, NULL, flags_r);
 #else
 	SOCKET c = accept(s, NULL, NULL);
 	if (c == INVALID_SOCKET)
-			return INVALID_SOCKET;
+		return INVALID_SOCKET;
 	int r = ccsocket_set_flags(c, flags);
 	if (r == -1) {
-			ccsocket_close(c);
-			c = INVALID_SOCKET;
+		ccsocket_close(c);
+		c = INVALID_SOCKET;
 	}
 	return c;
 #endif
@@ -234,15 +270,17 @@ bool ccsocket_listen(ccsocket_t s, const char ip[], uint16_t port)
 	struct sockaddr_storage sa; memset(&sa, 0x0, sizeof(sa));
 	r = ccsocket_wrap_ip_and_port(s, &sa, ip, port);
 	if (r)
-			return false;
+		return false;
 
 	r = bind(s, (const struct sockaddr*)&sa, ccsizeof(&sa));
 	if (r < 0)
-			return false;
+		return false;
+
 	r = listen(s, SOMAXCONN);
 	if (r < 0)
-			return false;
-	return true;
+		return false;
+
+		return true;
 }
 
 /* 连接 ccsocket */
@@ -252,11 +290,11 @@ bool ccsocket_connect(ccsocket_t s, const char ip[], uint16_t port)
 	struct sockaddr_storage sa;
 	r = ccsocket_wrap_ip_and_port(s, &sa, ip, port);
 	if (r)
-			return false;
+		return false;
 	r = connect((SOCKET)s, (const struct sockaddr*)&sa, ccsizeof(&sa));
 	// printf("r = %d, errno = %d\n", r, errno);
-	if (r < 0)
-			return false;
+	if (r <= 0)
+		return false;
 	return true;
 }
 
@@ -282,13 +320,24 @@ ccsocket_conn_t ccsocket_is_connected(ccsocket_t s)
 			state = CC_CONNECTED;
 	}
 #else
-	int r = connect((SOCKET)s, NULL, 0);
-	if (r == 1)
-			return true;
-	if (r == 0)
-			return ccsocket_is_connected(s);
-	/* 如果还没连上, 说明已经失败了. */
-	state = (r == -1 && errno == EISCONN) ? CC_CONNECTED : CC_CONNERROR;
+	int error = 0;
+	socklen_t len = sizeof(error);
+	int r = getsockopt((SOCKET)s, SOL_SOCKET, SO_ERROR, &error, (socklen_t*)&len);
+	// printf("getsockopt r = %d, error = %d\n", r, error);
+	if (r || error)
+		return CC_CONNERROR;
+	// 如果没有错误, 那么尝试获取对端地址来判断连接状态
+	char addr[MAX_ADDRLEN]; int port;
+	if (!ccsocket_get_peername(s, addr, &port)){
+		// printf("get_peername errno = %d\n", errno);
+		if (errno == ENOTCONN)
+			return CC_CONNECTING;
+		else if (errno == EISCONN)
+			return CC_CONNECTED;
+		else
+			return CC_CONNERROR;
+	}
+	state = CC_CONNECTED;
 #endif
 	return state;
 }
@@ -315,10 +364,20 @@ int ccsocket_recv(ccsocket_t s, char* buf, size_t bsize)
 bool ccsocket_set_nodelay(ccsocket_t s, bool on)
 {
 	int Enable = on ? 1 : 0;
-	if (setsockopt((SOCKET)s, IPPROTO_TCP, TCP_NODELAY, (char*)&Enable, sizeof(Enable))) {
-			return false;
+	if (SOCKET_ERROR == setsockopt((SOCKET)s, IPPROTO_TCP, TCP_NODELAY, (char*)&Enable, sizeof(Enable))) {
+		return false;
 	}
 	return true;
+}
+
+bool ccsocket_get_peername(ccsocket_t s, char addr[MAX_ADDRLEN], int *port)
+{
+	struct sockaddr_storage sa;
+	socklen_t addrlen = sizeof(sa); memset(&sa, 0x0, sizeof(sa));
+	int r = getpeername((SOCKET)s, (struct sockaddr*)&sa, (socklen_t*)&addrlen);
+	if (r == SOCKET_ERROR)
+		return false;
+	return ccsocket2addr(&sa, addr, port);
 }
 
 bool ccsocket_get_sockname(ccsocket_t s, char addr[MAX_ADDRLEN], int *port)
@@ -326,31 +385,9 @@ bool ccsocket_get_sockname(ccsocket_t s, char addr[MAX_ADDRLEN], int *port)
 	struct sockaddr_storage sa;
 	socklen_t addrlen = sizeof(sa); memset(&sa, 0x0, sizeof(sa));
 	int r = getsockname((SOCKET)s, (struct sockaddr*)&sa, (socklen_t*)&addrlen);
-	if (r == -1)
-			return false;
-	// struct2addr
-	switch ((int)sa.ss_family)
-	{
-#if defined(AF_UNIX)
-			case AF_UNIX:
-					return false;
-#endif
-			case AF_INET:
-			{
-					const struct sockaddr_in* in = (const struct sockaddr_in*)&sa;
-					inet_ntop(AF_INET, &in->sin_addr, addr, MAX_ADDRLEN);
-					*port = ntohs(in->sin_port);
-					break;
-			}
-			case AF_INET6:
-			{
-					const struct sockaddr_in6* in = (const struct sockaddr_in6*)&sa;
-					inet_ntop(AF_INET6, &in->sin6_addr, addr, MAX_ADDRLEN);
-					*port = ntohs(in->sin6_port);
-					break;
-			}
-	}
-	return true;
+	if (r == SOCKET_ERROR)
+		return false;
+	return ccsocket2addr(&sa, addr, port);
 }
 
 bool ccsocket_set_nonblock(ccsocket_t s)

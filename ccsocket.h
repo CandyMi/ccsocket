@@ -72,6 +72,7 @@ CCSOCKET_EXPORT int ccsocket_recv(ccsocket_t s, char* buf, size_t bsize);
 
 /* ********** 下面是一些标准/平台特有的标志来变更交互行为 ********** */
 
+CCSOCKET_EXPORT bool ccsocket_get_peername(ccsocket_t s, char addr[MAX_ADDRLEN], int *port);
 CCSOCKET_EXPORT bool ccsocket_get_sockname(ccsocket_t s, char addr[MAX_ADDRLEN], int* port);
 
 /* 设置非延迟发送 */
