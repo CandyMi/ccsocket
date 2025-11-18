@@ -7,26 +7,29 @@
 #else
   #include <unistd.h>
 #endif
-int main(int argc, char const *argv[])
+
+#define ccsocket_dump_error(sock, prefix)   \
+({                                          \
+  char errinfo[MAX_ERRORLEN];               \
+  ccsocket_get_error(sock, errinfo);        \
+  printf(prefix ": %s\n", errinfo);         \
+})
+
+void test_client_socket(ccsocket_t sock)
 {
-  //SOCKET sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
-
-  // ccsocket_t sock = ccsocket(CC_INET4, CC_TCP);
-  ccsocket_t sock = ccsocket1(CC_INET4, CC_TCP, CC_NONBLOCK);
-  printf("new fd = %ld\n", sock);
-
+  char errinfo[MAX_ERRORLEN];
   int rc = ccsocket_connect(sock, "120.24.216.230", 80);
   // int rc = ccsocket_connect(sock, "127.0.0.1", 7888);
-  printf("connect r = %d\n", rc); perror("conn");
+  ccsocket_dump_error(sock, "ccsocket_connect");
   while (1) {
     int r = ccsocket_is_connected(sock);
-    printf("connect state r = %d\n", r);
+    // printf("connect state r = %d\n", r);
     if (r == CC_CONNERROR) {
-      perror("connect error: ");
-      return 0;
+      ccsocket_dump_error(sock, "CC_CONNERROR");
+      exit(1);
     }
     if (r == CC_CONNECTED) {
-      perror("connected error: ");
+      ccsocket_dump_error(sock, "CC_CONNECTED");
       break;
     }
 #if WIN32
@@ -38,7 +41,11 @@ int main(int argc, char const *argv[])
 
   char req[] = "GET / HTTP/1.1\r\nHost: shangpiaoyi.cn\r\n\r\n";
   int rs = ccsocket_send(sock, req, strlen(req));
-  printf("send r = %d\n", rs); if (rs == -1) { perror("send error: "); return 0; }
+  printf("send r = %d\n", rs);
+  if (rs == -1) {
+    ccsocket_dump_error(sock, "ccsocket_send");
+    exit(1);
+  }
 
 #if WIN32
     Sleep(1000);
@@ -48,11 +55,48 @@ int main(int argc, char const *argv[])
 
 char buf[1024]; memset(buf, 0x0, 1024);
   int rr = ccsocket_recv(sock, buf, 1024);
-  printf("recv r = %d, ['%s']\n", rr, buf); if (rr == -1) { perror("recv error: "); return 0; }
+  printf("recv r = %d, ['%s']\n", rr, buf);
+  if (rr == -1) {
+    ccsocket_dump_error(sock, "ccsocket_recv");
+    exit(1);
+  }
 
   char addr[MAX_ADDRLEN]; int port;
   int r = ccsocket_get_sockname(sock, addr, &port);
-  printf("client = {'%s', %d}, r = %d", addr, port, r);
+  printf("ccsocket_get_sockname = {'%s', %d}, r = %d\n", addr, port, r);
+}
+
+void test_server_socket(ccsocket_t sock) {
+  if (!ccsocket_set_reuseaddr(sock, true)) {
+    ccsocket_dump_error(sock, "ccsocket_set_reuseaddr");
+    exit(1);
+  }
+
+  if (!ccsocket_listen(sock, "0.0.0.0", 7888)) {
+    ccsocket_dump_error(sock, "ccsocket_listen");
+    exit(1);
+  }
+
+  ccsocket_t csock = ccsocket_accept(sock, 0);
+  if (csock == INVALID_SOCKET) {
+    ccsocket_dump_error(sock, "ccsocket_accept");
+    exit(1);
+  }
+  
+  ccsocket_send(csock, "hello\r\n", 7);
+  ccsocket_close(csock);
+}
+
+int main(int argc, char const *argv[])
+{
+  //SOCKET sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+
+  // ccsocket_t sock = ccsocket(CC_INET4, CC_TCP);
+  ccsocket_t sock = ccsocket1(CC_INET4, CC_TCP, CC_NONBLOCK);
+  printf("new fd = %ld\n", sock);
+
+  test_client_socket(sock);
+  // test_server_socket(sock);
 
   printf("close fd = %d\n", ccsocket_close(sock));
 
