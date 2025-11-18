@@ -9,15 +9,14 @@
 #endif
 
 #define ccsocket_dump_error(sock, prefix)   \
-({                                          \
+{                                           \
   char errinfo[MAX_ERRORLEN];               \
   ccsocket_get_error(sock, errinfo);        \
   printf(prefix ": %s\n", errinfo);         \
-})
+}
 
 void test_client_socket(ccsocket_t sock)
 {
-  char errinfo[MAX_ERRORLEN];
   int rc = ccsocket_connect(sock, "120.24.216.230", 80);
   // int rc = ccsocket_connect(sock, "127.0.0.1", 7888);
   ccsocket_dump_error(sock, "ccsocket_connect");
@@ -93,7 +92,7 @@ int main(int argc, char const *argv[])
 
   // ccsocket_t sock = ccsocket(CC_INET4, CC_TCP);
   ccsocket_t sock = ccsocket1(CC_INET4, CC_TCP, CC_NONBLOCK);
-  printf("new fd = %ld\n", sock);
+  printf("new fd = %ld\n", (long)sock);
 
   test_client_socket(sock);
   // test_server_socket(sock);
