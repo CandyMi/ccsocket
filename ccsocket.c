@@ -296,11 +296,7 @@ bool ccsocket_connect(ccsocket_t s, const char ip[], uint16_t port)
   r = ccsocket_wrap_ip_and_port(s, &sa, ip, port);
   if (r)
     return false;
-  r = connect((SOCKET)s, (const struct sockaddr*)&sa, ccsizeof(&sa));
-  // printf("r = %d, errno = %d\n", r, errno);
-  if (r <= 0)
-    return false;
-  return true;
+  return connect((SOCKET)s, (const struct sockaddr*)&sa, ccsizeof(&sa)) != SOCKET_ERROR;
 }
 
 ccsocket_conn_t ccsocket_is_connected(ccsocket_t s)
@@ -341,9 +337,12 @@ ccsocket_conn_t ccsocket_is_connected(ccsocket_t s)
     // printf("get_peername errno = %d\n", errno);
     if (errno == ENOTCONN)
       return CC_CONNECTING;
-    else if (errno == EISCONN)
-      return CC_CONNECTED;
-    else
+  }
+  // 即使能获取到对端地址, 也可能尚未完成连接
+  if (!ccsocket_connect(s, addr, port)) {
+    if (errno == EINPROGRESS)
+      return CC_CONNECTING;
+    else if (errno != EISCONN)
       return CC_CONNERROR;
   }
   state = CC_CONNECTED;
