@@ -323,24 +323,33 @@ ccsocket_conn_t ccsocket_is_connected(ccsocket_t s)
     state = CC_CONNECTED;
   }
 #else
-  int error = 0;
-  socklen_t len = sizeof(error);
+  int error = 0; socklen_t len = sizeof(error);
   int r = getsockopt((SOCKET)s, SOL_SOCKET, SO_ERROR, &error, (socklen_t*)&len);
   // printf("getsockopt r = %d, error = %d, errno = %d\n", r, error, errno);
   if (r || error) {
     errno = error;
     return CC_CONNERROR;
   }
-  // 如果没有错误, 那么尝试获取对端地址来判断连接状态
+  /**
+   * 如果还没发生错误, 就尝试获取对端地址
+   * 获取地址失败可能是因为一些平台未连接成功时不会设置的.
+   * 因此这里需要做一些额外的判断来处理这种特殊的情况.
+   */
   char addr[MAX_ADDRLEN]; int port;
-  if (!ccsocket_get_peername(s, addr, &port)){
-    // printf("get_peername errno = %d\n", errno);
+  if (!ccsocket_get_peername(s, addr, &port)) {
+    // printf("ccsocket_get_peername errno = %d\n", errno);
     if (errno == ENOTCONN)
       return CC_CONNECTING;
   }
-  // 即使能获取到对端地址, 也可能尚未完成连接
+  /**
+   * 即使能获取到对端地址, 也可能尚未完成连接.
+   * 因此需要再次调用 connect 来判断连接状态.
+   * EINPROGRESS 表示连接正在进行中.
+   * EALREADY 表示还在继续尝试链接.
+   */
   if (!ccsocket_connect(s, addr, port)) {
-    if (errno == EINPROGRESS)
+    // printf("ccsocket_connect errno = %d\n", errno);
+    if (errno == EINPROGRESS || errno == EALREADY)
       return CC_CONNECTING;
     else if (errno != EISCONN)
       return CC_CONNERROR;
