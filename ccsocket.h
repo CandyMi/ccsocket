@@ -63,6 +63,9 @@ CCSOCKET_EXPORT ccsocket_t ccsocket_accept(ccsocket_t s, ccsocket_flags_t flags)
 /* 监听 ccsocket */
 CCSOCKET_EXPORT bool ccsocket_listen(ccsocket_t s, const char ip[], uint16_t port);
 
+/* 监听 ccsocket 实现负载均衡(仅部分平台) */
+CCSOCKET_EXPORT bool ccsocket_listen1(ccsocket_t s, const char ip[], uint16_t port);
+
 /* 连接 ccsocket */
 CCSOCKET_EXPORT bool ccsocket_connect(ccsocket_t s, const char ip[], uint16_t port);
 
@@ -93,6 +96,9 @@ CCSOCKET_EXPORT bool ccsocket_set_nodelay(ccsocket_t s, bool on);
 
 /* 设置地址重用 */
 CCSOCKET_EXPORT bool ccsocket_set_reuseaddr(ccsocket_t s, bool on);
+
+/* 设置端口重用 */
+CCSOCKET_EXPORT bool ccsocket_set_reuseport(ccsocket_t s, bool on);
 
 /* 设置非延迟发送 */
 CCSOCKET_EXPORT bool ccsocket_set_nonblock(ccsocket_t s);

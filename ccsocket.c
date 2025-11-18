@@ -288,6 +288,39 @@ bool ccsocket_listen(ccsocket_t s, const char ip[], uint16_t port)
   return true;
 }
 
+/* 监听 ccsocket 实现负载均衡(仅部分平台) */
+bool ccsocket_listen1(ccsocket_t s, const char ip[], uint16_t port)
+{
+  /**
+   * 注意:
+   * 1. 仅下面列出的平台和之后的版本才支持内核负载均衡.
+   * 2. DragonFly | FreeBSD 最多支持256个进程.
+   * Linux 3.9 : SO_REUSEPORT
+   * DragonFlyBSD 3.6 : SO_REUSEPORT
+   * FreeBSD 12 : SO_REUSEPORT_LB
+   * Solaris 11.4 : SO_REUSEPORT
+   * AIX 7.2.5.0 : SO_REUSEPORT
+   */
+#if defined(SO_REUSEPORT_LB)
+  int Enable = 1;
+  if (SOCKET_ERROR == setsockopt((SOCKET)s, SOL_SOCKET, SO_REUSEPORT_LB, (char*)&Enable, sizeof(Enable))) {
+    errno = EINVAL;
+    return false;
+  }
+#elif defined(SO_REUSEPORT)
+  if (!ccsocket_set_reuseport(s, true)) {
+    errno = EINVAL;
+    return false;
+  }
+#elif WIN32
+  if (!ccsocket_set_reuseaddr(s, true)) {
+    errno = EINVAL;
+    return false;
+  }
+#endif
+  return ccsocket_listen(s, ip, port);
+}
+
 /* 连接 ccsocket */
 bool ccsocket_connect(ccsocket_t s, const char ip[], uint16_t port)
 {
@@ -416,6 +449,7 @@ bool ccsocket_set_sndtimeout(ccsocket_t s, int timeout)
   return SOCKET_ERROR != setsockopt((SOCKET)s, SOL_SOCKET, SO_SNDTIMEO, (char*)&tm, sizeof(tm));
 }
 
+/* 获取对端地址/端口 */
 bool ccsocket_get_peername(ccsocket_t s, char addr[MAX_ADDRLEN], int *port)
 {
   struct sockaddr_storage sa;
@@ -426,6 +460,7 @@ bool ccsocket_get_peername(ccsocket_t s, char addr[MAX_ADDRLEN], int *port)
   return ccsocket2addr(&sa, addr, port);
 }
 
+/* 获取本端地址/端口 */
 bool ccsocket_get_sockname(ccsocket_t s, char addr[MAX_ADDRLEN], int *port)
 {
   struct sockaddr_storage sa;
