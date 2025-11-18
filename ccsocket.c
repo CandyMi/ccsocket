@@ -12,7 +12,7 @@
   #include <winsock2.h>
   #include <mstcpip.h>
   #include <WS2tcpip.h>
-  #if defined(HAS_AF_UNIX)
+  #if defined(AF_UNIX)
     #include <afunix.h>
   #endif
   #include <Windows.h>
@@ -76,7 +76,7 @@ bool ccsocket2addr(const struct sockaddr_storage* sa, char addr[MAX_ADDRLEN], in
     case AF_UNIX:
     {
       const struct sockaddr_un* in = (const struct sockaddr_un*)sa;
-      strncpy(addr, in->sun_path, strlen(in->sun_path));
+      memcpy(addr, in->sun_path, strlen(in->sun_path));
       *port = 0;
       break;
     }
@@ -107,7 +107,7 @@ int ccsocket_set_flags(ccsocket_t s, ccsocket_flags_t flags)
 {
   int r = -1;
 #if WIN32
-  u_long mode = 0;
+  u_long mode = 1;
   if (flags & CC_CLOEXEC)
     r = SetHandleInformation((HANDLE)s, HANDLE_FLAG_INHERIT, 0) ? 0 : -1;
   if (flags & CC_NONBLOCK)
@@ -257,10 +257,12 @@ ccsocket_t ccsocket_accept(ccsocket_t s, ccsocket_flags_t flags)
   SOCKET c = accept(s, NULL, NULL);
   if (c == INVALID_SOCKET)
     return INVALID_SOCKET;
-  int r = ccsocket_set_flags(c, flags);
-  if (r == -1) {
-    ccsocket_close(c);
-    c = INVALID_SOCKET;
+  if (flags) {
+    int r = ccsocket_set_flags(c, flags);
+    if (r == -1) {
+      ccsocket_close(c);
+      c = INVALID_SOCKET;
+    }
   }
   return c;
 #endif
@@ -313,6 +315,8 @@ ccsocket_conn_t ccsocket_is_connected(ccsocket_t s)
       case WSAEISCONN:
         state = CC_CONNECTED;
         break;
+      case WSAEALREADY:
+      case WSAEWOULDBLOCK:
       case WSAEINPROGRESS:
         state = CC_CONNECTING;
         break;
