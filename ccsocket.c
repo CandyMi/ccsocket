@@ -381,10 +381,39 @@ int ccsocket_recv(ccsocket_t s, char* buf, size_t bsize)
 bool ccsocket_set_nodelay(ccsocket_t s, bool on)
 {
   int Enable = on ? 1 : 0;
-  if (SOCKET_ERROR == setsockopt((SOCKET)s, IPPROTO_TCP, TCP_NODELAY, (char*)&Enable, sizeof(Enable))) {
-    return false;
-  }
-  return true;
+  return SOCKET_ERROR != setsockopt((SOCKET)s, IPPROTO_TCP, TCP_NODELAY, (char*)&Enable, sizeof(Enable));
+}
+
+/* 开启/关闭 reuse address */
+bool ccsocket_set_reuseaddr(ccsocket_t s, bool on)
+{
+  int Enable = on ? 1 : 0;
+  return SOCKET_ERROR != setsockopt((SOCKET)s, SOL_SOCKET, SO_REUSEADDR, (char*)&Enable, sizeof(Enable));
+}
+
+/* 开启/关闭 reuse port */
+bool ccsocket_set_reuseport(ccsocket_t s, bool on)
+{
+#if defined(SO_REUSEPORT)
+  int Enable = on ? 1 : 0;
+  return SOCKET_ERROR != setsockopt((SOCKET)s, SOL_SOCKET, SO_REUSEPORT, (char*)&Enable, sizeof(Enable));
+#else
+  return false;
+#endif
+}
+
+/* 设置最大接收时间 */
+bool ccsocket_set_rcvtimeout(ccsocket_t s, int timeout)
+{
+  socklen_t tm = timeout;
+  return SOCKET_ERROR != setsockopt((SOCKET)s, SOL_SOCKET, SO_RCVTIMEO, (char*)&tm, sizeof(tm));
+}
+
+/* 设置最大发送时间 */
+bool ccsocket_set_sndtimeout(ccsocket_t s, int timeout)
+{
+  socklen_t tm = timeout;
+  return SOCKET_ERROR != setsockopt((SOCKET)s, SOL_SOCKET, SO_SNDTIMEO, (char*)&tm, sizeof(tm));
 }
 
 bool ccsocket_get_peername(ccsocket_t s, char addr[MAX_ADDRLEN], int *port)
@@ -415,4 +444,26 @@ bool ccsocket_set_nonblock(ccsocket_t s)
 bool ccsocket_set_cloexec(ccsocket_t s)
 {
   return ccsocket_set_flags(s, CC_CLOEXEC) == 0;
+}
+
+void ccsocket_get_error(ccsocket_t s, char buf[MAX_ERRORLEN])
+{
+  int err = 0; socklen_t len = sizeof(err); memset(buf, 0x0, MAX_ERRORLEN);
+  getsockopt((SOCKET)s, SOL_SOCKET, SO_ERROR, (char*)&err, (socklen_t*)&len);
+#if WIN32
+  if (!err)
+    err = WSAGetLastError();
+  FormatMessageA(
+    FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+    NULL,
+    err,
+    MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+    buf, (DWORD)MAX_ERRORLEN, NULL
+  );
+#else
+  if (!err)
+    err = errno;
+  const char *info = strerror(err);
+  memcpy(buf, info, strlen(info));
+#endif
 }
