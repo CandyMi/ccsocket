@@ -2,7 +2,9 @@
 #define _CCSOCKET_H_
 
 #if WIN32
-    #WIN32_LEAN_AND_MEAN 1
+    #ifndef WIN32_LEAN_AND_MEAN
+      #define WIN32_LEAN_AND_MEAN 1
+    #endif
     #define CCSOCKET_EXPORT __declspec(dllexport)
     typedef intptr_t ccsocket_t;
 #else
