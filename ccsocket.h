@@ -1,10 +1,11 @@
 #ifndef _CCSOCKET_H_
 #define _CCSOCKET_H_
 
+#include <stdint.h>
+#include <stdlib.h>
+#include <stdbool.h>
+
 #if WIN32
-    #ifndef WIN32_LEAN_AND_MEAN
-      #define WIN32_LEAN_AND_MEAN 1
-    #endif
     #define CCSOCKET_EXPORT __declspec(dllexport)
     typedef intptr_t ccsocket_t;
 #else
@@ -20,10 +21,6 @@
 #ifndef MAX_ERRORLEN
     #define MAX_ERRORLEN 255
 #endif
-
-#include <stdint.h>
-#include <stdlib.h>
-#include <stdbool.h>
 
 typedef enum {
     CC_NOFLAG   = 0,
@@ -67,13 +64,13 @@ CCSOCKET_EXPORT ccsocket_t ccsocket_accept(ccsocket_t s, ccsocket_flags_t flags)
 CCSOCKET_EXPORT ccsocket_t ccsocket_accept1(ccsocket_t s, char addr[MAX_ADDRLEN], uint16_t *port, ccsocket_flags_t flags);
 
 /* 监听 ccsocket */
-CCSOCKET_EXPORT bool ccsocket_listen(ccsocket_t s, const char addr[], uint16_t port);
+CCSOCKET_EXPORT bool ccsocket_listen(ccsocket_t s, const char *addr, uint16_t port);
 
 /* 监听 ccsocket 实现负载均衡(仅部分平台) */
-CCSOCKET_EXPORT bool ccsocket_listen1(ccsocket_t s, const char addr[], uint16_t port);
+CCSOCKET_EXPORT bool ccsocket_listen1(ccsocket_t s, const char *addr, uint16_t port);
 
 /* 连接 ccsocket */
-CCSOCKET_EXPORT bool ccsocket_connect(ccsocket_t s, const char addr[], uint16_t port);
+CCSOCKET_EXPORT bool ccsocket_connect(ccsocket_t s, const char *addr, uint16_t port);
 
 /* 检查 ccsocket */
 CCSOCKET_EXPORT ccsocket_conn_t ccsocket_is_connected(ccsocket_t s);

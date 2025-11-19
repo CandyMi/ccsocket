@@ -304,7 +304,7 @@ bool ccsocket_listen_internal(ccsocket_t s, const char ip[MAX_ADDRLEN], uint16_t
 }
 
 /* 监听 ccsocket */
-bool ccsocket_listen(ccsocket_t s, const char ip[MAX_ADDRLEN], uint16_t port)
+bool ccsocket_listen(ccsocket_t s, const char *ip, uint16_t port)
 {
   /**
    * 确保端口/地址被独占, 解决部分平台安全问题.
@@ -324,7 +324,7 @@ bool ccsocket_listen(ccsocket_t s, const char ip[MAX_ADDRLEN], uint16_t port)
 }
 
 /* 监听 ccsocket 实现负载均衡(仅部分平台) */
-bool ccsocket_listen1(ccsocket_t s, const char ip[MAX_ADDRLEN], uint16_t port)
+bool ccsocket_listen1(ccsocket_t s, const char *ip, uint16_t port)
 {
   /**
    * 注意:
@@ -357,7 +357,7 @@ bool ccsocket_listen1(ccsocket_t s, const char ip[MAX_ADDRLEN], uint16_t port)
 }
 
 /* 连接 ccsocket */
-bool ccsocket_connect(ccsocket_t s, const char ip[MAX_ADDRLEN], uint16_t port)
+bool ccsocket_connect(ccsocket_t s, const char *ip, uint16_t port)
 {
   errno = 0; int r;
   struct sockaddr_storage sa;
