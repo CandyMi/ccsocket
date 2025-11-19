@@ -60,27 +60,25 @@ char buf[1024]; memset(buf, 0x0, 1024);
     exit(1);
   }
 
-  char addr[MAX_ADDRLEN]; int port;
+  char addr[MAX_ADDRLEN]; uint16_t port;
   int r = ccsocket_get_sockname(sock, addr, &port);
   printf("ccsocket_get_sockname = {'%s', %d}, r = %d\n", addr, port, r);
 }
 
 void test_server_socket(ccsocket_t sock) {
-  if (!ccsocket_set_reuseaddr(sock, true)) {
-    ccsocket_dump_error(sock, "ccsocket_set_reuseaddr");
-    exit(1);
-  }
 
   if (!ccsocket_listen(sock, "0.0.0.0", 7888)) {
     ccsocket_dump_error(sock, "ccsocket_listen");
     exit(1);
   }
 
-  ccsocket_t csock = ccsocket_accept(sock, 0);
+  char addr[MAX_ADDRLEN]; uint16_t port;
+  ccsocket_t csock = ccsocket_accept1(sock, addr, &port, 0);
   if (csock == INVALID_SOCKET) {
-    ccsocket_dump_error(sock, "ccsocket_accept");
-    exit(1);
+      ccsocket_dump_error(sock, "ccsocket_accept");
+      exit(1);
   }
+  printf("sock{ip = '%s', port = %d}\n", addr, port);
   
   ccsocket_send(csock, "hello\r\n", 7);
   ccsocket_close(csock);
@@ -90,12 +88,12 @@ int main(int argc, char const *argv[])
 {
   //SOCKET sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
 
-  // ccsocket_t sock = ccsocket(CC_INET4, CC_TCP);
-  ccsocket_t sock = ccsocket1(CC_INET4, CC_TCP, CC_NONBLOCK);
+  ccsocket_t sock = ccsocket(CC_INET4, CC_TCP);
+  // ccsocket_t sock = ccsocket1(CC_INET4, CC_TCP, CC_NONBLOCK);
   printf("new fd = %ld\n", (long)sock);
 
-  test_client_socket(sock);
-  // test_server_socket(sock);
+  // test_client_socket(sock);
+  test_server_socket(sock);
 
   printf("close fd = %d\n", ccsocket_close(sock));
 
