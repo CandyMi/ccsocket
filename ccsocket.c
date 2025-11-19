@@ -68,7 +68,7 @@ int ccsizeof(const struct sockaddr_storage* sa)
 }
 
 static inline
-bool ccsocket2addr(const struct sockaddr_storage* sa, char addr[MAX_ADDRLEN], int *port)
+bool ccsocket2addr(const struct sockaddr_storage* sa, char addr[MAX_ADDRLEN], uint16_t *port)
 {
   switch ((int)sa->ss_family)
   {
@@ -136,7 +136,7 @@ int ccsocket_get_family(ccsocket_t s, struct sockaddr_storage* sa)
 }
 
 static inline
-int ccsocket_wrap_ip_and_port(ccsocket_t s, struct sockaddr_storage* sa, const char ip[], uint16_t port)
+int ccsocket_wrap_ip_and_port(ccsocket_t s, struct sockaddr_storage* sa, const char ip[MAX_ADDRLEN], uint16_t port)
 {
   int r = ccsocket_get_family(s, sa);
   if (r)
@@ -245,16 +245,29 @@ ccsocket_t ccsocket1(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsock
 /* 准入 ccsocket */
 ccsocket_t ccsocket_accept(ccsocket_t s, ccsocket_flags_t flags)
 {
-  errno = 0;
+  return ccsocket_accept1(s, NULL, NULL, flags);
+}
+
+ccsocket_t ccsocket_accept1(ccsocket_t s, char ip[MAX_ADDRLEN], uint16_t *port, ccsocket_flags_t flags)
+{
+  errno = 0; int sasize = 0;
+  struct sockaddr_storage* sap = NULL; int* sasizep = NULL;
+  struct sockaddr_storage sa; memset(&sa, 0x0, sizeof(sa));
+  if (ip && port) {
+    if (ccsocket_get_family(s, &sa))
+      return false;
+    sap = &sa; sasizep = &sasize; sasize = ccsizeof(sap);
+  }
+  SOCKET c;
 #if defined(SOCK_NONBLOCK) && defined(SOCK_CLOEXEC)
   int flags_r = 0;
   if (flags & CC_NONBLOCK)
     flags |= SOCK_NONBLOCK;
   if (flags & CC_CLOEXEC)
     flags |= SOCK_CLOEXEC;
-  return accept4(s, NULL, NULL, flags_r);
+  c = accept4(s, (struct sockaddr*)sap, sasizep, flags_r);
 #else
-  SOCKET c = accept(s, NULL, NULL);
+  c = accept(s, (struct sockaddr*)sap, sasizep);
   if (c == INVALID_SOCKET)
     return INVALID_SOCKET;
   if (flags) {
@@ -264,12 +277,14 @@ ccsocket_t ccsocket_accept(ccsocket_t s, ccsocket_flags_t flags)
       c = INVALID_SOCKET;
     }
   }
-  return c;
 #endif
+  if (ip && port)
+    ccsocket2addr(sap, ip, port);
+  return c;
 }
 
-/* 监听 ccsocket */
-bool ccsocket_listen(ccsocket_t s, const char ip[], uint16_t port)
+static inline
+bool ccsocket_listen_internal(ccsocket_t s, const char ip[MAX_ADDRLEN], uint16_t port)
 {
   errno = 0; int r = 0;
   struct sockaddr_storage sa; memset(&sa, 0x0, sizeof(sa));
@@ -288,8 +303,28 @@ bool ccsocket_listen(ccsocket_t s, const char ip[], uint16_t port)
   return true;
 }
 
+/* 监听 ccsocket */
+bool ccsocket_listen(ccsocket_t s, const char ip[MAX_ADDRLEN], uint16_t port)
+{
+  /**
+   * 确保端口/地址被独占, 解决部分平台安全问题.
+   */
+#if defined(SO_EXCLUSIVEADDRUSE)
+  int Enable = 1; errno = 0;
+  if (SOCKET_ERROR == setsockopt((SOCKET)s, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, (char*)&Enable, sizeof(Enable))) {
+    return false;
+  }
+#elif defined(SO_EXCLBIND)
+  int Enable = 1; errno = 0;
+  if (SOCKET_ERROR == setsockopt((SOCKET)s, SOL_SOCKET, SO_EXCLBIND, (char*)&Enable, sizeof(Enable))) {
+    return false;
+  }
+#endif
+  return ccsocket_listen_internal(s, ip, port);
+}
+
 /* 监听 ccsocket 实现负载均衡(仅部分平台) */
-bool ccsocket_listen1(ccsocket_t s, const char ip[], uint16_t port)
+bool ccsocket_listen1(ccsocket_t s, const char ip[MAX_ADDRLEN], uint16_t port)
 {
   /**
    * 注意:
@@ -318,11 +353,11 @@ bool ccsocket_listen1(ccsocket_t s, const char ip[], uint16_t port)
     return false;
   }
 #endif
-  return ccsocket_listen(s, ip, port);
+  return ccsocket_listen_internal(s, ip, port);
 }
 
 /* 连接 ccsocket */
-bool ccsocket_connect(ccsocket_t s, const char ip[], uint16_t port)
+bool ccsocket_connect(ccsocket_t s, const char ip[MAX_ADDRLEN], uint16_t port)
 {
   errno = 0; int r;
   struct sockaddr_storage sa;
@@ -368,7 +403,7 @@ ccsocket_conn_t ccsocket_is_connected(ccsocket_t s)
    * 获取地址失败可能是因为一些平台未连接成功时不会设置的.
    * 因此这里需要做一些额外的判断来处理这种特殊的情况.
    */
-  char addr[MAX_ADDRLEN]; int port;
+  char addr[MAX_ADDRLEN]; uint16_t port;
   if (!ccsocket_get_peername(s, addr, &port)) {
     // printf("ccsocket_get_peername errno = %d\n", errno);
     if (errno == ENOTCONN)
@@ -450,7 +485,7 @@ bool ccsocket_set_sndtimeout(ccsocket_t s, int timeout)
 }
 
 /* 获取对端地址/端口 */
-bool ccsocket_get_peername(ccsocket_t s, char addr[MAX_ADDRLEN], int *port)
+bool ccsocket_get_peername(ccsocket_t s, char addr[MAX_ADDRLEN], uint16_t *port)
 {
   struct sockaddr_storage sa;
   socklen_t addrlen = sizeof(sa); memset(&sa, 0x0, sizeof(sa));
@@ -461,7 +496,7 @@ bool ccsocket_get_peername(ccsocket_t s, char addr[MAX_ADDRLEN], int *port)
 }
 
 /* 获取本端地址/端口 */
-bool ccsocket_get_sockname(ccsocket_t s, char addr[MAX_ADDRLEN], int *port)
+bool ccsocket_get_sockname(ccsocket_t s, char addr[MAX_ADDRLEN], uint16_t *port)
 {
   struct sockaddr_storage sa;
   socklen_t addrlen = sizeof(sa); memset(&sa, 0x0, sizeof(sa));
@@ -489,7 +524,7 @@ void ccsocket_get_error(ccsocket_t s, char buf[MAX_ERRORLEN])
   if (!err)
     err = WSAGetLastError();
   FormatMessageA(
-    FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+    FORMAT_MESSAGE_FROM_SYSTEM,
     NULL,
     err,
     MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),

@@ -1,11 +1,8 @@
 #ifndef _CCSOCKET_H_
 #define _CCSOCKET_H_
 
-#include <stdint.h>
-#include <stdlib.h>
-#include <stdbool.h>
-
 #if WIN32
+    #WIN32_LEAN_AND_MEAN 1
     #define CCSOCKET_EXPORT __declspec(dllexport)
     typedef intptr_t ccsocket_t;
 #else
@@ -21,6 +18,10 @@
 #ifndef MAX_ERRORLEN
     #define MAX_ERRORLEN 255
 #endif
+
+#include <stdint.h>
+#include <stdlib.h>
+#include <stdbool.h>
 
 typedef enum {
     CC_NOFLAG   = 0,
@@ -60,23 +61,26 @@ CCSOCKET_EXPORT ccsocket_t ccsocket1(ccsocket_domain_t domain, ccsocket_protocol
 /* 准入 ccsocket */
 CCSOCKET_EXPORT ccsocket_t ccsocket_accept(ccsocket_t s, ccsocket_flags_t flags);
 
+/* 准入 ccsocket (获取地址与端口)*/
+CCSOCKET_EXPORT ccsocket_t ccsocket_accept1(ccsocket_t s, char addr[MAX_ADDRLEN], uint16_t *port, ccsocket_flags_t flags);
+
 /* 监听 ccsocket */
-CCSOCKET_EXPORT bool ccsocket_listen(ccsocket_t s, const char ip[], uint16_t port);
+CCSOCKET_EXPORT bool ccsocket_listen(ccsocket_t s, const char addr[], uint16_t port);
 
 /* 监听 ccsocket 实现负载均衡(仅部分平台) */
-CCSOCKET_EXPORT bool ccsocket_listen1(ccsocket_t s, const char ip[], uint16_t port);
+CCSOCKET_EXPORT bool ccsocket_listen1(ccsocket_t s, const char addr[], uint16_t port);
 
 /* 连接 ccsocket */
-CCSOCKET_EXPORT bool ccsocket_connect(ccsocket_t s, const char ip[], uint16_t port);
+CCSOCKET_EXPORT bool ccsocket_connect(ccsocket_t s, const char addr[], uint16_t port);
 
 /* 检查 ccsocket */
 CCSOCKET_EXPORT ccsocket_conn_t ccsocket_is_connected(ccsocket_t s);
 
 /* 发送 ccsocket */
-CCSOCKET_EXPORT int ccsocket_send(ccsocket_t s, const void* buf, size_t bsize);
+CCSOCKET_EXPORT int ccsocket_send(ccsocket_t s, const void *buf, size_t bsize);
 
 /* 接收 ccsocket */
-CCSOCKET_EXPORT int ccsocket_recv(ccsocket_t s, char* buf, size_t bsize);
+CCSOCKET_EXPORT int ccsocket_recv(ccsocket_t s, char *buf, size_t bsize);
 
 /* ********** 下面是一些标准/平台特有的标志来变更交互行为 ********** */
 
@@ -84,8 +88,8 @@ CCSOCKET_EXPORT int ccsocket_recv(ccsocket_t s, char* buf, size_t bsize);
 CCSOCKET_EXPORT void ccsocket_get_error(ccsocket_t s, char buf[MAX_ERRORLEN]);
 
 /* 获取本端/对端地址/端口 */
-CCSOCKET_EXPORT bool ccsocket_get_peername(ccsocket_t s, char addr[MAX_ADDRLEN], int *port);
-CCSOCKET_EXPORT bool ccsocket_get_sockname(ccsocket_t s, char addr[MAX_ADDRLEN], int* port);
+CCSOCKET_EXPORT bool ccsocket_get_peername(ccsocket_t s, char addr[MAX_ADDRLEN], uint16_t *port);
+CCSOCKET_EXPORT bool ccsocket_get_sockname(ccsocket_t s, char addr[MAX_ADDRLEN], uint16_t *port);
 
 /* 设置接受/发送超时 */
 CCSOCKET_EXPORT bool ccsocket_set_rcvtimeout(ccsocket_t s, int timeout);
