@@ -103,10 +103,10 @@ CCSOCKET_EXPORT bool ccsocket_set_reuseaddr(ccsocket_t s, bool on);
 /* 设置端口重用 */
 CCSOCKET_EXPORT bool ccsocket_set_reuseport(ccsocket_t s, bool on);
 
-/* 设置非延迟发送 */
+/* 设置非阻塞模式 */
 CCSOCKET_EXPORT bool ccsocket_set_nonblock(ccsocket_t s);
 
-/* 设置非延迟发送 */
+/* 设置非继承模式 */
 CCSOCKET_EXPORT bool ccsocket_set_cloexec(ccsocket_t s);
 
 #ifdef __cplusplus
