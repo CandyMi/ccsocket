@@ -40,6 +40,9 @@
   #include <netinet/in.h>
   #include <netinet/tcp.h>
   #include <sys/socket.h>
+#if defined(__linux__) || defined(__sun__)
+  #include <sys/sendfile.h>
+#endif
   #define closesocket(s) close(s)
   typedef int SOCKET;
   #define SOCKET_ERROR (~0)
@@ -250,8 +253,8 @@ ccsocket_t ccsocket_accept(ccsocket_t s, ccsocket_flags_t flags)
 
 ccsocket_t ccsocket_accept1(ccsocket_t s, char ip[MAX_ADDRLEN], uint16_t *port, ccsocket_flags_t flags)
 {
-  errno = 0; int sasize = 0;
-  struct sockaddr_storage* sap = NULL; int* sasizep = NULL;
+  errno = 0; socklen_t sasize = 0;
+  struct sockaddr_storage* sap = NULL; socklen_t* sasizep = NULL;
   struct sockaddr_storage sa; memset(&sa, 0x0, sizeof(sa));
   if (ip && port) {
     if (ccsocket_get_family(s, &sa))
@@ -349,7 +352,7 @@ bool ccsocket_listen1(ccsocket_t s, const char *ip, uint16_t port)
   }
 #elif WIN32
   if (!ccsocket_set_reuseaddr(s, true)) {
-    errno = EINVAL;
+    WSASetLastError(EINVAL);
     return false;
   }
 #endif
@@ -367,10 +370,10 @@ bool ccsocket_connect(ccsocket_t s, const char *ip, uint16_t port)
   return connect((SOCKET)s, (const struct sockaddr*)&sa, ccsizeof(&sa)) != SOCKET_ERROR;
 }
 
-ccsocket_conn_t ccsocket_is_connected(ccsocket_t s)
+ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s)
 {
   errno = 0;
-  ccsocket_conn_t state = CC_CONNECTING;
+  ccsocket_conn_state_t state = CC_CONNECTING;
 #if WIN32
   if (SOCKET_ERROR == connect(s, NULL, 0))
   {
@@ -518,11 +521,10 @@ bool ccsocket_set_cloexec(ccsocket_t s)
 
 void ccsocket_get_error(ccsocket_t s, char buf[MAX_ERRORLEN])
 {
-  int err = 0; socklen_t len = sizeof(err); memset(buf, 0x0, MAX_ERRORLEN);
-  getsockopt((SOCKET)s, SOL_SOCKET, SO_ERROR, (char*)&err, (socklen_t*)&len);
+  (void)s;
 #if WIN32
-  if (!err)
-    err = WSAGetLastError();
+  memset(buf, 0x0, MAX_ERRORLEN);
+  int err = WSAGetLastError();
   FormatMessageA(
     FORMAT_MESSAGE_FROM_SYSTEM,
     NULL,
@@ -531,9 +533,75 @@ void ccsocket_get_error(ccsocket_t s, char buf[MAX_ERRORLEN])
     buf, (DWORD)MAX_ERRORLEN, NULL
   );
 #else
-  if (!err)
-    err = errno;
-  const char *info = strerror(err);
+  memset(buf, 0x0, MAX_ERRORLEN);
+  const char *info = strerror(errno);
   memcpy(buf, info, strlen(info));
+#endif
+}
+
+ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
+{
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__DragonFlyBSD__)
+  off_t size = 0; errno = 0;
+  off_t offset = lseek(fd, 0, SEEK_CUR);
+  if (offset == -1)
+    return CC_SENDERROR;
+  #if defined(__APPLE__)
+  int r = sendfile(fd, (SOCKET)s, offset, &size, NULL, 0);
+  #else
+  int r = sendfile(fd, (SOCKET)s, offset, 0, NULL, &size, 0);
+  #endif
+  if (r == -1) {
+    if (errno == EINTR)
+      return CC_SENDNEXT;
+    return (errno == EAGAIN) ? CC_SENDWAIT : CC_SENDERROR;
+  }
+  off_t eof = lseek(fd, 0, SEEK_END);
+  if (size == eof)
+    return CC_SENDALL;
+  lseek(fd, size, SEEK_SET);
+  return ccsocket_sendfile(s, fd);
+#elif defined(__linux__) || defined(__sun__)
+  errno = 0;
+  off_t offset = lseek(fd, 0, SEEK_CUR);
+  if (offset == -1)
+    return CC_SENDERROR;
+  int size = sendfile(s, fd, &offset, INT32_MAX);
+  if (size == -1) {
+    if (errno == EINTR)
+      return CC_SENDNEXT;
+    return errno == EAGAIN ? CC_SENDWAIT : CC_SENDERROR;
+  }
+  off_t eof = lseek(fd, 0, SEEK_END);
+  if (offset == eof)
+    return CC_SENDALL;
+  lseek(fd, offset, SEEK_SET);
+  return ccsocket_sendfile(s, fd);
+#elif WIN32
+  WSASetLastError(ENODEV);
+  return CC_SENDERROR;
+#else
+  int wsize; errno = 0;
+  uint32_t bsize = 1024; char buffer[1024];
+  off_t offset = lseek(fd, 0, SEEK_CUR);
+  if (offset == -1)
+    return CC_SENDERROR;
+  off_t eof = lseek(fd, 0, SEEK_END);
+  if (eof == -1)
+    return CC_SENDERROR;
+  while (offset < eof) {
+    int rsize = pread(fd, buffer, bsize, offset);
+    if (rsize == -1)
+      return CC_SENDERROR;
+    int wsize = ccsocket_send(s, buffer, rsize);
+    if (wsize == -1) {
+      if (errno == EINTR)
+        return CC_SENDNEXT;
+      return errno == EAGAIN ? CC_SENDWAIT : CC_SENDERROR;
+    }
+    offset += wsize;
+    lseek(fd, offset, SEEK_SET);
+  }
+  return CC_SENDALL;
 #endif
 }

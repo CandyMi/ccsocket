@@ -43,7 +43,14 @@ typedef enum {
     CC_CONNECTING = 0,
     CC_CONNECTED  = 1,
     CC_CONNERROR  = 2,
-} ccsocket_conn_t;
+} ccsocket_conn_state_t;
+
+typedef enum {
+    CC_SENDWAIT   = 0, // 正在发送(缓冲区已满)
+    CC_SENDNEXT   = 1, // 再次尝试(需再次调用)
+    CC_SENDALL    = 2, // 发送完成(数据已全部发送)
+    CC_SENDERROR  = 3, // 发送失败(发送期间出错)
+} ccsocket_sendf_state_t;
 
 #ifdef __cplusplus
 extern "C" {
@@ -73,13 +80,16 @@ CCSOCKET_EXPORT bool ccsocket_listen1(ccsocket_t s, const char *addr, uint16_t p
 CCSOCKET_EXPORT bool ccsocket_connect(ccsocket_t s, const char *addr, uint16_t port);
 
 /* 检查 ccsocket */
-CCSOCKET_EXPORT ccsocket_conn_t ccsocket_is_connected(ccsocket_t s);
+CCSOCKET_EXPORT ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s);
 
 /* 发送 ccsocket */
 CCSOCKET_EXPORT int ccsocket_send(ccsocket_t s, const void *buf, size_t bsize);
 
 /* 接收 ccsocket */
 CCSOCKET_EXPORT int ccsocket_recv(ccsocket_t s, char *buf, size_t bsize);
+
+/* 发送文件 ccsocket */
+CCSOCKET_EXPORT ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd);
 
 /* ********** 下面是一些标准/平台特有的标志来变更交互行为 ********** */
 
