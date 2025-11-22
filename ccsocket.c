@@ -566,8 +566,8 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
   off_t offset = lseek(fd, 0, SEEK_CUR);
   if (offset == -1)
     return CC_SENDERROR;
-  int size = sendfile(s, fd, &offset, INT32_MAX);
-  if (size == -1) {
+  off_t wsize = sendfile(s, fd, &offset, INT64_MAX);
+  if (wsize == -1) {
     if (errno == EINTR)
       return CC_SENDNEXT;
     return errno == EAGAIN ? CC_SENDWAIT : CC_SENDERROR;
