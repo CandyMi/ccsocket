@@ -82,11 +82,13 @@ CCSOCKET_EXPORT bool ccsocket_connect(ccsocket_t s, const char *addr, uint16_t p
 /* 检查 ccsocket */
 CCSOCKET_EXPORT ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s);
 
-/* 发送 ccsocket */
-CCSOCKET_EXPORT int ccsocket_send(ccsocket_t s, const void *buf, size_t bsize);
-
 /* 接收 ccsocket */
 CCSOCKET_EXPORT int ccsocket_recv(ccsocket_t s, char *buf, size_t bsize);
+/* 偷看 ccsocket */
+CCSOCKET_EXPORT int ccsocket_peek(ccsocket_t s, char* buf, size_t bsize);
+
+/* 发送 ccsocket */
+CCSOCKET_EXPORT int ccsocket_send(ccsocket_t s, const void *buf, size_t bsize);
 
 /* 发送文件 ccsocket */
 CCSOCKET_EXPORT ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd);

@@ -448,6 +448,17 @@ int ccsocket_recv(ccsocket_t s, char* buf, size_t bsize)
   return recv((SOCKET)s, buf, (int)bsize, flags);
 }
 
+/* 偷看 ccsocket */
+int ccsocket_peek(ccsocket_t s, char* buf, size_t bsize)
+{
+#ifdef MSG_PEEK
+  return recv((SOCKET)s, buf, (int)bsize, MSG_PEEK);
+#else
+  errno = EIO; 
+  return SOCKET_ERROR;
+#endif
+}
+
 /* 开启/关闭 nodelay */
 bool ccsocket_set_nodelay(ccsocket_t s, bool on)
 {
@@ -576,6 +587,27 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
   if (offset == eof)
     return CC_SENDALL;
   lseek(fd, offset, SEEK_SET);
+  return ccsocket_sendfile(s, fd);
+#elif _AIX
+  errno = 0;
+  off_t offset = lseek(fd, 0, SEEK_CUR);
+  if (offset == -1)
+    return CC_SENDERROR;
+  struct sf_parms params = {
+    .header_data = NULL, .header_length = 0,   // 无头部数据
+    .trailer_data = NULL, .trailer_length = 0, // 无尾部数据
+    .file_descriptor = fd, .file_offset = offset, .file_bytes = -1,
+  };
+  int wsize = send_file(s, &params, 0);
+  if (wsize == -1) {
+    if (errno == EINTR)
+      return CC_SENDNEXT;
+    return errno == EAGAIN ? CC_SENDWAIT : CC_SENDERROR;
+  }
+  offset = offset + params.bytes_sent;
+  if (offset == params.file_size)
+    return CC_SENDALL;
+  // lseek(fd, size, SEEK_SET);
   return ccsocket_sendfile(s, fd);
 #elif WIN32
   WSASetLastError(ENODEV);
