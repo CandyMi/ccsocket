@@ -99,15 +99,17 @@ CCSOCKET_EXPORT ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd);
 /* 获取错误信息 */
 CCSOCKET_EXPORT void ccsocket_get_error(ccsocket_t s, char buf[MAX_ERRORLEN]);
 
-/* 获取本端/对端地址/端口 */
+/* 获取对端地址/端口 */
 CCSOCKET_EXPORT bool ccsocket_get_peername(ccsocket_t s, char addr[MAX_ADDRLEN], uint16_t *port);
+/* 获取本端地址/端口 */
 CCSOCKET_EXPORT bool ccsocket_get_sockname(ccsocket_t s, char addr[MAX_ADDRLEN], uint16_t *port);
 
 /* 获取套接字协议簇, -1表示错误 */
 CCSOCKET_EXPORT int ccsocket_get_family(ccsocket_t s);
 
-/* 设置接受/发送超时 */
+/* 设置接收超时时间(`timeout`单位毫秒) */
 CCSOCKET_EXPORT bool ccsocket_set_rcvtimeout(ccsocket_t s, int timeout);
+/* 设置发送超时时间(`timeout`单位毫秒) */
 CCSOCKET_EXPORT bool ccsocket_set_sndtimeout(ccsocket_t s, int timeout);
 
 /* 设置非延迟发送 */

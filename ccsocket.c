@@ -489,18 +489,29 @@ bool ccsocket_set_reuseport(ccsocket_t s, bool on)
 #endif
 }
 
+static inline
+bool _ccsocket_set_timeout(ccsocket_t s, int type, int timeout)
+{
+#if WIN32
+  socklen_t tm = timeout;
+#else
+  struct timeval tm;
+  tm.tv_sec = (timeout - (timeout % 1000)) / 1000;
+  tm.tv_usec = (timeout % 1000) * 1000;
+#endif
+  return SOCKET_ERROR != setsockopt((SOCKET)s, SOL_SOCKET, type, (char*)&tm, sizeof(tm));
+}
+
 /* 设置最大接收时间 */
 bool ccsocket_set_rcvtimeout(ccsocket_t s, int timeout)
 {
-  socklen_t tm = timeout;
-  return SOCKET_ERROR != setsockopt((SOCKET)s, SOL_SOCKET, SO_RCVTIMEO, (char*)&tm, sizeof(tm));
+  return _ccsocket_set_timeout(s, SO_RCVTIMEO, timeout);
 }
 
 /* 设置最大发送时间 */
 bool ccsocket_set_sndtimeout(ccsocket_t s, int timeout)
 {
-  socklen_t tm = timeout;
-  return SOCKET_ERROR != setsockopt((SOCKET)s, SOL_SOCKET, SO_SNDTIMEO, (char*)&tm, sizeof(tm));
+  return _ccsocket_set_timeout(s, SO_SNDTIMEO, timeout);
 }
 
 /* 获取对端地址/端口 */
