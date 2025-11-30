@@ -435,6 +435,22 @@ ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s)
   return state;
 }
 
+int ccsocket_sendto(ccsocket_t s, const void *buf, size_t bsize, char *addr, uint16_t port)
+{
+  int flags = 0;
+#if defined(MSG_NOSIGNAL)
+  flags |= MSG_NOSIGNAL;
+#endif
+  socklen_t slen = 0;
+  struct sockaddr_storage sa, *sap = NULL; 
+  if (addr) {
+    if (ccsocket_wrap_ip_and_port(s, &sa, addr, port))
+      return SOCKET_ERROR;
+    sap = &sa; slen = ccsizeof(sap);
+  }
+  return sendto((SOCKET)s, buf, bsize, flags, (const struct sockaddr *)sap, slen);
+}
+
 /* 发送 ccsocket */
 int ccsocket_send(ccsocket_t s, const void* buf, size_t bsize)
 {
@@ -443,6 +459,21 @@ int ccsocket_send(ccsocket_t s, const void* buf, size_t bsize)
   flags |= MSG_NOSIGNAL;
 #endif
   return send((SOCKET)s, buf, (int)bsize, flags);
+}
+
+int ccsocket_recvfrom(ccsocket_t s, void *buf, size_t bsize, char *addr, uint16_t *port)
+{
+  struct sockaddr_storage sa;
+  int af = _ccsocket_get_family(s, &sa);
+  if (af == SOCKET_ERROR)
+    return SOCKET_ERROR;
+  socklen_t len = ccsizeof(&sa);
+  int r = recvfrom((SOCKET)s, buf, bsize, 0, (struct sockaddr *)&sa, &len);
+  if (r >= 0 && addr && port) {
+    memset(addr, 0, MAX_ADDRLEN);
+    ccsocket2addr(&sa, addr, port);
+  }
+  return r;
 }
 
 /* 接收 ccsocket */
