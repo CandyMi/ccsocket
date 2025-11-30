@@ -125,7 +125,7 @@ int ccsocket_set_flags(ccsocket_t s, ccsocket_flags_t flags)
 }
 
 static inline
-int ccsocket_get_family(ccsocket_t s, struct sockaddr_storage* sa)
+int _ccsocket_get_family(ccsocket_t s, struct sockaddr_storage* sa)
 {
   socklen_t addrlen = sizeof(*sa); memset(sa, 0x0, sizeof(*sa));
 #if WIN32
@@ -141,7 +141,7 @@ int ccsocket_get_family(ccsocket_t s, struct sockaddr_storage* sa)
 static inline
 int ccsocket_wrap_ip_and_port(ccsocket_t s, struct sockaddr_storage* sa, const char ip[MAX_ADDRLEN], uint16_t port)
 {
-  int r = ccsocket_get_family(s, sa);
+  int r = _ccsocket_get_family(s, sa);
   if (r)
     return r;
   // 根据协议转换IP与端口
@@ -202,16 +202,21 @@ ccsocket_t ccsocket1(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsock
     domain_r = AF_INET6;
 
   int flag_r = IPPROTO_IP;
-  int proto_r = SOCK_RAW;
-  if (proto == CC_TCP)
+  int proto_r = 0;
+  switch (proto)
   {
-    proto_r = SOCK_STREAM;
-    //flag_r = IPPROTO_TCP;
-  }
-  if (proto == CC_UDP)
-  {
-    proto_r = SOCK_DGRAM;
-    //flag_r = IPPROTO_UDP;
+    case CC_TCP:
+      proto_r = SOCK_STREAM;
+      // flag_r = IPPROTO_TCP;
+      break;
+    case CC_UDP:
+      proto_r = SOCK_DGRAM;
+      // flag_r = IPPROTO_UDP;
+      break;
+    case CC_ICMP:
+      proto_r = SOCK_RAW;
+      // flag_r = IPPROTO_ICMP;
+      break;
   }
 
   bool isset = false;
@@ -257,7 +262,7 @@ ccsocket_t ccsocket_accept1(ccsocket_t s, char ip[MAX_ADDRLEN], uint16_t *port, 
   struct sockaddr_storage* sap = NULL; socklen_t* sasizep = NULL;
   struct sockaddr_storage sa; memset(&sa, 0x0, sizeof(sa));
   if (ip && port) {
-    if (ccsocket_get_family(s, &sa))
+    if (_ccsocket_get_family(s, &sa))
       return false;
     sap = &sa; sasizep = &sasize; sasize = ccsizeof(sap);
   }
@@ -518,6 +523,12 @@ bool ccsocket_get_sockname(ccsocket_t s, char addr[MAX_ADDRLEN], uint16_t *port)
   if (r == SOCKET_ERROR)
     return false;
   return ccsocket2addr(&sa, addr, port);
+}
+
+int ccsocket_get_family(ccsocket_t s)
+{
+  struct sockaddr_storage sa;
+  return _ccsocket_get_family(s, &sa) ? -1 : (int)sa.ss_family;
 }
 
 bool ccsocket_set_nonblock(ccsocket_t s)

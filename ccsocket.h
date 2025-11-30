@@ -35,8 +35,9 @@ typedef enum {
 } ccsocket_domain_t;
 
 typedef enum {
-    CC_TCP = 1,
-    CC_UDP = 2,
+    CC_TCP   = 1,
+    CC_UDP   = 2,
+    CC_ICMP  = 3,
 } ccsocket_protocol_t;
 
 typedef enum {
@@ -101,6 +102,9 @@ CCSOCKET_EXPORT void ccsocket_get_error(ccsocket_t s, char buf[MAX_ERRORLEN]);
 /* 获取本端/对端地址/端口 */
 CCSOCKET_EXPORT bool ccsocket_get_peername(ccsocket_t s, char addr[MAX_ADDRLEN], uint16_t *port);
 CCSOCKET_EXPORT bool ccsocket_get_sockname(ccsocket_t s, char addr[MAX_ADDRLEN], uint16_t *port);
+
+/* 获取套接字协议簇, -1表示错误 */
+CCSOCKET_EXPORT int ccsocket_get_family(ccsocket_t s);
 
 /* 设置接受/发送超时 */
 CCSOCKET_EXPORT bool ccsocket_set_rcvtimeout(ccsocket_t s, int timeout);
