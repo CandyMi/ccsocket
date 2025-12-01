@@ -2,20 +2,34 @@
   #define _GNU_SOURCE
 #endif
 
+#define STRICT
+#define WIN32_LEAN_AND_MEAN
+#if !defined(_MSC_VER)
+  #define _WIN32_WINNT _WIN32_WINNT_WIN7
+#endif
+
 #include "ccsocket.h"
 
 #include <errno.h>
 // #include <stdio.h>
 #include <string.h>
 
-#if WIN32
+#if _WIN32
+  #include <sdkddkver.h>
   #include <winsock2.h>
   #include <mstcpip.h>
-  #include <WS2tcpip.h>
-  #if defined(AF_UNIX)
-    #include <afunix.h>
-  #endif
+  #include <ws2tcpip.h>
   #include <Windows.h>
+  #if defined(_MSC_VER) && WDK_NTDDI_VERSION > NTDDI_WIN10_RS2
+    #include <afunix.h>
+  #else
+    #define UNIX_PATH_MAX 108
+    typedef struct sockaddr_un
+    {
+        short sun_family;              /* AF_UNIX */
+        char  sun_path[UNIX_PATH_MAX]; /* pathname */
+    } SOCKADDR_UN, * PSOCKADDR_UN;
+  #endif
   #pragma comment(lib, "Ws2_32.lib")
   BOOL WINAPI DllMain(
       _In_ HINSTANCE hinstDLL,
@@ -109,7 +123,7 @@ static inline
 int ccsocket_set_flags(ccsocket_t s, ccsocket_flags_t flags)
 {
   int r = -1;
-#if WIN32
+#if _WIN32
   u_long mode = 1;
   if (flags & CC_CLOEXEC)
     r = SetHandleInformation((HANDLE)s, HANDLE_FLAG_INHERIT, 0) ? 0 : -1;
@@ -128,7 +142,7 @@ static inline
 int _ccsocket_get_family(ccsocket_t s, struct sockaddr_storage* sa)
 {
   socklen_t addrlen = sizeof(*sa); memset(sa, 0x0, sizeof(*sa));
-#if WIN32
+#if _WIN32
   WSAPROTOCOL_INFOA info; int len = sizeof(info); // WinSock使用getsockname会失败. :<
   int r = getsockopt((SOCKET)s, SOL_SOCKET, SO_PROTOCOL_INFO, (char*)&info, &len);
   sa->ss_family = info.iAddressFamily;
@@ -185,7 +199,7 @@ int ccsocket_close(ccsocket_t s)
 /* 创建 ccsocket */
 ccsocket_t ccsocket(ccsocket_domain_t domain, ccsocket_protocol_t proto)
 {
-  return ccsocket1(domain, proto, 0);
+  return ccsocket1(domain, proto, CC_NOFLAG);
 }
 
 /* 创建 ccsocket 顺便设置标记 */
@@ -355,7 +369,7 @@ bool ccsocket_listen1(ccsocket_t s, const char *ip, uint16_t port)
     errno = EINVAL;
     return false;
   }
-#elif WIN32
+#elif _WIN32
   if (!ccsocket_set_reuseaddr(s, true)) {
     WSASetLastError(EINVAL);
     return false;
@@ -379,7 +393,7 @@ ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s)
 {
   errno = 0;
   ccsocket_conn_state_t state = CC_CONNECTING;
-#if WIN32
+#if _WIN32
   if (SOCKET_ERROR == connect(s, NULL, 0))
   {
     switch (WSAGetLastError())
@@ -448,7 +462,7 @@ int ccsocket_sendto(ccsocket_t s, const void *buf, size_t bsize, char *addr, uin
       return SOCKET_ERROR;
     sap = &sa; slen = ccsizeof(sap);
   }
-  return sendto((SOCKET)s, buf, bsize, flags, (const struct sockaddr *)sap, slen);
+  return sendto((SOCKET)s, (const char *)buf, bsize, flags, (const struct sockaddr *)sap, slen);
 }
 
 /* 发送 ccsocket */
@@ -458,7 +472,7 @@ int ccsocket_send(ccsocket_t s, const void* buf, size_t bsize)
 #if defined(MSG_NOSIGNAL)
   flags |= MSG_NOSIGNAL;
 #endif
-  return send((SOCKET)s, buf, (int)bsize, flags);
+  return send((SOCKET)s, (const char *)buf, (int)bsize, flags);
 }
 
 int ccsocket_recvfrom(ccsocket_t s, void *buf, size_t bsize, char *addr, uint16_t *port)
@@ -468,7 +482,7 @@ int ccsocket_recvfrom(ccsocket_t s, void *buf, size_t bsize, char *addr, uint16_
   if (af == SOCKET_ERROR)
     return SOCKET_ERROR;
   socklen_t len = ccsizeof(&sa);
-  int r = recvfrom((SOCKET)s, buf, bsize, 0, (struct sockaddr *)&sa, &len);
+  int r = recvfrom((SOCKET)s, (char *)buf, bsize, 0, (struct sockaddr *)&sa, &len);
   if (r >= 0 && addr && port) {
     memset(addr, 0, MAX_ADDRLEN);
     ccsocket2addr(&sa, addr, port);
@@ -481,7 +495,7 @@ int ccsocket_recv(ccsocket_t s, char* buf, size_t bsize)
 {
   int flags = 0;
   // TODO: 
-  return recv((SOCKET)s, buf, (int)bsize, flags);
+  return recv((SOCKET)s, (char *)buf, (int)bsize, flags);
 }
 
 /* 偷看 ccsocket */
@@ -523,7 +537,7 @@ bool ccsocket_set_reuseport(ccsocket_t s, bool on)
 static inline
 bool _ccsocket_set_timeout(ccsocket_t s, int type, int timeout)
 {
-#if WIN32
+#if _WIN32
   socklen_t tm = timeout;
 #else
   struct timeval tm;
@@ -586,7 +600,7 @@ bool ccsocket_set_cloexec(ccsocket_t s)
 void ccsocket_get_error(ccsocket_t s, char buf[MAX_ERRORLEN])
 {
   (void)s;
-#if WIN32
+#if _WIN32
   memset(buf, 0x0, MAX_ERRORLEN);
   int err = WSAGetLastError();
   FormatMessageA(
@@ -662,7 +676,7 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
     return CC_SENDALL;
   // lseek(fd, size, SEEK_SET);
   return ccsocket_sendfile(s, fd);
-#elif WIN32
+#elif _WIN32
   WSASetLastError(ENODEV);
   return CC_SENDERROR;
 #else
