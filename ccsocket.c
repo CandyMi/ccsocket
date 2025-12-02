@@ -251,7 +251,11 @@ ccsocket_t ccsocket1(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsock
 #endif
   }
   // 创建
+#if _WIN32 // 创建支持重叠I/O
+  ccsocket_t s = WSASocket(domain_r, proto_r, flag_r, NULL, 0, WSA_FLAG_OVERLAPPED);
+#else
   ccsocket_t s = socket(domain_r, proto_r, flag_r);
+#endif
   if (s == INVALID_SOCKET)
     return INVALID_SOCKET;
   /**
