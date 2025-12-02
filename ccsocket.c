@@ -4,9 +4,10 @@
 
 #define STRICT
 #define WIN32_LEAN_AND_MEAN
-#if !defined(_MSC_VER)
-  #define _WIN32_WINNT _WIN32_WINNT_WIN7
-#endif
+/*
+* WSAStringToAddress / WSAAddressToString
+*/
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
 
 #include "ccsocket.h"
 
@@ -100,17 +101,19 @@ bool ccsocket2addr(const struct sockaddr_storage* sa, char addr[MAX_ADDRLEN], ui
       // return false;
 #endif
     case AF_INET:
-    {
-      const struct sockaddr_in* in = (const struct sockaddr_in*)sa;
-      inet_ntop(AF_INET, &in->sin_addr, addr, MAX_ADDRLEN);
-      *port = ntohs(in->sin_port);
-      break;
-    }
     case AF_INET6:
     {
-      const struct sockaddr_in6* in = (const struct sockaddr_in6*)sa;
-      inet_ntop(AF_INET6, &in->sin6_addr, addr, MAX_ADDRLEN);
-      *port = ntohs(in->sin6_port);
+#if _WIN32
+      DWORD len = MAX_ADDRLEN; WSAAddressToString((struct sockaddr*)sa, ccsizeof(sa), NULL, addr, &len);
+#else
+      sa->ss_family == AF_INET ? 
+          inet_ntop(AF_INET, &(((struct sockaddr_in*)sa)->sin_addr), addr, MAX_ADDRLEN) :
+          inet_ntop(AF_INET6, &(((struct sockaddr_in6*)sa)->sin6_addr), addr, MAX_ADDRLEN) ;
+#endif
+      *port = sa->ss_family == AF_INET ?
+          ntohs(((struct sockaddr_in*)sa)->sin_port) :
+          ntohs(((struct sockaddr_in6*)sa)->sin6_port);
+      // Done.
       break;
     }
     default:
@@ -153,7 +156,7 @@ int _ccsocket_get_family(ccsocket_t s, struct sockaddr_storage* sa)
 }
 
 static inline
-int ccsocket_wrap_ip_and_port(ccsocket_t s, struct sockaddr_storage* sa, const char ip[MAX_ADDRLEN], uint16_t port)
+int ccsocket_wrap_ip_and_port(ccsocket_t s, struct sockaddr_storage* sa, const char addr[MAX_ADDRLEN], uint16_t port)
 {
   int r = _ccsocket_get_family(s, sa);
   if (r)
@@ -167,26 +170,27 @@ int ccsocket_wrap_ip_and_port(ccsocket_t s, struct sockaddr_storage* sa, const c
     case AF_UNIX:
     {
       struct sockaddr_un* in = (struct sockaddr_un*)sa;
-      memcpy(in->sun_path, ip, strlen(ip));
+      memcpy(in->sun_path, addr, strlen(addr));
       break;
     }
 #endif
     case AF_INET:
-    {
-      struct sockaddr_in* in = (struct sockaddr_in*)sa;
-      in->sin_port = htons(port);
-      if (1 != inet_pton(AF_INET, ip, &in->sin_addr))
-        return -1;
-      break;
-    }
     case AF_INET6:
     {
-      struct sockaddr_in6* in6 = (struct sockaddr_in6*)sa;
-      in6->sin6_port = htons(port);
-      if (1 != inet_pton(AF_INET6, ip, &in6->sin6_addr))
-        return -1;
+#if _WIN32 // 为了兼容MingW的环境, 同时可以在低版本的编译器可用.
+      int len = ccsizeof(sa);
+      if (WSAStringToAddress((char*)addr, sa->ss_family, NULL, (struct sockaddr*)sa, &len)) return -1;
+#else
+      if (sa->ss_family == AF_INET && 1 != inet_pton(AF_INET, addr, &(((struct sockaddr_in*)sa)->sin_addr))) return -1;
+      else if (sa->ss_family == AF_INET6 && 1 != inet_pton(AF_INET6, addr, &(((struct sockaddr_in6*)sa)->sin6_addr))) return -1;
+#endif
+      if (sa->ss_family == AF_INET) ((struct sockaddr_in*)sa)->sin_port = htons(port);
+      else if (sa->ss_family == AF_INET6) ((struct sockaddr_in6*)sa)->sin6_port = htons(port);
+      // Done.
       break;
     }
+    default:
+      return -1;
   }
   return 0;
 }
@@ -462,7 +466,7 @@ int ccsocket_sendto(ccsocket_t s, const void *buf, size_t bsize, char *addr, uin
       return SOCKET_ERROR;
     sap = &sa; slen = ccsizeof(sap);
   }
-  return sendto((SOCKET)s, (const char *)buf, bsize, flags, (const struct sockaddr *)sap, slen);
+  return sendto((SOCKET)s, (const char *)buf, (int)bsize, flags, (const struct sockaddr *)sap, slen);
 }
 
 /* 发送 ccsocket */
@@ -482,7 +486,7 @@ int ccsocket_recvfrom(ccsocket_t s, void *buf, size_t bsize, char *addr, uint16_
   if (af == SOCKET_ERROR)
     return SOCKET_ERROR;
   socklen_t len = ccsizeof(&sa);
-  int r = recvfrom((SOCKET)s, (char *)buf, bsize, 0, (struct sockaddr *)&sa, &len);
+  int r = recvfrom((SOCKET)s, (char *)buf, (int)bsize, 0, (struct sockaddr *)&sa, &len);
   if (r >= 0 && addr && port) {
     memset(addr, 0, MAX_ADDRLEN);
     ccsocket2addr(&sa, addr, port);
