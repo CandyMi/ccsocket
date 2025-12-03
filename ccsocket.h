@@ -1,11 +1,11 @@
-#ifndef _CCSOCKET_H_
-#define _CCSOCKET_H_
+#ifndef CCSOCKET_H
+#define CCSOCKET_H
 
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdbool.h>
 
-#if WIN32
+#if _WIN32
     #define CCSOCKET_EXPORT __declspec(dllexport)
     typedef intptr_t ccsocket_t;
 #else
@@ -47,10 +47,10 @@ typedef enum {
 } ccsocket_conn_state_t;
 
 typedef enum {
-    CC_SENDWAIT   = 0, // 正在发送(缓冲区已满)
-    CC_SENDNEXT   = 1, // 再次尝试(需再次调用)
-    CC_SENDALL    = 2, // 发送完成(数据已全部发送)
-    CC_SENDERROR  = 3, // 发送失败(发送期间出错)
+    CC_SENDERROR  = -1,  // 发送失败(发送期间出错)
+    CC_SENDWAIT   =  0,  // 正在发送(缓冲区已满)
+    CC_SENDNEXT   =  1,  // 再次尝试(需再次调用)
+    CC_SENDALL    =  2,  // 发送完成(数据已全部发送)
 } ccsocket_sendf_state_t;
 
 #ifdef __cplusplus
