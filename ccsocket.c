@@ -210,14 +210,20 @@ ccsocket_t ccsocket(ccsocket_domain_t domain, ccsocket_protocol_t proto)
 ccsocket_t ccsocket1(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsocket_flags_t flags)
 {
   int domain_r = AF_UNSPEC;
+  switch (domain)
+  {
 #if defined(AF_UNIX)
-  if (domain == CC_LOCAL)
-    domain_r = AF_UNIX;
+    case CC_UNIX:
+      domain_r = AF_UNIX;
+      break;
 #endif
-  if (domain == CC_INET4)
-    domain_r = AF_INET;
-  if (domain == CC_INET6)
-    domain_r = AF_INET6;
+    case CC_INET4:
+      domain_r = AF_INET;
+      break;
+    case CC_INET6:
+      domain_r = AF_INET6;
+      break;
+  }
 
   int flag_r = IPPROTO_IP;
   int proto_r = 0;

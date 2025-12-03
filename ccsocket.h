@@ -29,7 +29,7 @@ typedef enum {
 } ccsocket_flags_t;
 
 typedef enum {
-    CC_LOCAL = 0,
+    CC_UNIX  = 0,
     CC_INET4 = 1,
     CC_INET6 = 2,
 } ccsocket_domain_t;
