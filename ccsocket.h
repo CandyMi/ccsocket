@@ -60,6 +60,9 @@ extern "C" {
 /* 销毁 ccsocket */
 CCSOCKET_EXPORT int ccsocket_close(ccsocket_t s);
 
+/* 创建双向连接的SOCK_STREAM管道 */
+CCSOCKET_EXPORT bool ccsocketpair(ccsocket_t sv[2], ccsocket_flags_t flags);
+
 /* 创建 ccsocket */
 CCSOCKET_EXPORT ccsocket_t ccsocket(ccsocket_domain_t domain, ccsocket_protocol_t proto);
 /* 创建 ccsocket */
@@ -124,10 +127,10 @@ CCSOCKET_EXPORT bool ccsocket_set_reuseaddr(ccsocket_t s, bool on);
 CCSOCKET_EXPORT bool ccsocket_set_reuseport(ccsocket_t s, bool on);
 
 /* 设置非阻塞模式 */
-CCSOCKET_EXPORT bool ccsocket_set_nonblock(ccsocket_t s);
+CCSOCKET_EXPORT bool ccsocket_set_nonblock(ccsocket_t s, bool on);
 
 /* 设置非继承模式 */
-CCSOCKET_EXPORT bool ccsocket_set_cloexec(ccsocket_t s);
+CCSOCKET_EXPORT bool ccsocket_set_cloexec(ccsocket_t s, bool on);
 
 #ifdef __cplusplus
 }

@@ -123,22 +123,40 @@ bool ccsocket2addr(const struct sockaddr_storage* sa, char addr[MAX_ADDRLEN], ui
 }
 
 static inline
-int ccsocket_set_flags(ccsocket_t s, ccsocket_flags_t flags)
+int _ccsocket_set_flags(ccsocket_t s, ccsocket_flags_t flags, bool on)
 {
   int r = -1;
 #if _WIN32
-  u_long mode = 1;
+  u_long mode = on ? 1 : 0;
   if (flags & CC_CLOEXEC)
     r = SetHandleInformation((HANDLE)s, HANDLE_FLAG_INHERIT, 0) ? 0 : -1;
   if (flags & CC_NONBLOCK)
     r = ioctlsocket(s, FIONBIO, &mode);
 #else
-  if (flags & CC_CLOEXEC)
-    r = fcntl(s, F_SETFD, FD_CLOEXEC | fcntl(s, F_GETFD));
-  if (flags & CC_NONBLOCK)
-    r = fcntl(s, F_SETFL, O_NONBLOCK | fcntl(s, F_GETFL));
+  if (flags & CC_CLOEXEC) {
+    if (on) {
+      r = fcntl(s, F_SETFD, FD_CLOEXEC | fcntl(s, F_GETFD));
+    } else {
+      r = fcntl(s, F_SETFD, FD_CLOEXEC ^ fcntl(s, F_GETFD));
+    }
+    if (r) return r;
+  }
+  if (flags & CC_NONBLOCK) {
+    if (on) {
+      r = fcntl(s, F_SETFL, O_NONBLOCK | fcntl(s, F_GETFL));
+    } else {
+      r = fcntl(s, F_SETFL, O_NONBLOCK ^ fcntl(s, F_GETFL));
+    }
+    if (r) return r;
+  }
 #endif
   return r;
+}
+
+static inline
+int ccsocket_set_flags(ccsocket_t s, ccsocket_flags_t flags)
+{
+  return _ccsocket_set_flags(s, flags, true);
 }
 
 static inline
@@ -294,7 +312,7 @@ ccsocket_t ccsocket_accept1(ccsocket_t s, char ip[MAX_ADDRLEN], uint16_t *port, 
       return false;
     sap = &sa; sasizep = &sasize; sasize = ccsizeof(sap);
   }
-  SOCKET c;
+  ccsocket_t c;
 #if defined(SOCK_NONBLOCK) && defined(SOCK_CLOEXEC)
   int flags_r = 0;
   if (flags & CC_NONBLOCK)
@@ -390,6 +408,68 @@ bool ccsocket_listen1(ccsocket_t s, const char *ip, uint16_t port)
   }
 #endif
   return ccsocket_listen_internal(s, ip, port);
+}
+
+/* 创建双向连接的SOCK_STREAM管道 */
+bool ccsocketpair(ccsocket_t sv[2], ccsocket_flags_t flags)
+{
+  errno = 0;
+  if (!sv || flags < 0 || flags > 3) {
+    errno = EINVAL;
+#if _WIN32
+    WSASetLastError(WSAEINVAL);
+#endif
+    return false;
+  }
+#if _WIN32
+  /* 本地管道 */
+  cc_socket_t srv = ccsocket1(CC_INET4, CC_TCP, CC_NOFLAG);
+  if (srv == SOCKET_ERROR)
+    return false;
+  /* 开启监听(`port`为0表示随机端口) */
+  if (!ccsocket_listen_internal(srv, "127.0.0.1", 0)) {
+    ccsocket_close(srv); /* 创建失败 */
+    return false;
+  }
+  char addr[MAX_ADDRLEN]; uint16_t port;
+  /* 获得监听服务器地址 */
+  if (!ccsocket_get_sockname(srv, addr, &port)) {
+    ccsocket_close(srv); /* 创建失败 */
+    return false;
+  }
+  /* 创建 socket 1 */
+  cc_socket_t c = ccsocket1(CC_INET4, CC_TCP, CC_NOFLAG);
+  ccsocket_set_nonblock(c, true);
+  if (!ccsocket_connect(c, addr, port)) {
+    int code = WSAGetLastError();
+    if (code != WSAEINPROGRESS) {
+      ccsocket_close(srv); /* 创建失败 */
+      ccsocket_close(c);   /* 创建失败 */
+      return false;
+    }
+  }
+  /* 创建 socket 2 */
+  ccsocket_t s = ccsocket_accept(srv, flags);
+  if (s == SOCKET_ERROR) {
+    ccsocket_close(srv); /* 创建失败 */
+    ccsocket_close(c);   /* 创建失败 */
+    return false;
+  }
+  ccsocket_set_nonblock(c, false);
+  ccsocket_set_flags(c, flags);
+  sv[0] = c, sv[1] = s;
+  /* 别忘记销毁监听套接字哦 */
+  ccsocket_close(srv);
+#else
+  int r = socketpair(AF_UNIX, SOCK_STREAM, 0, sv);
+  if (r == SOCKET_ERROR)
+    return false;
+  if (flags) {
+    ccsocket_set_flags(sv[0], flags);
+    ccsocket_set_flags(sv[1], flags);
+  }
+#endif
+  return true;
 }
 
 /* 连接 ccsocket */
@@ -601,14 +681,14 @@ int ccsocket_get_family(ccsocket_t s)
   return _ccsocket_get_family(s, &sa) ? -1 : (int)sa.ss_family;
 }
 
-bool ccsocket_set_nonblock(ccsocket_t s)
+bool ccsocket_set_nonblock(ccsocket_t s, bool on)
 {
-  return ccsocket_set_flags(s, CC_NONBLOCK) == 0;
+  return _ccsocket_set_flags(s, CC_NONBLOCK, on) == 0;
 }
 
-bool ccsocket_set_cloexec(ccsocket_t s)
+bool ccsocket_set_cloexec(ccsocket_t s, bool on)
 {
-  return ccsocket_set_flags(s, CC_CLOEXEC) == 0;
+  return _ccsocket_set_flags(s, CC_CLOEXEC, on) == 0;
 }
 
 void ccsocket_get_error(ccsocket_t s, char buf[MAX_ERRORLEN])
