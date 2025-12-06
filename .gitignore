@@ -58,6 +58,7 @@ dkms.conf
 
 # build file
 Makefile
+.xmake
 
 # debug information files
 *.dwo
