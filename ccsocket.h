@@ -29,57 +29,57 @@ typedef enum {
 } ccsocket_flags_t;
 
 typedef enum {
-    CC_UNIX  = 0,
-    CC_INET4 = 1,
-    CC_INET6 = 2,
+    CC_UNIX  = 0, // AF_UNIX  -> LOCAL
+    CC_INET4 = 1, // AF_INET  -> IPv4
+    CC_INET6 = 2, // AF_INET6 -> IPv6
 } ccsocket_domain_t;
 
 typedef enum {
-    CC_TCP   = 1,
-    CC_UDP   = 2,
-    CC_ICMP  = 3,
+    CC_TCP   = 1,  // use `so_stream`
+    CC_UDP   = 2,  // use `so_datagram`
+    CC_ICMP  = 3,  // use `so_raw -> icmp`
 } ccsocket_protocol_t;
 
 typedef enum {
-    CC_CONNECTING = 0,
-    CC_CONNECTED  = 1,
-    CC_CONNERROR  = 2,
+    CC_CONNECTING = 0, // socket connecting(try later)
+    CC_CONNECTED  = 1, // socket connected and succeed
+    CC_CONNERROR  = 2, // socket connect failed.
 } ccsocket_conn_state_t;
 
 typedef enum {
-    CC_SENDERROR  = -1,  // 发送失败(发送期间出错)
-    CC_SENDWAIT   =  0,  // 正在发送(缓冲区已满)
-    CC_SENDNEXT   =  1,  // 再次尝试(需再次调用)
-    CC_SENDALL    =  2,  // 发送完成(数据已全部发送)
+    CC_SENDERROR  = -1,  // sending error(Unrecoverable).
+    CC_SENDWAIT   =  0,  // send buffer was fully.(wait a seconds.)
+    CC_SENDNEXT   =  1,  // try call `ccsocket_sendfile` again.
+    CC_SENDALL    =  2,  // send completed.
 } ccsocket_sendf_state_t;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* 销毁 ccsocket */
+/* close ccsocket */
 CCSOCKET_EXPORT int ccsocket_close(ccsocket_t s);
 
-/* 创建双向连接的SOCK_STREAM管道 */
+/* create socketpair base `SOCK_STREAM` */
 CCSOCKET_EXPORT bool ccsocketpair(ccsocket_t sv[2], ccsocket_flags_t flags);
 
-/* 创建 ccsocket */
+/* create `ccsocket` */
 CCSOCKET_EXPORT ccsocket_t ccsocket(ccsocket_domain_t domain, ccsocket_protocol_t proto);
-/* 创建 ccsocket */
+/* create `ccsocket` with flags */
 CCSOCKET_EXPORT ccsocket_t ccsocket1(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsocket_flags_t flags);
 
-/* 准入 ccsocket */
+/* accept client from listen `ccsocket` */
 CCSOCKET_EXPORT ccsocket_t ccsocket_accept(ccsocket_t s, ccsocket_flags_t flags);
 
-/* 准入 ccsocket (获取地址与端口)*/
+/* accept client from listen `ccsocket` with client `address` and `port` */
 CCSOCKET_EXPORT ccsocket_t ccsocket_accept1(ccsocket_t s, char addr[MAX_ADDRLEN], uint16_t *port, ccsocket_flags_t flags);
 
-/* 监听 ccsocket */
+/* listen a `ccsocket` (Only a listener) */
 CCSOCKET_EXPORT bool ccsocket_listen(ccsocket_t s, const char *addr, uint16_t port);
 
-/** 监听 ccsocket, 可多进程实现负载均衡(仅部分平台)
- *  注意: 仅下面列出的平台和之后的版本才支持内核级负载均衡.
- *  DragonFly | FreeBSD 最多支持256个进程.
+/** listen a `ccsocket` with load balance in supported kernal. 
+ *  the following platforms support multi-process load balancing using `ccsocket`:
+ *  DragonFly | FreeBSD , but listener must less than `255`.
  *  * Linux 3.9 : SO_REUSEPORT
  *  * DragonFlyBSD 3.6 : SO_REUSEPORT
  *  * FreeBSD 12 : SO_REUSEPORT_LB
@@ -88,57 +88,58 @@ CCSOCKET_EXPORT bool ccsocket_listen(ccsocket_t s, const char *addr, uint16_t po
  */
 CCSOCKET_EXPORT bool ccsocket_listen1(ccsocket_t s, const char *addr, uint16_t port);
 
-/* 连接 ccsocket */
+/* connect to server using ccsocket. */
 CCSOCKET_EXPORT bool ccsocket_connect(ccsocket_t s, const char *addr, uint16_t port);
 
-/* 检查 ccsocket */
+/* check `ccsocket` connecting state. */
 CCSOCKET_EXPORT ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s);
 
-/* 接收 ccsocket */
+/* Read data sent by the peer from the `ccsocket`. */
 CCSOCKET_EXPORT int ccsocket_recv(ccsocket_t s, char *buf, size_t bsize);
-/* 接收 ccsocket */
+/* Read data sent by the peer from the `ccsocket`. */
 CCSOCKET_EXPORT int ccsocket_recvfrom(ccsocket_t s, void *buf, size_t bsize, char *addr, uint16_t *port);
-/* 偷看 ccsocket */
+/* Sneaking a view of the data sent by the other end through a ccsocket. (platform must be supported) */
 CCSOCKET_EXPORT int ccsocket_peek(ccsocket_t s, char* buf, size_t bsize);
 
-/* 发送 ccsocket */
+/* send buffer to peer `ccsocket` */
 CCSOCKET_EXPORT int ccsocket_send(ccsocket_t s, const void *buf, size_t bsize);
+/* send buffer to peer `ccsocket` */
 CCSOCKET_EXPORT int ccsocket_sendto(ccsocket_t s, const void *buf, size_t bsize, char *addr, uint16_t port);
 
-/* 发送文件 ccsocket */
+/* call sendfile using `ccsocket` with `zero-copy` */
 CCSOCKET_EXPORT ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd);
 
-/* ********** 下面是一些标准/平台特有的标志来变更交互行为 ********** */
+/* ********** Below are some settings that can be used to change the behavior of `ccsocket` ********** */
 
-/* 获取错误信息 */
+/* get string error information from `ccsocket` */
 CCSOCKET_EXPORT void ccsocket_get_error(ccsocket_t s, char buf[MAX_ERRORLEN]);
 
-/* 获取对端地址/端口 */
+/* get peer address/port from `ccsocket` */
 CCSOCKET_EXPORT bool ccsocket_get_peername(ccsocket_t s, char addr[MAX_ADDRLEN], uint16_t *port);
-/* 获取本端地址/端口 */
+/* get listen address/port from `ccsocket` */
 CCSOCKET_EXPORT bool ccsocket_get_sockname(ccsocket_t s, char addr[MAX_ADDRLEN], uint16_t *port);
 
-/* 获取套接字协议簇, -1表示错误 */
+/* get `Address Family` from `ccscket`, (e.g : check it's ipv4 or ipv6?) */
 CCSOCKET_EXPORT int ccsocket_get_family(ccsocket_t s);
 
-/* 设置接收超时时间(`timeout`单位毫秒) */
+/* set the receive timeout (`timeout` in milliseconds). */
 CCSOCKET_EXPORT bool ccsocket_set_rcvtimeout(ccsocket_t s, int timeout);
-/* 设置发送超时时间(`timeout`单位毫秒) */
+/* set the timeout period for sending (`timeout` in milliseconds). */
 CCSOCKET_EXPORT bool ccsocket_set_sndtimeout(ccsocket_t s, int timeout);
 
-/* 设置非延迟发送 */
+/* Used to enable/disable the `Nagle-algorithm`. */
 CCSOCKET_EXPORT bool ccsocket_set_nodelay(ccsocket_t s, bool on);
 
-/* 设置地址重用 */
+/* Used to enable/disable the `reuse address`. */
 CCSOCKET_EXPORT bool ccsocket_set_reuseaddr(ccsocket_t s, bool on);
 
-/* 设置端口重用 */
+/* Used to enable/disable the `reuse port`. */
 CCSOCKET_EXPORT bool ccsocket_set_reuseport(ccsocket_t s, bool on);
 
-/* 设置非阻塞模式 */
+/* Used to enable/disable the `ccsocket block/nonblock`. */
 CCSOCKET_EXPORT bool ccsocket_set_nonblock(ccsocket_t s, bool on);
 
-/* 设置非继承模式 */
+/* Used to enable/disable whether "sockets will be automatically inherited by sub-processes". */
 CCSOCKET_EXPORT bool ccsocket_set_cloexec(ccsocket_t s, bool on);
 
 #ifdef __cplusplus
