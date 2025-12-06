@@ -74,7 +74,7 @@ void test_server_socket(ccsocket_t sock) {
   }
 
   char addr[MAX_ADDRLEN]; uint16_t port;
-  ccsocket_t csock = ccsocket_accept1(sock, addr, &port, 0);
+  ccsocket_t csock = ccsocket_accept1(sock, addr, &port, CC_NOFLAG);
   if (csock == INVALID_SOCKET) {
       ccsocket_dump_error(sock, "ccsocket_accept");
       exit(1);
