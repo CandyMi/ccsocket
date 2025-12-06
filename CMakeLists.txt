@@ -15,16 +15,35 @@ message("-- Detecting platform: '${CMAKE_SYSTEM_NAME}'")
 message("-- Detecting install prefix path: '${CMAKE_INSTALL_PREFIX}'")
 
 set(ccsocket_headers ccsocket.h)
-file(GLOB ccsocket_src ccsocket.c)
+set(ccsocket_source ccsocket.c)
+set(ccsocket_testmain main.c)
 
 if(MSVC)
   add_compile_options("/source-charset:utf-8")
+else()
+  set(CMAKE_C_STANDARD 99)
+  set(CMAKE_C_EXTENSIONS ON)
+  set(CMAKE_C_STANDARD_REQUIRED ON)
+  option(USE_CXX "force use c++ compiler" ON)
+  if (USE_CXX) #如果强制使用C++编译.
+    set(CMAKE_CXX_STANDARD 11)
+    set(CMAKE_CXX_EXTENSIONS ON)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+    set_source_files_properties(
+      ${ccsocket_headers} ${ccsocket_source} ${ccsocket_testmain}
+      PROPERTIES
+        LANGUAGE CXX
+    )
+    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang") # Clang 编译器会有警告
+      add_compile_options(-Wno-deprecated)
+    endif()
+  endif()
 endif()
 
-add_executable(main main.c)
+add_executable(main ${ccsocket_testmain})
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
   # message("Windows")
-  add_library(ccsocket_object OBJECT ${ccsocket_src})
+  add_library(ccsocket_object OBJECT ${ccsocket_source})
   add_library(ccsocket-dynamic SHARED $<TARGET_OBJECTS:ccsocket_object>)
   set_target_properties(ccsocket-dynamic PROPERTIES OUTPUT_NAME "ccsocket" PREFIX "" PUBLIC_HEADER "${ccsocket_headers}")
   add_library(ccsocket-static STATIC $<TARGET_OBJECTS:ccsocket_object>)
@@ -32,7 +51,7 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
   target_link_libraries(main PRIVATE ccsocket-dynamic)
 else()
   # message("Unix-Like")
-  add_library(ccsocket_object OBJECT ${ccsocket_src})
+  add_library(ccsocket_object OBJECT ${ccsocket_source})
   target_compile_options(ccsocket_object PRIVATE -fPIC)
   add_library(ccsocket-dynamic SHARED $<TARGET_OBJECTS:ccsocket_object>)
   set_target_properties(ccsocket-dynamic PROPERTIES OUTPUT_NAME "ccsocket" PREFIX "lib" PUBLIC_HEADER "${ccsocket_headers}")
@@ -50,6 +69,7 @@ endif()
 install(
   TARGETS ccsocket-dynamic ccsocket-static
   RUNTIME  DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+  ARCHIVE  DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
   LIBRARY  DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
   PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_PREFIX}/include # includes
 )
