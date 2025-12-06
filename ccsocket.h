@@ -56,21 +56,21 @@ typedef enum {
 typedef enum {
 #define CC_CONNERROR  CC_CONNERROR
     CC_CONNERROR  = -1, // socket connect failed.
-#define CC_CONNECTING CC_CONNECTING
-    CC_CONNECTING =  0, // socket connecting(try later)
 #define CC_CONNECTED  CC_CONNECTED
-    CC_CONNECTED  =  1, // socket connected and succeed
+    CC_CONNECTED  =  0, // socket connected and succeed.
+#define CC_CONNECTING CC_CONNECTING
+    CC_CONNECTING =  1, // socket connecting(try later).
 } ccsocket_conn_state_t;
 
 typedef enum {
 #define CC_SENDERROR CC_SENDERROR
     CC_SENDERROR  = -1,  // sending error(Unrecoverable).
-#define CC_SENDWAIT  CC_SENDWAIT
-    CC_SENDWAIT   =  0,  // send buffer was fully.(wait a seconds.)
-#define CC_SENDNEXT  CC_SENDNEXT
-    CC_SENDNEXT   =  1,  // try call `ccsocket_sendfile` again.
 #define CC_SENDALL   CC_SENDALL
-    CC_SENDALL    =  2,  // send completed.
+    CC_SENDALL    =  0,  // send completed.
+#define CC_SENDWAIT  CC_SENDWAIT
+    CC_SENDWAIT   =  1,  // send buffer was fully.(wait a seconds)
+#define CC_SENDNEXT  CC_SENDNEXT
+    CC_SENDNEXT   =  2,  // try call `ccsocket_sendfile` again.
 } ccsocket_sendf_state_t;
 
 /* close ccsocket */
