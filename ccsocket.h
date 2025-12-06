@@ -2,7 +2,7 @@
 #define CCSOCKET_H
 
 #include <stdint.h>
-#include <stdlib.h>
+#include <stddef.h>
 #include <stdbool.h>
 
 #if _WIN32

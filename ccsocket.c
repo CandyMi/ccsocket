@@ -12,7 +12,7 @@
 #include "ccsocket.h"
 
 #include <errno.h>
-// #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #if _WIN32
