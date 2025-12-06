@@ -322,8 +322,22 @@ ccsocket_t ccsocket_accept1(ccsocket_t s, char ip[MAX_ADDRLEN], uint16_t *port, 
   c = accept4(s, (struct sockaddr*)sap, sasizep, flags_r);
 #else
   c = accept(s, (struct sockaddr*)sap, sasizep);
-  if (c == INVALID_SOCKET)
+#endif
+  if (c == INVALID_SOCKET) {
+#if _WIN32
+    int ecode = WSAGetLastError();
+    if (ecode == WSAEINTR)
+      return ccsocket_accept1(s, ip, port, flags);
+    if (ecode == WSAEWOULDBLOCK)
+      return 0;
+#else
+    if (errno == EINTR)
+      return ccsocket_accept1(s, ip, port, flags);
+    if (errno == EAGAIN)
+      return 0;
+#endif
     return INVALID_SOCKET;
+  }
   if (flags) {
     int r = ccsocket_set_flags(c, flags);
     if (r == -1) {
@@ -331,7 +345,6 @@ ccsocket_t ccsocket_accept1(ccsocket_t s, char ip[MAX_ADDRLEN], uint16_t *port, 
       c = INVALID_SOCKET;
     }
   }
-#endif
   if (ip && port)
     ccsocket2addr(sap, ip, port);
   return c;

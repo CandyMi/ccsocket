@@ -68,10 +68,10 @@ CCSOCKET_EXPORT ccsocket_t ccsocket(ccsocket_domain_t domain, ccsocket_protocol_
 /* create `ccsocket` with flags */
 CCSOCKET_EXPORT ccsocket_t ccsocket1(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsocket_flags_t flags);
 
-/* accept client from listen `ccsocket` */
+/* accept a client from listen `ccsocket`, return `(ccsocket_t)0` when non-block mode syscall want wait events. */
 CCSOCKET_EXPORT ccsocket_t ccsocket_accept(ccsocket_t s, ccsocket_flags_t flags);
 
-/* accept client from listen `ccsocket` with client `address` and `port` */
+/* accept client from listen `ccsocket` with client `address` and `port`, return `(ccsocket_t)0` when non-block mode syscall want wait events. */
 CCSOCKET_EXPORT ccsocket_t ccsocket_accept1(ccsocket_t s, char addr[MAX_ADDRLEN], uint16_t *port, ccsocket_flags_t flags);
 
 /* listen a `ccsocket` (Only a listener) */
