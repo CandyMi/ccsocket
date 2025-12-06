@@ -380,16 +380,6 @@ bool ccsocket_listen(ccsocket_t s, const char *ip, uint16_t port)
 /* 监听 ccsocket 实现负载均衡(仅部分平台) */
 bool ccsocket_listen1(ccsocket_t s, const char *ip, uint16_t port)
 {
-  /**
-   * 注意:
-   * 1. 仅下面列出的平台和之后的版本才支持内核负载均衡.
-   * 2. DragonFly | FreeBSD 最多支持256个进程.
-   * Linux 3.9 : SO_REUSEPORT
-   * DragonFlyBSD 3.6 : SO_REUSEPORT
-   * FreeBSD 12 : SO_REUSEPORT_LB
-   * Solaris 11.4 : SO_REUSEPORT
-   * AIX 7.2.5.0 : SO_REUSEPORT
-   */
 #if defined(SO_REUSEPORT_LB)
   int Enable = 1;
   if (SOCKET_ERROR == setsockopt((SOCKET)s, SOL_SOCKET, SO_REUSEPORT_LB, (char*)&Enable, sizeof(Enable))) {

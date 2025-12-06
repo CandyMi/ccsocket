@@ -77,7 +77,15 @@ CCSOCKET_EXPORT ccsocket_t ccsocket_accept1(ccsocket_t s, char addr[MAX_ADDRLEN]
 /* 监听 ccsocket */
 CCSOCKET_EXPORT bool ccsocket_listen(ccsocket_t s, const char *addr, uint16_t port);
 
-/* 监听 ccsocket 实现负载均衡(仅部分平台) */
+/** 监听 ccsocket, 可多进程实现负载均衡(仅部分平台)
+ *  注意: 仅下面列出的平台和之后的版本才支持内核级负载均衡.
+ *  DragonFly | FreeBSD 最多支持256个进程.
+ *  * Linux 3.9 : SO_REUSEPORT
+ *  * DragonFlyBSD 3.6 : SO_REUSEPORT
+ *  * FreeBSD 12 : SO_REUSEPORT_LB
+ *  * Solaris 11.4 : SO_REUSEPORT
+ *  * AIX 7.2.5.0 : SO_REUSEPORT
+ */
 CCSOCKET_EXPORT bool ccsocket_listen1(ccsocket_t s, const char *addr, uint16_t port);
 
 /* 连接 ccsocket */
@@ -88,6 +96,7 @@ CCSOCKET_EXPORT ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s);
 
 /* 接收 ccsocket */
 CCSOCKET_EXPORT int ccsocket_recv(ccsocket_t s, char *buf, size_t bsize);
+/* 接收 ccsocket */
 CCSOCKET_EXPORT int ccsocket_recvfrom(ccsocket_t s, void *buf, size_t bsize, char *addr, uint16_t *port);
 /* 偷看 ccsocket */
 CCSOCKET_EXPORT int ccsocket_peek(ccsocket_t s, char* buf, size_t bsize);
