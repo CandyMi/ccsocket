@@ -1,4 +1,4 @@
----@diagnostic disable: undefined-global
+---@diagnostic disable: undefined-global, undefined-field
 
 workspace "ccsocket"
   configurations { "Debug", "Release" }
@@ -22,7 +22,7 @@ local function ccbuild (
 
     if project_links then
       links(project_links)
-      libdirs { 'build' }
+      libdirs({ path.getabsolute(preject_output), '/usr/local/lib' })
     end
 
     if project_filename then
@@ -38,8 +38,11 @@ local function ccbuild (
       defines { "NDEBUG" }
       optimize "On"
 
-    filter "system:windows"
+    filter { "system:windows" }
       targetprefix ""
+
+    filter { "system:macosx" }
+      runpathdirs { path.getabsolute(preject_output) }
 end
 
 ccbuild(
