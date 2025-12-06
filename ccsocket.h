@@ -14,6 +14,10 @@
     #define INVALID_SOCKET (~0)
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef MAX_ADDRLEN
     #define MAX_ADDRLEN 255
 #endif
@@ -23,39 +27,51 @@
 #endif
 
 typedef enum {
-    CC_NOFLAG   = 0,
-    CC_CLOEXEC  = 1,
-    CC_NONBLOCK = 2,
+#define CC_NOFLAG  CC_NOFLAG
+    CC_NOFLAG   = 0, // normal flags
+#define CC_CLOEXEC CC_CLOEXEC
+    CC_CLOEXEC  = 1, // with cloexec
+#define CC_NONBLOCK  CC_NONBLOCK
+    CC_NONBLOCK = 2, // with non-block
 } ccsocket_flags_t;
 
 typedef enum {
+#define CC_UNIX  CC_UNIX
     CC_UNIX  = 0, // AF_UNIX  -> LOCAL
+#define CC_INET4 CC_INET4
     CC_INET4 = 1, // AF_INET  -> IPv4
+#define CC_INET6 CC_INET6
     CC_INET6 = 2, // AF_INET6 -> IPv6
 } ccsocket_domain_t;
 
 typedef enum {
+#define CC_TCP  CC_TCP
     CC_TCP   = 1,  // use `so_stream`
+#define CC_UDP  CC_UDP
     CC_UDP   = 2,  // use `so_datagram`
+#define CC_ICMP CC_ICMP
     CC_ICMP  = 3,  // use `so_raw -> icmp`
 } ccsocket_protocol_t;
 
 typedef enum {
-    CC_CONNECTING = 0, // socket connecting(try later)
-    CC_CONNECTED  = 1, // socket connected and succeed
-    CC_CONNERROR  = 2, // socket connect failed.
+#define CC_CONNERROR  CC_CONNERROR
+    CC_CONNERROR  = -1, // socket connect failed.
+#define CC_CONNECTING CC_CONNECTING
+    CC_CONNECTING =  0, // socket connecting(try later)
+#define CC_CONNECTED  CC_CONNECTED
+    CC_CONNECTED  =  1, // socket connected and succeed
 } ccsocket_conn_state_t;
 
 typedef enum {
+#define CC_SENDERROR CC_SENDERROR
     CC_SENDERROR  = -1,  // sending error(Unrecoverable).
+#define CC_SENDWAIT  CC_SENDWAIT
     CC_SENDWAIT   =  0,  // send buffer was fully.(wait a seconds.)
+#define CC_SENDNEXT  CC_SENDNEXT
     CC_SENDNEXT   =  1,  // try call `ccsocket_sendfile` again.
+#define CC_SENDALL   CC_SENDALL
     CC_SENDALL    =  2,  // send completed.
 } ccsocket_sendf_state_t;
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /* close ccsocket */
 CCSOCKET_EXPORT int ccsocket_close(ccsocket_t s);
@@ -145,4 +161,5 @@ CCSOCKET_EXPORT bool ccsocket_set_cloexec(ccsocket_t s, bool on);
 #ifdef __cplusplus
 }
 #endif
-#endif
+
+#endif // CCSOCKET_H
