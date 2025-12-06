@@ -316,9 +316,9 @@ ccsocket_t ccsocket_accept1(ccsocket_t s, char ip[MAX_ADDRLEN], uint16_t *port, 
 #if defined(SOCK_NONBLOCK) && defined(SOCK_CLOEXEC)
   int flags_r = 0;
   if (flags & CC_NONBLOCK)
-    flags |= SOCK_NONBLOCK;
+    flags_r |= SOCK_NONBLOCK;
   if (flags & CC_CLOEXEC)
-    flags |= SOCK_CLOEXEC;
+    flags_r |= SOCK_CLOEXEC;
   c = accept4(s, (struct sockaddr*)sap, sasizep, flags_r);
 #else
   c = accept(s, (struct sockaddr*)sap, sasizep);
