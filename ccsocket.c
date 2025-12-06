@@ -2,6 +2,13 @@
   #define _GNU_SOURCE
 #endif
 
+/* 兼容C89/C90 */
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
+  #define CC_INLINE static inline
+#else
+  #define CC_INLINE static
+#endif
+
 #define STRICT
 #define WIN32_LEAN_AND_MEAN
 /*
@@ -68,7 +75,7 @@ typedef enum {
   CCCLIENT = 2,
 } cc_socket_t;
 
-static inline
+CC_INLINE
 int ccsizeof(const struct sockaddr_storage* sa)
 {
   switch ((int)sa->ss_family)
@@ -85,7 +92,7 @@ int ccsizeof(const struct sockaddr_storage* sa)
   return 0;
 }
 
-static inline
+CC_INLINE
 bool ccsocket2addr(const struct sockaddr_storage* sa, char addr[MAX_ADDRLEN], uint16_t *port)
 {
   switch ((int)sa->ss_family)
@@ -122,7 +129,7 @@ bool ccsocket2addr(const struct sockaddr_storage* sa, char addr[MAX_ADDRLEN], ui
   return true;
 }
 
-static inline
+CC_INLINE
 int _ccsocket_set_flags(ccsocket_t s, ccsocket_flags_t flags, bool on)
 {
   int r = -1;
@@ -153,13 +160,13 @@ int _ccsocket_set_flags(ccsocket_t s, ccsocket_flags_t flags, bool on)
   return r;
 }
 
-static inline
+CC_INLINE
 int ccsocket_set_flags(ccsocket_t s, ccsocket_flags_t flags)
 {
   return _ccsocket_set_flags(s, flags, true);
 }
 
-static inline
+CC_INLINE
 int _ccsocket_get_family(ccsocket_t s, struct sockaddr_storage* sa)
 {
   socklen_t addrlen = sizeof(*sa); memset(sa, 0x0, sizeof(*sa));
@@ -173,7 +180,7 @@ int _ccsocket_get_family(ccsocket_t s, struct sockaddr_storage* sa)
   return r;
 }
 
-static inline
+CC_INLINE
 int ccsocket_wrap_ip_and_port(ccsocket_t s, struct sockaddr_storage* sa, const char addr[MAX_ADDRLEN], uint16_t port)
 {
   int r = _ccsocket_get_family(s, sa);
@@ -350,7 +357,7 @@ ccsocket_t ccsocket_accept1(ccsocket_t s, char ip[MAX_ADDRLEN], uint16_t *port, 
   return c;
 }
 
-static inline
+CC_INLINE
 bool ccsocket_listen_internal(ccsocket_t s, const char ip[MAX_ADDRLEN], uint16_t port)
 {
   errno = 0; int r = 0;
@@ -631,7 +638,7 @@ bool ccsocket_set_reuseport(ccsocket_t s, bool on)
 #endif
 }
 
-static inline
+CC_INLINE
 bool _ccsocket_set_timeout(ccsocket_t s, int type, int timeout)
 {
 #if _WIN32
