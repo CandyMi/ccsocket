@@ -36,6 +36,8 @@ typedef enum {
 } ccsocket_flags_t;
 
 typedef enum {
+#define CC_DOMAIN_INVALID  CC_DOMAIN_INVALID
+    CC_DOMAIN_INVALID = -1,
 #define CC_UNIX  CC_UNIX
     CC_UNIX  = 0, // AF_UNIX  -> LOCAL
 #define CC_INET4 CC_INET4
@@ -45,6 +47,8 @@ typedef enum {
 } ccsocket_domain_t;
 
 typedef enum {
+#define CC_PROTOCOL_INVALID  CC_PROTOCOL_INVALID
+    CC_PROTOCOL_INVALID = -1,
 #define CC_TCP  CC_TCP
     CC_TCP   = 1,  // use `so_stream`
 #define CC_UDP  CC_UDP
@@ -137,6 +141,11 @@ CCSOCKET_EXPORT bool ccsocket_get_sockname(ccsocket_t s, char addr[MAX_ADDRLEN],
 
 /* get `Address Family` from `ccscket`, (e.g : check it's ipv4 or ipv6?) */
 CCSOCKET_EXPORT int ccsocket_get_family(ccsocket_t s);
+
+/* Check the ip protocol version from `addr` stirng.
+ * return once of `CC_INET4`, `CC_INET6`, `CC_DOMAIN_INVALID`.
+ */
+CCSOCKET_EXPORT ccsocket_domain_t ccsocket_get_version(char addr[MAX_ADDRLEN]);
 
 /**
  * enable accept defer in listen tcp socket, becare unless you know it's behavior.

@@ -248,6 +248,9 @@ ccsocket_t ccsocket1(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsock
     case CC_INET6:
       domain_r = AF_INET6;
       break;
+    case CC_DOMAIN_INVALID:
+    default:
+      return SOCKET_ERROR;
   }
 
   int flag_r = IPPROTO_IP;
@@ -266,6 +269,9 @@ ccsocket_t ccsocket1(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsock
       proto_r = SOCK_RAW;
       // flag_r = IPPROTO_ICMP;
       break;
+    case CC_PROTOCOL_INVALID:
+    default:
+      return SOCKET_ERROR;
   }
 
   bool isset = false;
@@ -739,6 +745,29 @@ int ccsocket_get_family(ccsocket_t s)
 {
   struct sockaddr_storage sa;
   return _ccsocket_get_family(s, &sa) ? -1 : (int)sa.ss_family;
+}
+
+ccsocket_domain_t ccsocket_get_version(char addr[MAX_ADDRLEN])
+{
+  struct sockaddr_in sa4; memset(&sa4, 0x0, sizeof(sa4));
+#if _WIN32
+  if (WSAStringToAddress(addr, AF_INET, NULL, (struct sockaddr *)&sa4, sizeof(sa4)) == SOCKET_ERROR)
+#else
+  if (inet_pton(AF_INET, addr, &sa4.sin_addr) != 1)
+#endif
+    return CC_INET4;
+  struct sockaddr_in6 sa6; memset(&sa6, 0x0, sizeof(sa6));
+#if _WIN32
+  if (WSAStringToAddress(addr, AF_INET6, NULL, (struct sockaddr *)&sa6, sizeof(sa6)) == SOCKET_ERROR)
+#else
+  if (inet_pton(AF_INET6, addr, &sa6.sin6_addr) != 1)
+#endif
+    return CC_INET6;
+  errno = EINVAL;
+#if _WIN32
+  WSASetLastError(WSAEINVAL);
+#endif
+  return CC_DOMAIN_INVALID;
 }
 
 bool ccsocket_set_nonblock(ccsocket_t s, bool on)
