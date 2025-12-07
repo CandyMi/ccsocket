@@ -642,6 +642,15 @@ bool ccsocket_set_reuseport(ccsocket_t s, bool on)
 #endif
 }
 
+/* 开启/关闭 keepalive */
+bool ccsocket_set_keepalive(ccsocket_t s, bool on)
+{
+  int Enable = on ? 1 : 0;
+  if (setsockopt((SOCKET)s, SOL_SOCKET, SO_KEEPALIVE, (void *)&Enable, sizeof(Enable)))
+    return false;
+  return true;
+}
+
 CC_INLINE
 bool _ccsocket_set_timeout(ccsocket_t s, int type, int timeout)
 {

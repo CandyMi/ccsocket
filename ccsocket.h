@@ -143,6 +143,9 @@ CCSOCKET_EXPORT bool ccsocket_set_rcvtimeout(ccsocket_t s, int timeout);
 /* set the timeout period for sending (`timeout` in milliseconds). */
 CCSOCKET_EXPORT bool ccsocket_set_sndtimeout(ccsocket_t s, int timeout);
 
+/* set `ccsocket` cocnnection keep-alive(when peer in internet better). */
+CCSOCKET_EXPORT bool ccsocket_set_keepalive(ccsocket_t s, bool on);
+
 /* Used to enable/disable the `Nagle-algorithm`. */
 CCSOCKET_EXPORT bool ccsocket_set_nodelay(ccsocket_t s, bool on);
 
