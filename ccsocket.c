@@ -393,6 +393,10 @@ bool ccsocket_listen(ccsocket_t s, const char *ip, uint16_t port)
   if (SOCKET_ERROR == setsockopt((SOCKET)s, SOL_SOCKET, SO_EXCLBIND, (char*)&Enable, sizeof(Enable))) {
     return false;
   }
+#else
+  errno = 0;
+  if (!ccsocket_set_reuseaddr((SOCKET)s, true))
+    return false;
 #endif
   return ccsocket_listen_internal(s, ip, port);
 }
