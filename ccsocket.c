@@ -751,16 +751,16 @@ ccsocket_domain_t ccsocket_get_version(char addr[MAX_ADDRLEN])
 {
   struct sockaddr_in sa4; memset(&sa4, 0x0, sizeof(sa4));
 #if _WIN32
-  if (WSAStringToAddress(addr, AF_INET, NULL, (struct sockaddr *)&sa4, sizeof(sa4)) == SOCKET_ERROR)
+  if (!WSAStringToAddress(addr, AF_INET, NULL, (struct sockaddr *)&sa4, sizeof(sa4)))
 #else
-  if (inet_pton(AF_INET, addr, &sa4.sin_addr) != 1)
+  if (inet_pton(AF_INET, addr, &sa4.sin_addr) == 1)
 #endif
     return CC_INET4;
   struct sockaddr_in6 sa6; memset(&sa6, 0x0, sizeof(sa6));
 #if _WIN32
-  if (WSAStringToAddress(addr, AF_INET6, NULL, (struct sockaddr *)&sa6, sizeof(sa6)) == SOCKET_ERROR)
+  if (!WSAStringToAddress(addr, AF_INET6, NULL, (struct sockaddr *)&sa6, sizeof(sa6)))
 #else
-  if (inet_pton(AF_INET6, addr, &sa6.sin6_addr) != 1)
+  if (inet_pton(AF_INET6, addr, &sa6.sin6_addr) == 1)
 #endif
     return CC_INET6;
   errno = EINVAL;
