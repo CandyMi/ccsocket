@@ -19,7 +19,7 @@ static void fname() { code; printf(         \
 CCSOCKET_TEST_FUNCTION(cctest_sockpair, {
   ccsocket_t sv[2]; char buffer[] = "1024";
   char buf[1024]; memset(buf, 0x0, 1024);
-  assert(ccsocketpair(sv, (ccsocket_flags_t)(CC_NONBLOCK|CC_CLOEXEC)));
+  assert(ccsocketpair(sv, CC_NONBLOCK|CC_CLOEXEC));
   int wsize = ccsocket_send(sv[0], buffer, strlen(buffer));
   assert(wsize == strlen(buffer));
   int rsize = ccsocket_recv(sv[1], buf, 1024);
@@ -31,11 +31,11 @@ CCSOCKET_TEST_FUNCTION(cctest_sockpair, {
 /* test TCP/UDP socket in all platform. */
 CCSOCKET_TEST_FUNCTION(cctest_socketnew, {
   ccsocket_t s4; ccsocket_t s6;
-  s4 = ccsocket1(CC_INET4, CC_TCP, (ccsocket_flags_t)(CC_NONBLOCK|CC_CLOEXEC));
-  s6 = ccsocket1(CC_INET6, CC_TCP, (ccsocket_flags_t)(CC_NONBLOCK|CC_CLOEXEC));
+  s4 = ccsocket1(CC_INET4, CC_TCP, CC_NONBLOCK|CC_CLOEXEC);
+  s6 = ccsocket1(CC_INET6, CC_TCP, CC_NONBLOCK|CC_CLOEXEC);
   assert(s4 != INVALID_SOCKET && s6 != INVALID_SOCKET);
-  s4 = ccsocket1(CC_INET4, CC_UDP, (ccsocket_flags_t)(CC_NONBLOCK|CC_CLOEXEC));
-  s6 = ccsocket1(CC_INET6, CC_UDP, (ccsocket_flags_t)(CC_NONBLOCK|CC_CLOEXEC));
+  s4 = ccsocket1(CC_INET4, CC_UDP, CC_NONBLOCK|CC_CLOEXEC);
+  s6 = ccsocket1(CC_INET6, CC_UDP, CC_NONBLOCK|CC_CLOEXEC);
   assert(s4 != INVALID_SOCKET && s6 != INVALID_SOCKET);
 })
 
@@ -43,19 +43,19 @@ CCSOCKET_TEST_FUNCTION(cctest_listen_and_connect, {
   const char ipv4[] = "127.0.0.1"; const char ipv6[] = "::1"; uint16_t port = 7888;
   ccsocket_t s4; ccsocket_t c4; ccsocket_t ss4 = INVALID_SOCKET;
   ccsocket_t s6; ccsocket_t c6; ccsocket_t ss6 = INVALID_SOCKET;
-  s4 = ccsocket1(CC_INET4, CC_TCP, (ccsocket_flags_t)(CC_NONBLOCK|CC_CLOEXEC));
-  c4 = ccsocket1(CC_INET4, CC_TCP, (ccsocket_flags_t)(CC_NONBLOCK|CC_CLOEXEC));
-  s6 = ccsocket1(CC_INET6, CC_TCP, (ccsocket_flags_t)(CC_NONBLOCK|CC_CLOEXEC));
-  c6 = ccsocket1(CC_INET6, CC_TCP, (ccsocket_flags_t)(CC_NONBLOCK|CC_CLOEXEC));
+  s4 = ccsocket1(CC_INET4, CC_TCP, CC_NONBLOCK|CC_CLOEXEC);
+  c4 = ccsocket1(CC_INET4, CC_TCP, CC_NONBLOCK|CC_CLOEXEC);
+  s6 = ccsocket1(CC_INET6, CC_TCP, CC_NONBLOCK|CC_CLOEXEC);
+  c6 = ccsocket1(CC_INET6, CC_TCP, CC_NONBLOCK|CC_CLOEXEC);
   assert(c4 != INVALID_SOCKET && c6 != INVALID_SOCKET);
   assert(s4 != INVALID_SOCKET && s6 != INVALID_SOCKET);
   /* listen ipv6 and ipv4 */
   assert(ccsocket_listen(s4, ipv4, port));
   assert(ccsocket_listen(s6, ipv6, port));
   /* accept ipv6 and ipv4 client socket. */
-  ss4 = ccsocket_accept(s4, (ccsocket_flags_t)(CC_NONBLOCK|CC_CLOEXEC));
+  ss4 = ccsocket_accept(s4, CC_NONBLOCK|CC_CLOEXEC);
   assert(!ss4);
-  ss6 = ccsocket_accept(s6, (ccsocket_flags_t)(CC_NONBLOCK|CC_CLOEXEC));
+  ss6 = ccsocket_accept(s6, CC_NONBLOCK|CC_CLOEXEC);
   assert(!ss6);
   /* connect to ipv6 and ipv4 */
   ccsocket_connect(c4, ipv4, port);
@@ -71,8 +71,8 @@ CCSOCKET_TEST_FUNCTION(cctest_listen_and_connect, {
   usleep(10000);
 #endif
   /* accept socket again */
-  ss4 = ccsocket_accept(s4, (ccsocket_flags_t)(CC_NONBLOCK|CC_CLOEXEC));
-  ss6 = ccsocket_accept(s6, (ccsocket_flags_t)(CC_NONBLOCK|CC_CLOEXEC));
+  ss4 = ccsocket_accept(s4, CC_NONBLOCK|CC_CLOEXEC);
+  ss6 = ccsocket_accept(s6, CC_NONBLOCK|CC_CLOEXEC);
   assert(ss4 > 0);
   assert(ss6 > 0);
   /* verify client was connected. */
@@ -96,9 +96,10 @@ CCSOCKET_TEST_FUNCTION(cctest_check_timeout, {
   assert(ccsocket_is_connected(c4) == CC_CONNECTED);
 
   /* 1. not timeout. */
-  const char *req = "GET / HTTP/1.1\r\nHost: www.163.com\r\n\r\n";
+  const char *req = "GET / HTTP/1.1\r\nHost: www.qq.com\r\n\r\n";
   // printf("len = %d\n", ccsocket_send(c4, req, strlen(req)));
-  assert(ccsocket_send(c4, req, strlen(req)) == strlen(req));
+  int wlen = ccsocket_send(c4, req, strlen(req));
+  assert(wlen == strlen(req));
 
   char buf[1024]; memset(buf, 0x0, 1024);
   int len = ccsocket_recv(c4, buf, sizeof(buf));
