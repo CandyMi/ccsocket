@@ -225,14 +225,8 @@ int ccsocket_close(ccsocket_t s)
   return closesocket(s);
 }
 
-/* 创建 ccsocket */
-ccsocket_t ccsocket(ccsocket_domain_t domain, ccsocket_protocol_t proto)
-{
-  return ccsocket1(domain, proto, CC_NOFLAG);
-}
-
 /* 创建 ccsocket 顺便设置标记 */
-ccsocket_t ccsocket1(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsocket_flags_t flags)
+ccsocket_t ccsocket2(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsocket_flags_t flags)
 {
   int domain_r = AF_UNSPEC;
   switch (domain)
@@ -310,12 +304,7 @@ ccsocket_t ccsocket1(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsock
 }
 
 /* 准入 ccsocket */
-ccsocket_t ccsocket_accept(ccsocket_t s, ccsocket_flags_t flags)
-{
-  return ccsocket_accept1(s, NULL, NULL, flags);
-}
-
-ccsocket_t ccsocket_accept1(ccsocket_t s, char ip[MAX_ADDRLEN], uint16_t *port, ccsocket_flags_t flags)
+ccsocket_t ccsocket_accept2(ccsocket_t s, char ip[MAX_ADDRLEN], uint16_t *port, ccsocket_flags_t flags)
 {
   errno = 0; socklen_t sasize = 0;
   struct sockaddr_storage* sap = NULL; socklen_t* sasizep = NULL;
@@ -431,7 +420,7 @@ bool ccsocket_listen1(ccsocket_t s, const char *ip, uint16_t port)
 }
 
 /* 创建双向连接的SOCK_STREAM管道 */
-bool ccsocketpair(ccsocket_t sv[2], ccsocket_flags_t flags)
+bool ccsocketpair1(ccsocket_t sv[2], ccsocket_flags_t flags)
 {
   errno = 0;
   if (!sv || flags < 0 || flags > 3) {

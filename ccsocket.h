@@ -81,18 +81,27 @@ typedef enum {
 CCSOCKET_EXPORT int ccsocket_close(ccsocket_t s);
 
 /* create socketpair base `SOCK_STREAM` */
-CCSOCKET_EXPORT bool ccsocketpair(ccsocket_t sv[2], ccsocket_flags_t flags);
+#define ccsocketpair(fds, flags) ccsocketpair1((fds), (ccsocket_flags_t)(flags))
+/* `ccsocketpair` ABI (Try to avoid using it directly.) */
+CCSOCKET_EXPORT bool ccsocketpair1(ccsocket_t sv[2], ccsocket_flags_t flags);
 
 /* create `ccsocket` */
-CCSOCKET_EXPORT ccsocket_t ccsocket(ccsocket_domain_t domain, ccsocket_protocol_t proto);
+#define ccsocket(domain, protocol) ccsocket2((domain), (protocol), CC_NOFLAG)
+
 /* create `ccsocket` with flags */
-CCSOCKET_EXPORT ccsocket_t ccsocket1(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsocket_flags_t flags);
+#define ccsocket1(domain, protocol, flags) ccsocket2((domain), (protocol), (ccsocket_flags_t)(flags))
+
+/* `ccsocket/ccsocket1` ABI (Try to avoid using it directly.) */
+CCSOCKET_EXPORT ccsocket_t ccsocket2(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsocket_flags_t flags);
 
 /* accept a client from listen `ccsocket`, return `(ccsocket_t)0` when non-block mode syscall want wait events. */
-CCSOCKET_EXPORT ccsocket_t ccsocket_accept(ccsocket_t s, ccsocket_flags_t flags);
+#define ccsocket_accept(s, flags) ccsocket_accept2((s), NULL, NULL, (ccsocket_flags_t)(flags))
 
 /* accept client from listen `ccsocket` with client `address` and `port`, return `(ccsocket_t)0` when non-block mode syscall want wait events. */
-CCSOCKET_EXPORT ccsocket_t ccsocket_accept1(ccsocket_t s, char addr[MAX_ADDRLEN], uint16_t *port, ccsocket_flags_t flags);
+#define ccsocket_accept1(s, paddr, pport, flags) ccsocket_accept2((s), (paddr), (pport), (ccsocket_flags_t)(flags))
+
+/* `ccsocket_accept/ccsocket_accept1` ABI (Try to avoid using it directly.) */
+CCSOCKET_EXPORT ccsocket_t ccsocket_accept2(ccsocket_t s, char addr[MAX_ADDRLEN], uint16_t *port, ccsocket_flags_t flags);
 
 /* listen a `ccsocket` (Only a listener) */
 CCSOCKET_EXPORT bool ccsocket_listen(ccsocket_t s, const char *addr, uint16_t port);
