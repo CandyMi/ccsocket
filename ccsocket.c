@@ -652,9 +652,7 @@ bool ccsocket_set_reuseport(ccsocket_t s, bool on)
 bool ccsocket_set_keepalive(ccsocket_t s, bool on)
 {
   int Enable = on ? 1 : 0;
-  if (setsockopt((SOCKET)s, SOL_SOCKET, SO_KEEPALIVE, (void *)&Enable, sizeof(Enable)))
-    return false;
-  return true;
+  return SOCKET_ERROR != setsockopt((SOCKET)s, SOL_SOCKET, SO_KEEPALIVE, (char*)&Enable, sizeof(Enable));
 }
 
 /* 准入的连接为发送数据, 使用延迟`Accept`方式 */
@@ -744,10 +742,25 @@ bool ccsocket_get_sockname(ccsocket_t s, char addr[MAX_ADDRLEN], uint16_t *port)
 int ccsocket_get_family(ccsocket_t s)
 {
   struct sockaddr_storage sa;
-  return _ccsocket_get_family(s, &sa) ? -1 : (int)sa.ss_family;
+  int r = _ccsocket_get_family(s, &sa);
+  if (r)
+    return CC_DOMAIN_INVALID;
+
+  switch (sa.ss_family)
+  {
+#if defined(AF_UNIX)
+    case AF_UNIX:
+      return CC_UNIX;
+#endif
+    case AF_INET:
+      return CC_INET4;
+    case AF_INET6:
+      return CC_INET6;
+  }
+  return CC_DOMAIN_INVALID;
 }
 
-ccsocket_domain_t ccsocket_get_version(char addr[MAX_ADDRLEN])
+ccsocket_domain_t ccsocket_get_version(const char addr[MAX_ADDRLEN])
 {
   struct sockaddr_in sa4; memset(&sa4, 0x0, sizeof(sa4));
 #if _WIN32

@@ -145,7 +145,7 @@ CCSOCKET_EXPORT int ccsocket_get_family(ccsocket_t s);
 /* Check the ip protocol version from `addr` stirng.
  * return once of `CC_INET4`, `CC_INET6`, `CC_DOMAIN_INVALID`.
  */
-CCSOCKET_EXPORT ccsocket_domain_t ccsocket_get_version(char addr[MAX_ADDRLEN]);
+CCSOCKET_EXPORT ccsocket_domain_t ccsocket_get_version(const char addr[MAX_ADDRLEN]);
 
 /**
  * enable accept defer in listen tcp socket, becare unless you know it's behavior.
