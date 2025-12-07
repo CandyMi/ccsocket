@@ -122,7 +122,7 @@ CCSOCKET_EXPORT int ccsocket_send(ccsocket_t s, const void *buf, size_t bsize);
 /* send buffer to peer `ccsocket` */
 CCSOCKET_EXPORT int ccsocket_sendto(ccsocket_t s, const void *buf, size_t bsize, char *addr, uint16_t port);
 
-/* call sendfile using `ccsocket` with `zero-copy` */
+/* call sendfile using `ccsocket` with `zero-copy`(part). */
 CCSOCKET_EXPORT ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd);
 
 /* ********** Below are some settings that can be used to change the behavior of `ccsocket` ********** */
@@ -137,6 +137,12 @@ CCSOCKET_EXPORT bool ccsocket_get_sockname(ccsocket_t s, char addr[MAX_ADDRLEN],
 
 /* get `Address Family` from `ccscket`, (e.g : check it's ipv4 or ipv6?) */
 CCSOCKET_EXPORT int ccsocket_get_family(ccsocket_t s);
+
+/**
+ * enable accept defer in listen tcp socket, becare unless you know it's behavior.
+ * Support Platform: `Linux` / `FreeBSD` / `Windows`(TODO).
+ */
+CCSOCKET_EXPORT bool ccsocket_enable_accept_defer(ccsocket_t s);
 
 /* set the receive timeout (`timeout` in milliseconds). */
 CCSOCKET_EXPORT bool ccsocket_set_rcvtimeout(ccsocket_t s, int timeout);

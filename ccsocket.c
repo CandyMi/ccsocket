@@ -651,6 +651,43 @@ bool ccsocket_set_keepalive(ccsocket_t s, bool on)
   return true;
 }
 
+/* 准入的连接为发送数据, 使用延迟`Accept`方式 */
+bool ccsocket_enable_accept_defer(ccsocket_t s)
+{
+  socklen_t type; socklen_t len = sizeof(socklen_t);
+  if (getsockopt((SOCKET)s, SOL_SOCKET, SO_TYPE, (char*)&type, &len))
+    return false;
+  if (type != SOCK_STREAM) {
+    errno = EINVAL;
+#if _WIN32
+    WSASetLastError(WSAEINVAL);
+#endif
+    return false;
+  }
+#if defined(TCP_DEFER_ACCEPT)
+  int Enable = 1;
+  if (setsockopt((SOCKET)s, IPPROTO_TCP, TCP_DEFER_ACCEPT, &Enable, sizeof(Enable)))
+    return false;
+#elif defined(SO_ACCEPTFILTER)
+/*
+1. use bash -> kldload accf_data.ko
+2. add 'accf_data_load="YES"' -> /boot/loader.conf
+
+root@freebsd:~ # kldstat
+Id Refs Address                Size Name
+ 1    7 0xffffffff80200000  1f30590 kernel
+ 2    1 0xffffffff82318000     3218 intpm.ko
+ 3    1 0xffffffff8231c000     2180 smbus.ko
+ 4    1 0xffffffff8231f000     20e0 accf_data.ko
+*/
+  struct accept_filter_arg afa; // 如果设置报错, 检查模块是否挂载.
+  memset(&afa, 0x0, sizeof(afa)); strcpy(afa.af_name, "dataready");
+  if (setsockopt((SOCKET)s, SOL_SOCKET, SO_ACCEPTFILTER, &afa, sizeof(afa)))
+    return false;
+#endif
+  return true;
+}
+
 CC_INLINE
 bool _ccsocket_set_timeout(ccsocket_t s, int type, int timeout)
 {
