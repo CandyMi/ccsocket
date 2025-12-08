@@ -561,7 +561,7 @@ int ccsocket_sendto(ccsocket_t s, const void *buf, size_t bsize, char *addr, uin
       return SOCKET_ERROR;
     sap = &sa; slen = ccsizeof(sap);
   }
-  return sendto((SOCKET)s, (const char *)buf, (int)bsize, flags, (const struct sockaddr *)sap, slen);
+  return (int)sendto((SOCKET)s, (const char *)buf, (int)bsize, flags, (const struct sockaddr *)sap, slen);
 }
 
 /* 发送 ccsocket */
@@ -571,7 +571,7 @@ int ccsocket_send(ccsocket_t s, const void* buf, size_t bsize)
 #if defined(MSG_NOSIGNAL)
   flags |= MSG_NOSIGNAL;
 #endif
-  return send((SOCKET)s, (const char *)buf, (int)bsize, flags);
+  return (int)send((SOCKET)s, (const char *)buf, (int)bsize, flags);
 }
 
 int ccsocket_recvfrom(ccsocket_t s, void *buf, size_t bsize, char *addr, uint16_t *port)
@@ -581,7 +581,7 @@ int ccsocket_recvfrom(ccsocket_t s, void *buf, size_t bsize, char *addr, uint16_
   if (af == SOCKET_ERROR)
     return SOCKET_ERROR;
   socklen_t len = ccsizeof(&sa);
-  int r = recvfrom((SOCKET)s, (char *)buf, (int)bsize, 0, (struct sockaddr *)&sa, &len);
+  int r = (int)recvfrom((SOCKET)s, (char *)buf, (int)bsize, 0, (struct sockaddr *)&sa, &len);
   if (r >= 0 && addr && port) {
     memset(addr, 0, MAX_ADDRLEN);
     ccsocket2addr(&sa, addr, port);
@@ -594,14 +594,14 @@ int ccsocket_recv(ccsocket_t s, char* buf, size_t bsize)
 {
   int flags = 0;
   // TODO: 
-  return recv((SOCKET)s, (char *)buf, (int)bsize, flags);
+  return (int)recv((SOCKET)s, (char *)buf, (int)bsize, flags);
 }
 
 /* 偷看 ccsocket */
 int ccsocket_peek(ccsocket_t s, char* buf, size_t bsize)
 {
 #ifdef MSG_PEEK
-  return recv((SOCKET)s, buf, (int)bsize, MSG_PEEK);
+  return (int)recv((SOCKET)s, buf, (int)bsize, MSG_PEEK);
 #else
   errno = EIO; 
   return SOCKET_ERROR;
