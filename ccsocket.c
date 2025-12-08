@@ -28,6 +28,7 @@
   #include <mstcpip.h>
   #include <ws2tcpip.h>
   #include <Windows.h>
+  #include <io.h>
   #if defined(_MSC_VER) && WDK_NTDDI_VERSION > NTDDI_WIN10_RS2
     #include <afunix.h>
   #else
@@ -858,11 +859,22 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
     return CC_SENDALL;
   // lseek(fd, size, SEEK_SET);
   return ccsocket_sendfile(s, fd);
-#elif _WIN32
-  WSASetLastError(ENODEV);
-  return CC_SENDERROR;
 #else
-  int wsize; errno = 0;
+#ifndef SEEK_CUR
+  #define SEEK_CUR    1
+#endif
+#ifndef SEEK_END
+  #define SEEK_END    2
+#endif
+#ifndef SEEK_SET
+  #define SEEK_SET    0
+#endif
+#if _WIN32
+  #define read _read
+  #define lseek _lseeki64
+  typedef int64_t off_t;
+#endif
+  errno = 0;
   uint32_t bsize = 1024; char buffer[1024];
   off_t offset = lseek(fd, 0, SEEK_CUR);
   if (offset == -1)
@@ -871,7 +883,7 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
   if (eof == -1)
     return CC_SENDERROR;
   while (offset < eof) {
-    int rsize = pread(fd, buffer, bsize, offset);
+    int rsize = read(fd, buffer, bsize);
     if (rsize == -1)
       return CC_SENDERROR;
     int wsize = ccsocket_send(s, buffer, rsize);
