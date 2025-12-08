@@ -3,7 +3,7 @@
 #endif
 
 /* 兼容C89/C90 */
-#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
+#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199409L)
   #define CC_INLINE static inline
 #else
   #define CC_INLINE static
@@ -69,11 +69,6 @@
   typedef int SOCKET;
   #define SOCKET_ERROR (~0)
 #endif
-
-typedef enum {
-  CCSERVER = 1,
-  CCCLIENT = 2,
-} cc_socket_t;
 
 CC_INLINE
 int ccsizeof(const struct sockaddr_storage* sa)
@@ -432,7 +427,7 @@ bool ccsocketpair1(ccsocket_t sv[2], ccsocket_flags_t flags)
   }
 #if _WIN32
   /* 本地管道 */
-  cc_socket_t srv = ccsocket1(CC_INET4, CC_TCP, CC_NOFLAG);
+  ccsocket_t srv = ccsocket1(CC_INET4, CC_TCP, CC_NOFLAG);
   if (srv == SOCKET_ERROR)
     return false;
   /* 开启监听(`port`为0表示随机端口) */
@@ -447,11 +442,11 @@ bool ccsocketpair1(ccsocket_t sv[2], ccsocket_flags_t flags)
     return false;
   }
   /* 创建 socket 1 */
-  cc_socket_t c = ccsocket1(CC_INET4, CC_TCP, CC_NOFLAG);
+  ccsocket_t c = ccsocket1(CC_INET4, CC_TCP, CC_NOFLAG);
   ccsocket_set_nonblock(c, true);
   if (!ccsocket_connect(c, addr, port)) {
     int code = WSAGetLastError();
-    if (code != WSAEINPROGRESS) {
+    if (code != WSAEINPROGRESS && code != WSAEWOULDBLOCK) {
       ccsocket_close(srv); /* 创建失败 */
       ccsocket_close(c);   /* 创建失败 */
       return false;
@@ -753,14 +748,16 @@ ccsocket_domain_t ccsocket_get_version(const char addr[MAX_ADDRLEN])
 {
   struct sockaddr_in sa4; memset(&sa4, 0x0, sizeof(sa4));
 #if _WIN32
-  if (!WSAStringToAddress(addr, AF_INET, NULL, (struct sockaddr *)&sa4, sizeof(sa4)))
+  socklen_t len4 = sizeof(sa4);
+  if (!WSAStringToAddress((char *)addr, AF_INET, NULL, (struct sockaddr *)&sa4, &len4))
 #else
   if (inet_pton(AF_INET, addr, &sa4.sin_addr) == 1)
 #endif
     return CC_INET4;
   struct sockaddr_in6 sa6; memset(&sa6, 0x0, sizeof(sa6));
 #if _WIN32
-  if (!WSAStringToAddress(addr, AF_INET6, NULL, (struct sockaddr *)&sa6, sizeof(sa6)))
+  socklen_t len6 = sizeof(sa6);
+  if (!WSAStringToAddress((char*)addr, AF_INET6, NULL, (struct sockaddr *)&sa6, &len6))
 #else
   if (inet_pton(AF_INET6, addr, &sa6.sin6_addr) == 1)
 #endif
