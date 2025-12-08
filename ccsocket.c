@@ -888,9 +888,16 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
       return CC_SENDERROR;
     int wsize = ccsocket_send(s, buffer, rsize);
     if (wsize == -1) {
-      if (errno == EINTR)
+#if _WIN32
+      int err = WSAGetLastError();
+      if (err == WSAEINTR)
+#else
+    #define WSAEWOULDBLOCK EAGAIN
+      int err = errno;
+      if (err == EINTR)
+#endif
         return CC_SENDNEXT;
-      return errno == EAGAIN ? CC_SENDWAIT : CC_SENDERROR;
+      return err == WSAEWOULDBLOCK ? CC_SENDWAIT : CC_SENDERROR;
     }
     offset += wsize;
     lseek(fd, offset, SEEK_SET);
