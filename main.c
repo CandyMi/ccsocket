@@ -4,11 +4,22 @@
 #include <string.h>
 #include <errno.h>
 #include <assert.h>
-#if WIN32
+#if _WIN32
   #include <Windows.h>
+  #pragma comment(lib, "Ws2_32.lib")
 #else
   #include <unistd.h>
+  #include <sys/select.h>
 #endif
+
+void cc_usleep(int timeout)
+{
+  const struct timeval tv = {
+    (timeout - timeout % 1000) / 1000,
+    (timeout % 1000) * 1000,
+  };
+  select(0, NULL, NULL, NULL, &tv);
+}
 
 static int i = 0;
 #define CCSOCKET_TEST_FUNCTION(fname, code)    \
@@ -65,11 +76,8 @@ CCSOCKET_TEST_FUNCTION(cctest_listen_and_connect, {
   assert(c4state == CC_CONNECTING || c4state == CC_CONNECTED);
   ccsocket_conn_state_t c6state = ccsocket_is_connected(c6);
   assert(c6state == CC_CONNECTING || c6state == CC_CONNECTED);
-#if _WIN32
-  Sleep(10);
-#else
-  usleep(10000);
-#endif
+  /* sleep a second. */
+  cc_usleep(10);
   /* accept socket again */
   ss4 = ccsocket_accept(s4, CC_NONBLOCK|CC_CLOEXEC);
   ss6 = ccsocket_accept(s6, CC_NONBLOCK|CC_CLOEXEC);
