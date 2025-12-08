@@ -2,6 +2,24 @@
 
 workspace "ccsocket"
   configurations { "Debug", "Release" }
+  characterset "ASCII"
+
+  platforms { "x64", "Win32", "ARM64" }
+
+  startproject "testmain"
+
+  filter "configurations:Debug"
+    defines { "DEBUG" }
+    symbols "On"
+    optimize "Off"
+
+  filter "configurations:Release"
+    defines { "NDEBUG" }
+    optimize "On"
+
+  filter { "system:windows" }
+    targetprefix ""
+    buildoptions { "/source-charset:utf-8" }
 
 local function ccbuild (
   project_name, project_type,
@@ -29,19 +47,7 @@ local function ccbuild (
       targetname(project_filename)
     end
 
-    filter "configurations:Debug"
-      defines { "DEBUG" }
-      symbols "On"
-      optimize "Off"
-
-    filter "configurations:Release"
-      defines { "NDEBUG" }
-      optimize "On"
-
-    filter { "system:windows" }
-      targetprefix ""
-
-    filter { "system:macosx" }
+    filter { "system:macosx", "system:linux" }
       runpathdirs { path.getabsolute(preject_output) }
 end
 
