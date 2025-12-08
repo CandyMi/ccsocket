@@ -47,8 +47,12 @@ local function ccbuild (
       targetname(project_filename)
     end
 
-    filter { "system:macosx", "system:linux" }
-      runpathdirs { path.getabsolute(preject_output) }
+    filter "not system:windows"
+      -- 设置 rpath 标志
+      linkoptions {
+        "-Wl,-rpath,./",
+        "-Wl,-rpath,./build",
+      }
 end
 
 ccbuild(
