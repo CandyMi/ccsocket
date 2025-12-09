@@ -35,6 +35,17 @@ typedef enum {
     CC_NONBLOCK = 2, // with non-block
 } ccsocket_flags_t;
 
+/* Used for ccsocket_send* and ccsocket_recv* */
+typedef enum {
+#define CC_OPCODE_ERROR CC_OPCODE_ERROR
+    CC_OPCODE_ERROR  = -1,
+#define CC_OPCODE_WAIT  CC_OPCODE_WAIT
+    CC_OPCODE_WAIT   =  0,
+#define CC_OPCODE_OK    CC_OPCODE_OK
+    CC_OPCODE_OK     =  1,
+} ccsocket_opcode_t;
+
+/* Used for ccsocket* */
 typedef enum {
 #define CC_DOMAIN_INVALID  CC_DOMAIN_INVALID
     CC_DOMAIN_INVALID = -1,
@@ -46,6 +57,7 @@ typedef enum {
     CC_INET6 = 2, // AF_INET6 -> IPv6
 } ccsocket_domain_t;
 
+/* Used for ccsocket* */
 typedef enum {
 #define CC_PROTOCOL_INVALID  CC_PROTOCOL_INVALID
     CC_PROTOCOL_INVALID = -1,
@@ -57,6 +69,7 @@ typedef enum {
     CC_ICMP  = 3,  // use `so_raw -> icmp`
 } ccsocket_protocol_t;
 
+/* Used for ccsocket_connect* */
 typedef enum {
 #define CC_CONNERROR  CC_CONNERROR
     CC_CONNERROR  = -1, // socket connect failed.
@@ -66,6 +79,7 @@ typedef enum {
     CC_CONNECTING =  1, // socket connecting(try later).
 } ccsocket_conn_state_t;
 
+/* Used for ccsocket_sendfile* */
 typedef enum {
 #define CC_SENDERROR CC_SENDERROR
     CC_SENDERROR  = -1,  // sending error(Unrecoverable).
@@ -124,16 +138,24 @@ CCSOCKET_EXPORT bool ccsocket_connect(ccsocket_t s, const char *addr, uint16_t p
 CCSOCKET_EXPORT ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s);
 
 /* Read data sent by the peer from the `ccsocket`. */
-CCSOCKET_EXPORT int ccsocket_recv(ccsocket_t s, char *buf, size_t bsize);
-/* Read data sent by the peer from the `ccsocket`. */
-CCSOCKET_EXPORT int ccsocket_recvfrom(ccsocket_t s, void *buf, size_t bsize, char *addr, uint16_t *port);
+CCSOCKET_EXPORT ccsocket_opcode_t ccsocket_recv(ccsocket_t s, char *buf, size_t bsize, int *rsize);
 /* Sneaking a view of the data sent by the other end through a ccsocket. (platform must be supported) */
-CCSOCKET_EXPORT int ccsocket_peek(ccsocket_t s, char* buf, size_t bsize);
+CCSOCKET_EXPORT ccsocket_opcode_t ccsocket_peek(ccsocket_t s, char* buf, size_t bsize, int *rsize);
 
 /* send buffer to peer `ccsocket` */
-CCSOCKET_EXPORT int ccsocket_send(ccsocket_t s, const void *buf, size_t bsize);
-/* send buffer to peer `ccsocket` */
-CCSOCKET_EXPORT int ccsocket_sendto(ccsocket_t s, const void *buf, size_t bsize, char *addr, uint16_t port);
+CCSOCKET_EXPORT ccsocket_opcode_t ccsocket_send(ccsocket_t s, const void *buf, size_t bsize, int *wsize);
+
+// /* Read data sent by the peer from the `ccsocket`. */
+// CCSOCKET_EXPORT int ccsocket_recv(ccsocket_t s, char *buf, size_t bsize);
+// /* Read data sent by the peer from the `ccsocket`. */
+// CCSOCKET_EXPORT int ccsocket_recvfrom(ccsocket_t s, void *buf, size_t bsize, char *addr, uint16_t *port);
+// /* Sneaking a view of the data sent by the other end through a ccsocket. (platform must be supported) */
+// CCSOCKET_EXPORT int ccsocket_peek(ccsocket_t s, char* buf, size_t bsize);
+
+// /* send buffer to peer `ccsocket` */
+// CCSOCKET_EXPORT int ccsocket_send(ccsocket_t s, const void *buf, size_t bsize);
+// /* send buffer to peer `ccsocket` */
+// CCSOCKET_EXPORT int ccsocket_sendto(ccsocket_t s, const void *buf, size_t bsize, char *addr, uint16_t port);
 
 /* call sendfile using `ccsocket` with `zero-copy`(part). */
 CCSOCKET_EXPORT ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd);

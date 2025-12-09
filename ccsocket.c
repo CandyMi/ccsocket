@@ -55,6 +55,8 @@
       }
       return true;
   }
+  #define ccsocket_is_errno(err) (WSA##err == WSAGetLastError())
+  #define ccsocket_set_errno(err) do{errno = err; WSASetLastError(WSA##err);}while(0)
 #else
   #include <fcntl.h>
   #include <unistd.h>
@@ -69,6 +71,11 @@
   #define closesocket(s) close(s)
   typedef int SOCKET;
   #define SOCKET_ERROR (~0)
+#ifndef EWOULDBLOCK
+  #define EWOULDBLOCK EAGAIN
+#endif
+  #define ccsocket_is_errno(err) (err == errno)
+  #define ccsocket_set_errno(err) errno = err
 #endif
 
 CC_INLINE
@@ -257,7 +264,7 @@ ccsocket_t ccsocket2(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsock
       break;
     case CC_ICMP:
       proto_r = SOCK_RAW;
-      // flag_r = IPPROTO_ICMP;
+      flag_r = IPPROTO_ICMP;
       break;
     case CC_PROTOCOL_INVALID:
     default:
@@ -322,18 +329,10 @@ ccsocket_t ccsocket_accept2(ccsocket_t s, char *ip, uint16_t *port, ccsocket_fla
   c = accept(s, (struct sockaddr*)sap, sasizep);
 #endif
   if (c == INVALID_SOCKET) {
-#if _WIN32
-    int ecode = WSAGetLastError();
-    if (ecode == WSAEINTR)
+    if (ccsocket_is_errno(EINTR))
       return ccsocket_accept1(s, ip, port, flags);
-    if (ecode == WSAEWOULDBLOCK)
+    if (ccsocket_is_errno(EWOULDBLOCK))
       return 0;
-#else
-    if (errno == EINTR)
-      return ccsocket_accept1(s, ip, port, flags);
-    if (errno == EAGAIN)
-      return 0;
-#endif
     return INVALID_SOCKET;
   }
   if (flags) {
@@ -420,10 +419,7 @@ bool ccsocketpair1(ccsocket_t sv[2], ccsocket_flags_t flags)
 {
   errno = 0;
   if (!sv || flags < 0 || flags > 3) {
-    errno = EINVAL;
-#if _WIN32
-    WSASetLastError(WSAEINVAL);
-#endif
+    ccsocket_set_errno(EINVAL);
     return false;
   }
 #if _WIN32
@@ -548,62 +544,101 @@ ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s)
   return state;
 }
 
-int ccsocket_sendto(ccsocket_t s, const void *buf, size_t bsize, char *addr, uint16_t port)
+// int ccsocket_sendto(ccsocket_t s, const void *buf, size_t bsize, char *addr, uint16_t port)
+// {
+//   int flags = 0;
+// #if defined(MSG_NOSIGNAL)
+//   flags |= MSG_NOSIGNAL;
+// #endif
+//   socklen_t slen = 0;
+//   struct sockaddr_storage sa, *sap = NULL; 
+//   if (addr) {
+//     if (ccsocket_wrap_ip_and_port(s, &sa, addr, port))
+//       return SOCKET_ERROR;
+//     sap = &sa; slen = ccsizeof(sap);
+//   }
+//   return (int)sendto((SOCKET)s, (const char *)buf, (int)bsize, flags, (const struct sockaddr *)sap, slen);
+// }
+
+// /* 发送 ccsocket */
+// int ccsocket_send(ccsocket_t s, const void* buf, size_t bsize)
+// {
+//   int flags = 0;
+// #if defined(MSG_NOSIGNAL)
+//   flags |= MSG_NOSIGNAL;
+// #endif
+//   return (int)send((SOCKET)s, (const char *)buf, (int)bsize, flags);
+// }
+
+// int ccsocket_recvfrom(ccsocket_t s, void *buf, size_t bsize, char *addr, uint16_t *port)
+// {
+//   struct sockaddr_storage sa;
+//   int af = _ccsocket_get_family(s, &sa);
+//   if (af == SOCKET_ERROR)
+//     return SOCKET_ERROR;
+//   socklen_t len = ccsizeof(&sa);
+//   int r = (int)recvfrom((SOCKET)s, (char *)buf, (int)bsize, 0, (struct sockaddr *)&sa, &len);
+//   if (r >= 0 && addr && port) {
+//     ccsocket2addr(&sa, addr, port);
+//   }
+//   return r;
+// }
+
+// /* 接收 ccsocket */
+// int ccsocket_recv(ccsocket_t s, char* buf, size_t bsize)
+// {
+//   int flags = 0;
+//   // TODO: 
+//   return (int)recv((SOCKET)s, (char *)buf, (int)bsize, flags);
+// }
+
+ccsocket_opcode_t ccsocket_send(ccsocket_t s, const void *buf, size_t bsize, int *wsize)
 {
   int flags = 0;
 #if defined(MSG_NOSIGNAL)
   flags |= MSG_NOSIGNAL;
 #endif
-  socklen_t slen = 0;
-  struct sockaddr_storage sa, *sap = NULL; 
-  if (addr) {
-    if (ccsocket_wrap_ip_and_port(s, &sa, addr, port))
-      return SOCKET_ERROR;
-    sap = &sa; slen = ccsizeof(sap);
+  int w = (int)send((SOCKET)s, (const char *)buf, (int)bsize, flags);
+  if (w == SOCKET_ERROR) {
+    if (ccsocket_is_errno(EINTR))
+      return ccsocket_send(s, buf, bsize, wsize);
+    if (ccsocket_is_errno(EWOULDBLOCK))
+      return CC_OPCODE_WAIT;
+    return CC_OPCODE_ERROR;
   }
-  return (int)sendto((SOCKET)s, (const char *)buf, (int)bsize, flags, (const struct sockaddr *)sap, slen);
+  if (wsize) *wsize = w;
+  return CC_OPCODE_OK;
 }
 
-/* 发送 ccsocket */
-int ccsocket_send(ccsocket_t s, const void* buf, size_t bsize)
+CC_INLINE
+ccsocket_opcode_t ccsocket_recv_internal(ccsocket_t s, char *buf, size_t bsize, int *rsize, int flags)
 {
-  int flags = 0;
-#if defined(MSG_NOSIGNAL)
-  flags |= MSG_NOSIGNAL;
-#endif
-  return (int)send((SOCKET)s, (const char *)buf, (int)bsize, flags);
-}
-
-int ccsocket_recvfrom(ccsocket_t s, void *buf, size_t bsize, char *addr, uint16_t *port)
-{
-  struct sockaddr_storage sa;
-  int af = _ccsocket_get_family(s, &sa);
-  if (af == SOCKET_ERROR)
-    return SOCKET_ERROR;
-  socklen_t len = ccsizeof(&sa);
-  int r = (int)recvfrom((SOCKET)s, (char *)buf, (int)bsize, 0, (struct sockaddr *)&sa, &len);
-  if (r >= 0 && addr && port) {
-    ccsocket2addr(&sa, addr, port);
+  int r = (int)recv((SOCKET)s, (char *)buf, (int)bsize, flags);
+  if (r == SOCKET_ERROR) {
+    if (ccsocket_is_errno(EINTR))
+      return ccsocket_recv(s, buf, bsize, rsize);
+    if (ccsocket_is_errno(EWOULDBLOCK))
+      return CC_OPCODE_WAIT;
+    return CC_OPCODE_ERROR;
   }
-  return r;
+  if (rsize) *rsize = r;
+  return CC_OPCODE_OK;
 }
 
-/* 接收 ccsocket */
-int ccsocket_recv(ccsocket_t s, char* buf, size_t bsize)
+/* recv for copy */
+ccsocket_opcode_t ccsocket_recv(ccsocket_t s, char *buf, size_t bsize, int *rsize)
 {
-  int flags = 0;
-  // TODO: 
-  return (int)recv((SOCKET)s, (char *)buf, (int)bsize, flags);
+  return ccsocket_recv_internal(s, buf, bsize, rsize, 0);
 }
 
-/* 偷看 ccsocket */
-int ccsocket_peek(ccsocket_t s, char* buf, size_t bsize)
+/* recv for peek */
+ccsocket_opcode_t ccsocket_peek(ccsocket_t s, char* buf, size_t bsize, int *rsize)
 {
 #ifdef MSG_PEEK
-  return (int)recv((SOCKET)s, buf, (int)bsize, MSG_PEEK);
+  return ccsocket_recv_internal(s, buf, bsize, rsize, MSG_PEEK);
 #else
-  errno = EIO; 
-  return SOCKET_ERROR;
+  ccoscket_set_errno(ENOBUFS);
+  return CC_OPCODE_ERROR;
 #endif
 }
 
@@ -646,10 +681,7 @@ bool ccsocket_enable_accept_defer(ccsocket_t s)
   if (getsockopt((SOCKET)s, SOL_SOCKET, SO_TYPE, (char*)&type, &len))
     return false;
   if (type != SOCK_STREAM) {
-    errno = EINVAL;
-#if _WIN32
-    WSASetLastError(WSAEINVAL);
-#endif
+    ccsocket_set_errno(EINVAL);
     return false;
   }
 #if defined(TCP_DEFER_ACCEPT)
@@ -762,10 +794,7 @@ ccsocket_domain_t ccsocket_get_version(const char *addr)
   if (inet_pton(AF_INET6, addr, &sa6.sin6_addr) == 1)
 #endif
     return CC_INET6;
-  errno = EINVAL;
-#if _WIN32
-  WSASetLastError(WSAEINVAL);
-#endif
+  ccsocket_set_errno(EINVAL);
   return CC_DOMAIN_INVALID;
 }
 
@@ -811,10 +840,10 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
   #else
   int r = sendfile(fd, (SOCKET)s, offset, 0, NULL, &size, 0);
   #endif
-  if (r == -1) {
-    if (errno == EINTR)
+  if (r == SOCKET_ERROR) {
+    if (ccsocket_is_errno(EINTR))
       return CC_SENDNEXT;
-    return (errno == EAGAIN) ? CC_SENDWAIT : CC_SENDERROR;
+    return ccsocket_is_errno(EWOULDBLOCK) ? CC_SENDWAIT : CC_SENDERROR;
   }
   off_t eof = lseek(fd, 0, SEEK_END);
   if (size == eof)
@@ -827,10 +856,10 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
   if (offset == -1)
     return CC_SENDERROR;
   off_t wsize = sendfile(s, fd, &offset, (size_t)INT64_MAX);
-  if (wsize == -1) {
-    if (errno == EINTR)
+  if (wsize == SOCKET_ERROR) {
+    if (ccsocket_is_errno(EINTR))
       return CC_SENDNEXT;
-    return errno == EAGAIN ? CC_SENDWAIT : CC_SENDERROR;
+    return ccsocket_is_errno(EWOULDBLOCK) ? CC_SENDWAIT : CC_SENDERROR;
   }
   off_t eof = lseek(fd, 0, SEEK_END);
   if (offset == eof)
@@ -848,10 +877,10 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
     .file_descriptor = fd, .file_offset = offset, .file_bytes = -1,
   };
   int wsize = send_file(s, &params, 0);
-  if (wsize == -1) {
-    if (errno == EINTR)
+  if (wsize == SOCKET_ERROR) {
+    if (ccsocket_is_errno(EINTR))
       return CC_SENDNEXT;
-    return errno == EAGAIN ? CC_SENDWAIT : CC_SENDERROR;
+    return ccsocket_is_errno(EWOULDBLOCK) ? CC_SENDWAIT : CC_SENDERROR;
   }
   offset = offset + params.bytes_sent;
   if (offset == params.file_size)
@@ -873,30 +902,23 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
   #define lseek _lseeki64
   typedef int64_t off_t;
 #endif
-  errno = 0;
+  errno = 0; int wsize;
   uint32_t bsize = 1024; char buffer[1024];
   off_t offset = lseek(fd, 0, SEEK_CUR);
-  if (offset == -1)
+  if (offset == SOCKET_ERROR)
     return CC_SENDERROR;
   off_t eof = lseek(fd, 0, SEEK_END);
-  if (eof == -1)
+  if (eof == SOCKET_ERROR)
     return CC_SENDERROR;
   while (offset < eof) {
     int rsize = read(fd, buffer, bsize);
-    if (rsize == -1)
+    if (rsize == SOCKET_ERROR)
       return CC_SENDERROR;
-    int wsize = ccsocket_send(s, buffer, rsize);
-    if (wsize == -1) {
-#if _WIN32
-      int err = WSAGetLastError();
-      if (err == WSAEINTR)
-#else
-    #define WSAEWOULDBLOCK EAGAIN
-      int err = errno;
-      if (err == EINTR)
-#endif
+    if (!ccsocket_send(s, buffer, rsize, &wsize)) {
+      lseek(fd, offset, SEEK_SET);
+      if (ccsocket_is_errno(EINTR))
         return CC_SENDNEXT;
-      return err == WSAEWOULDBLOCK ? CC_SENDWAIT : CC_SENDERROR;
+      return ccsocket_is_errno(EWOULDBLOCK) ? CC_SENDWAIT : CC_SENDERROR;
     }
     offset += wsize;
     lseek(fd, offset, SEEK_SET);
