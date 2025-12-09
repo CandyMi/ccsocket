@@ -80,7 +80,9 @@
 
 ### 3. xmake
 
-  安装`xmake`后进入到`ccsocket`目录, 执行`xmake`或`xmake build`即可完成构建.
+  1. 安装`xmake`后进入到`ccsocket`目录.
+
+  2. 执行`xmake`或`xmake build`即可完成构建.
 
 ## 使用指南
 
