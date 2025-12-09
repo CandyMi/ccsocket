@@ -28,13 +28,15 @@ static void fname() { code; printf(         \
 
 /* test socketpair in all platform. */
 CCSOCKET_TEST_FUNCTION(cctest_sockpair, {
-  ccsocket_t sv[2]; char buffer[] = "1024";
+  ccsocket_t sv[2]; char *buffer = "1024";
   char buf[1024]; memset(buf, 0x0, 1024);
   assert(ccsocketpair(sv, CC_NONBLOCK|CC_CLOEXEC));
-  int wsize = ccsocket_send(sv[0], buffer, strlen(buffer));
-  assert(wsize == strlen(buffer));
-  int rsize = ccsocket_recv(sv[1], buf, 1024);
-  assert(rsize == strlen(buffer));
+  int wsize;
+  bool ok1 = ccsocket_send(sv[0], buffer, strlen(buffer), &wsize);
+  assert(ok1 && wsize == strlen(buffer));
+  int rsize;
+  bool ok2 = ccsocket_recv(sv[1], buf, 1024, &rsize);
+  assert(ok2 && rsize == strlen(buffer));
   assert(!ccsocket_close(sv[0]));
   assert(!ccsocket_close(sv[1]));
 })
@@ -51,7 +53,7 @@ CCSOCKET_TEST_FUNCTION(cctest_socketnew, {
 })
 
 CCSOCKET_TEST_FUNCTION(cctest_listen_and_connect, {
-  const char ipv4[] = "127.0.0.1"; const char ipv6[] = "::1"; uint16_t port = 7888;
+  const char *ipv4 = "127.0.0.1"; const char *ipv6 = "::1"; uint16_t port = 7888;
   ccsocket_t s4; ccsocket_t c4; ccsocket_t ss4 = INVALID_SOCKET;
   ccsocket_t s6; ccsocket_t c6; ccsocket_t ss6 = INVALID_SOCKET;
   s4 = ccsocket1(CC_INET4, CC_TCP, CC_NONBLOCK|CC_CLOEXEC);
@@ -106,12 +108,14 @@ CCSOCKET_TEST_FUNCTION(cctest_check_timeout, {
   /* 1. not timeout. */
   const char *req = "GET / HTTP/1.1\r\nHost: www.qq.com\r\n\r\n";
   // printf("len = %d\n", ccsocket_send(c4, req, strlen(req)));
-  int wlen = ccsocket_send(c4, req, strlen(req));
-  assert(wlen == strlen(req));
+  int wlen;
+  bool ok1 = ccsocket_send(c4, req, strlen(req), &wlen);
+  assert(ok1 && wlen == strlen(req));
 
   char buf[1024]; memset(buf, 0x0, 1024);
-  int len = ccsocket_recv(c4, buf, sizeof(buf));
-  assert(len > 0);
+  int rlen;
+  bool ok2 = ccsocket_recv(c4, buf, sizeof(buf), &rlen);
+  assert(ok2 && rlen > 0);
   // printf("len = %d\n", len);
   // printf("res = '\n%s'", buf);
 
@@ -119,8 +123,12 @@ CCSOCKET_TEST_FUNCTION(cctest_check_timeout, {
   assert(ccsocket_set_sndtimeout(c4, 2));
   assert(ccsocket_set_rcvtimeout(c4, 2));
 
-  assert(ccsocket_send(c4, req, strlen(req)) == strlen(req));
-  assert(ccsocket_recv(c4, buf, sizeof(buf)) == -1);
+  wlen = 0;
+  ok1 = ccsocket_send(c4, req, strlen(req), &wlen);
+  assert(ok1 && wlen == strlen(req));
+  rlen = 0;
+  ok2 = ccsocket_recv(c4, buf, sizeof(buf), &rlen);
+  assert(!ok2 || rlen < 1);
   /* close*/
   assert(!ccsocket_close(c4));
 })
