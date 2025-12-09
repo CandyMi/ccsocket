@@ -25,7 +25,7 @@ local function ccbuild (
   project_name, project_type,
   project_language, project_files,
   project_links, project_filename,
-  preject_output
+  preject_output, project_depend
 )
   project(project_name)
     kind(project_type)
@@ -45,6 +45,10 @@ local function ccbuild (
 
     if project_filename then
       targetname(project_filename)
+    end
+
+    if project_depend then
+      dependson(project_depend)
     end
 
     filter "not system:windows"
@@ -70,5 +74,6 @@ ccbuild(
 ccbuild(
   'testmain', 'ConsoleApp', 'C',
   {'main.c', 'ccsocket.h'},
-  {'ccsocket'}, 'main', 'build'
+  {'ccsocket'}, 'main', 'build',
+  {'ccsocket-static', 'ccsocket-dynamic'}
 )
