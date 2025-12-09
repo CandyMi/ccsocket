@@ -101,7 +101,7 @@ CCSOCKET_EXPORT ccsocket_t ccsocket2(ccsocket_domain_t domain, ccsocket_protocol
 #define ccsocket_accept1(s, paddr, pport, flags) ccsocket_accept2((s), (paddr), (pport), (ccsocket_flags_t)(flags))
 
 /* `ccsocket_accept/ccsocket_accept1` ABI (Try to avoid using it directly.) */
-CCSOCKET_EXPORT ccsocket_t ccsocket_accept2(ccsocket_t s, char addr[MAX_ADDRLEN], uint16_t *port, ccsocket_flags_t flags);
+CCSOCKET_EXPORT ccsocket_t ccsocket_accept2(ccsocket_t s, char *addr, uint16_t *port, ccsocket_flags_t flags);
 
 /* listen a `ccsocket` (Only a listener) */
 CCSOCKET_EXPORT bool ccsocket_listen(ccsocket_t s, const char *addr, uint16_t port);
@@ -144,9 +144,9 @@ CCSOCKET_EXPORT ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd);
 CCSOCKET_EXPORT void ccsocket_get_error(ccsocket_t s, char buf[MAX_ERRORLEN]);
 
 /* get peer address/port from `ccsocket` */
-CCSOCKET_EXPORT bool ccsocket_get_peername(ccsocket_t s, char addr[MAX_ADDRLEN], uint16_t *port);
+CCSOCKET_EXPORT bool ccsocket_get_peername(ccsocket_t s, char *addr, uint16_t *port);
 /* get listen address/port from `ccsocket` */
-CCSOCKET_EXPORT bool ccsocket_get_sockname(ccsocket_t s, char addr[MAX_ADDRLEN], uint16_t *port);
+CCSOCKET_EXPORT bool ccsocket_get_sockname(ccsocket_t s, char *addr, uint16_t *port);
 
 /* get `Address Family` from `ccscket`, (e.g : check it's ipv4 or ipv6?) */
 CCSOCKET_EXPORT int ccsocket_get_family(ccsocket_t s);
@@ -154,7 +154,7 @@ CCSOCKET_EXPORT int ccsocket_get_family(ccsocket_t s);
 /* Check the ip protocol version from `addr` stirng.
  * return once of `CC_INET4`, `CC_INET6`, `CC_DOMAIN_INVALID`.
  */
-CCSOCKET_EXPORT ccsocket_domain_t ccsocket_get_version(const char addr[MAX_ADDRLEN]);
+CCSOCKET_EXPORT ccsocket_domain_t ccsocket_get_version(const char *addr);
 
 /**
  * enable accept defer in listen tcp socket, becare unless you know it's behavior.
