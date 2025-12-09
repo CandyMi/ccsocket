@@ -6,7 +6,7 @@
 #include <assert.h>
 #if _WIN32
   #include <Windows.h>
-  #pragma comment(lib, "Ws2_32.lib")
+  #pragma comment(lib, "Ws2_32.lib") // for `select`
 #else
   #include <unistd.h>
   #include <sys/select.h>
@@ -14,7 +14,7 @@
 
 void cc_usleep(int timeout)
 {
-  const struct timeval tv = {
+  struct timeval tv = {
     (timeout - timeout % 1000) / 1000,
     (timeout % 1000) * 1000,
   };
