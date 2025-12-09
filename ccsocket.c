@@ -89,7 +89,7 @@ int ccsizeof(const struct sockaddr_storage* sa)
 }
 
 CC_INLINE
-bool ccsocket2addr(const struct sockaddr_storage* sa, char addr[MAX_ADDRLEN], uint16_t *port)
+bool ccsocket2addr(const struct sockaddr_storage* sa, char *addr, uint16_t *port)
 {
   switch ((int)sa->ss_family)
   {
@@ -177,7 +177,7 @@ int _ccsocket_get_family(ccsocket_t s, struct sockaddr_storage* sa)
 }
 
 CC_INLINE
-int ccsocket_wrap_ip_and_port(ccsocket_t s, struct sockaddr_storage* sa, const char addr[MAX_ADDRLEN], uint16_t port)
+int ccsocket_wrap_ip_and_port(ccsocket_t s, struct sockaddr_storage* sa, const char *addr, uint16_t port)
 {
   int r = _ccsocket_get_family(s, sa);
   if (r)
@@ -300,7 +300,7 @@ ccsocket_t ccsocket2(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsock
 }
 
 /* 准入 ccsocket */
-ccsocket_t ccsocket_accept2(ccsocket_t s, char ip[MAX_ADDRLEN], uint16_t *port, ccsocket_flags_t flags)
+ccsocket_t ccsocket_accept2(ccsocket_t s, char *ip, uint16_t *port, ccsocket_flags_t flags)
 {
   errno = 0; socklen_t sasize = 0;
   struct sockaddr_storage* sap = NULL; socklen_t* sasizep = NULL;
@@ -349,7 +349,7 @@ ccsocket_t ccsocket_accept2(ccsocket_t s, char ip[MAX_ADDRLEN], uint16_t *port, 
 }
 
 CC_INLINE
-bool ccsocket_listen_internal(ccsocket_t s, const char ip[MAX_ADDRLEN], uint16_t port)
+bool ccsocket_listen_internal(ccsocket_t s, const char *ip, uint16_t port)
 {
   errno = 0; int r = 0;
   struct sockaddr_storage sa; memset(&sa, 0x0, sizeof(sa));
@@ -583,7 +583,6 @@ int ccsocket_recvfrom(ccsocket_t s, void *buf, size_t bsize, char *addr, uint16_
   socklen_t len = ccsizeof(&sa);
   int r = (int)recvfrom((SOCKET)s, (char *)buf, (int)bsize, 0, (struct sockaddr *)&sa, &len);
   if (r >= 0 && addr && port) {
-    memset(addr, 0, MAX_ADDRLEN);
     ccsocket2addr(&sa, addr, port);
   }
   return r;
@@ -703,7 +702,7 @@ bool ccsocket_set_sndtimeout(ccsocket_t s, int timeout)
 }
 
 /* 获取对端地址/端口 */
-bool ccsocket_get_peername(ccsocket_t s, char addr[MAX_ADDRLEN], uint16_t *port)
+bool ccsocket_get_peername(ccsocket_t s, char *addr, uint16_t *port)
 {
   struct sockaddr_storage sa;
   socklen_t addrlen = sizeof(sa); memset(&sa, 0x0, sizeof(sa));
@@ -714,7 +713,7 @@ bool ccsocket_get_peername(ccsocket_t s, char addr[MAX_ADDRLEN], uint16_t *port)
 }
 
 /* 获取本端地址/端口 */
-bool ccsocket_get_sockname(ccsocket_t s, char addr[MAX_ADDRLEN], uint16_t *port)
+bool ccsocket_get_sockname(ccsocket_t s, char *addr, uint16_t *port)
 {
   struct sockaddr_storage sa;
   socklen_t addrlen = sizeof(sa); memset(&sa, 0x0, sizeof(sa));
@@ -745,7 +744,7 @@ int ccsocket_get_family(ccsocket_t s)
   return CC_DOMAIN_INVALID;
 }
 
-ccsocket_domain_t ccsocket_get_version(const char addr[MAX_ADDRLEN])
+ccsocket_domain_t ccsocket_get_version(const char *addr)
 {
   struct sockaddr_in sa4; memset(&sa4, 0x0, sizeof(sa4));
 #if _WIN32
