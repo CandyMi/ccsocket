@@ -28,7 +28,7 @@ static void fname() { code; printf(         \
 
 /* test socketpair in all platform. */
 CCSOCKET_TEST_FUNCTION(cctest_sockpair, {
-  ccsocket_t sv[2]; char *buffer = "1024";
+  ccsocket_t sv[2]; const char *buffer = "1024";
   char buf[1024]; memset(buf, 0x0, 1024);
   assert(ccsocketpair(sv, CC_NONBLOCK|CC_CLOEXEC));
   int wsize;
