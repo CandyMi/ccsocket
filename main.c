@@ -164,6 +164,12 @@ CCSOCKET_TEST_FUNCTION(cctest_check_setsockopt, {
   assert(ccsocket_set_keepalive(c4, true));
   assert(ccsocket_set_keepalive(c6, true));
 
+  /**
+   * `ccsocket_enable_accept_defer` must after call listen method.
+   */
+  assert(ccsocket_listen(c4, "127.0.0.1", 7888));
+  assert(ccsocket_listen(c6, "::1", 7888));
+
   assert(ccsocket_enable_accept_defer(c4));
   assert(ccsocket_enable_accept_defer(c6));
 
