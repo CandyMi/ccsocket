@@ -66,6 +66,7 @@
       }
       return true;
   }
+  #define ccsocket_init_errno() do {errno = 0; WSASetLastError(0);}while(0)
   #define ccsocket_is_errno(err) (WSA##err == WSAGetLastError())
   #define ccsocket_set_errno(err) do{errno = err; WSASetLastError(WSA##err);}while(0)
 #else
@@ -85,6 +86,7 @@
 #ifndef EWOULDBLOCK
   #define EWOULDBLOCK EAGAIN
 #endif
+  #define ccsocket_init_errno() errno = 0
   #define ccsocket_is_errno(err) (err == errno)
   #define ccsocket_set_errno(err) errno = err
 #endif
@@ -320,7 +322,7 @@ ccsocket_t ccsocket2(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsock
 /* 准入 ccsocket */
 ccsocket_t ccsocket_accept2(ccsocket_t s, char *ip, uint16_t *port, ccsocket_flags_t flags)
 {
-  errno = 0; socklen_t sasize = 0;
+  ccsocket_init_errno(); socklen_t sasize = 0;
   struct sockaddr_storage* sap = NULL; socklen_t* sasizep = NULL;
   struct sockaddr_storage sa; memset(&sa, 0x0, sizeof(sa));
   if (ip && port) {
@@ -361,7 +363,7 @@ ccsocket_t ccsocket_accept2(ccsocket_t s, char *ip, uint16_t *port, ccsocket_fla
 CC_INLINE
 bool ccsocket_listen_internal(ccsocket_t s, const char *ip, uint16_t port)
 {
-  errno = 0; int r = 0;
+  ccsocket_init_errno(); int r = 0;
   struct sockaddr_storage sa; memset(&sa, 0x0, sizeof(sa));
   r = ccsocket_wrap_ip_and_port(s, &sa, ip, port);
   if (r)
@@ -385,17 +387,17 @@ bool ccsocket_listen(ccsocket_t s, const char *ip, uint16_t port)
    * 确保端口/地址被独占, 解决部分平台安全问题.
    */
 #if defined(SO_EXCLUSIVEADDRUSE)
-  int Enable = 1; errno = 0;
+  int Enable = 1; ccsocket_init_errno();
   if (SOCKET_ERROR == setsockopt((SOCKET)s, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, (char*)&Enable, sizeof(Enable))) {
     return false;
   }
 #elif defined(SO_EXCLBIND)
-  int Enable = 1; errno = 0;
+  int Enable = 1; ccsocket_init_errno();
   if (SOCKET_ERROR == setsockopt((SOCKET)s, SOL_SOCKET, SO_EXCLBIND, (char*)&Enable, sizeof(Enable))) {
     return false;
   }
 #else
-  errno = 0;
+  ccsocket_init_errno();
   if (!ccsocket_set_reuseaddr((SOCKET)s, true))
     return false;
 #endif
@@ -428,7 +430,7 @@ bool ccsocket_listen1(ccsocket_t s, const char *ip, uint16_t port)
 /* 创建双向连接的SOCK_STREAM管道 */
 bool ccsocketpair1(ccsocket_t sv[2], ccsocket_flags_t flags)
 {
-  errno = 0;
+  ccsocket_init_errno();
   if (!sv || flags < 0 || flags > 3) {
     ccsocket_set_errno(EINVAL);
     return false;
@@ -500,7 +502,7 @@ bool ccsocket_connect(ccsocket_t s, const char *addr, uint16_t port)
 
 ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s)
 {
-  errno = 0;
+  ccsocket_init_errno();
   ccsocket_conn_state_t state = CC_CONNECTING;
 #if _WIN32
   if (SOCKET_ERROR == ccsocket_connect(s, NULL, 0))
@@ -844,8 +846,9 @@ void ccsocket_get_error(ccsocket_t s, char buf[MAX_ERRORLEN])
 
 ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
 {
+  ccsocket_init_errno();
 #if defined(__APPLE__) || defined(__FreeBSD__) || defined(__DragonFlyBSD__)
-  off_t size = 0; errno = 0;
+  off_t size = 0;
   off_t offset = lseek(fd, 0, SEEK_CUR);
   if (offset == -1)
     return CC_SENDERROR;
@@ -865,7 +868,6 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
   lseek(fd, size, SEEK_SET);
   return ccsocket_sendfile(s, fd);
 #elif defined(__linux__) || defined(__sun__)
-  errno = 0;
   off_t offset = lseek(fd, 0, SEEK_CUR);
   if (offset == -1)
     return CC_SENDERROR;
@@ -881,7 +883,6 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
   lseek(fd, offset, SEEK_SET);
   return ccsocket_sendfile(s, fd);
 #elif _AIX
-  errno = 0;
   off_t offset = lseek(fd, 0, SEEK_CUR);
   if (offset == -1)
     return CC_SENDERROR;
@@ -917,7 +918,7 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
   typedef int64_t off_t;
 #endif
 #define CC_SENDFILE_PER_LEN 1024
-  errno = 0; int wsize;
+  int wsize;
   uint32_t bsize = CC_SENDFILE_PER_LEN;
   char buffer[CC_SENDFILE_PER_LEN];
   off_t offset = lseek(fd, 0, SEEK_CUR);
