@@ -21,6 +21,11 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
+#ifndef NDEBUG
+  #include <stdio.h>
+  #define ccsocket_dump(msg, ...) fprintf(stdout, "[libccsocket]: " msg "\n", ##__VA_ARGS__)
+#endif
 
 #if _WIN32
   #include <sdkddkver.h>
@@ -52,6 +57,12 @@
               WSACleanup();
               exit(1);
           }
+#ifndef NDEBUG
+          ccsocket_dump("WSAStartup init -> {\n\tVer: %g,\n\tmaxVer: %g,\n\tmaxOpenFiles: %d,\n\tudpMaxPacketSize: %d,\n\tsystem: '%s',\n\tdescrition: '%s'\n}",
+              HIBYTE(wsaData.wVersion) + LOBYTE(wsaData.wVersion) * 0.1, HIBYTE(wsaData.wHighVersion) + LOBYTE(wsaData.wHighVersion) * 0.1,
+              wsaData.iMaxSockets, wsaData.iMaxUdpDg, wsaData.szSystemStatus, wsaData.szDescription
+          );
+#endif
       }
       return true;
   }
@@ -474,14 +485,17 @@ bool ccsocketpair1(ccsocket_t sv[2], ccsocket_flags_t flags)
 }
 
 /* 连接 ccsocket */
-bool ccsocket_connect(ccsocket_t s, const char *ip, uint16_t port)
+bool ccsocket_connect(ccsocket_t s, const char *addr, uint16_t port)
 {
-  errno = 0; int r;
   struct sockaddr_storage sa;
-  r = ccsocket_wrap_ip_and_port(s, &sa, ip, port);
-  if (r)
-    return false;
-  return connect((SOCKET)s, (const struct sockaddr*)&sa, ccsizeof(&sa)) != SOCKET_ERROR;
+  struct sockaddr_storage *sap = NULL; socklen_t salen = 0;
+  if (addr)
+  {
+    if (ccsocket_wrap_ip_and_port(s, &sa, addr, port))
+      return false;
+    sap = &sa; salen = ccsizeof(sap);
+  }
+  return connect((SOCKET)s, (const struct sockaddr*)sap, salen) != SOCKET_ERROR;
 }
 
 ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s)
@@ -489,7 +503,7 @@ ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s)
   errno = 0;
   ccsocket_conn_state_t state = CC_CONNECTING;
 #if _WIN32
-  if (SOCKET_ERROR == connect(s, NULL, 0))
+  if (SOCKET_ERROR == ccsocket_connect(s, NULL, 0))
   {
     switch (WSAGetLastError())
     {
@@ -902,8 +916,10 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
   #define lseek _lseeki64
   typedef int64_t off_t;
 #endif
+#define CC_SENDFILE_PER_LEN 1024
   errno = 0; int wsize;
-  uint32_t bsize = 1024; char buffer[1024];
+  uint32_t bsize = CC_SENDFILE_PER_LEN;
+  char buffer[CC_SENDFILE_PER_LEN];
   off_t offset = lseek(fd, 0, SEEK_CUR);
   if (offset == SOCKET_ERROR)
     return CC_SENDERROR;
