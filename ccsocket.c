@@ -694,19 +694,20 @@ bool ccsocket_set_keepalive(ccsocket_t s, bool on)
 bool ccsocket_enable_accept_defer(ccsocket_t s)
 {
   socklen_t type; socklen_t len = sizeof(socklen_t);
-  if (getsockopt((SOCKET)s, SOL_SOCKET, SO_TYPE, (char*)&type, &len))
+  if (getsockopt((SOCKET)s, SOL_SOCKET, SO_TYPE, (char*)&type, &len) == SOCKET_ERROR)
     return false;
   if (type != SOCK_STREAM) {
     ccsocket_set_errno(EINVAL);
     return false;
   }
+  ccsocket_init_errno();
 #if defined(TCP_DEFER_ACCEPT)
   int Enable = 1;
-  if (setsockopt((SOCKET)s, IPPROTO_TCP, TCP_DEFER_ACCEPT, &Enable, sizeof(Enable)))
+  if (setsockopt((SOCKET)s, IPPROTO_TCP, TCP_DEFER_ACCEPT, &Enable, sizeof(Enable)) == SOCKET_ERROR)
     return false;
 #elif defined(SO_ACCEPTFILTER)
 /*
-1. use bash -> kldload accf_data.ko
+1. use command -> `kldload accf_data.ko`
 2. add 'accf_data_load="YES"' -> /boot/loader.conf
 
 root@freebsd:~ # kldstat
@@ -716,9 +717,9 @@ Id Refs Address                Size Name
  3    1 0xffffffff8231c000     2180 smbus.ko
  4    1 0xffffffff8231f000     20e0 accf_data.ko
 */
-  struct accept_filter_arg afa; // 如果设置报错, 检查模块是否挂载.
-  memset(&afa, 0x0, sizeof(afa)); strcpy(afa.af_name, "dataready");
-  if (setsockopt((SOCKET)s, SOL_SOCKET, SO_ACCEPTFILTER, &afa, sizeof(afa)))
+#define ACCF_NAME "dataready"
+  struct accept_filter_arg afa; memset(&afa, 0x0, sizeof(afa)); strcpy(afa.af_name, ACCF_NAME);
+  if (setsockopt((SOCKET)s, SOL_SOCKET, SO_ACCEPTFILTER, &afa, sizeof(afa)) == SOCKET_ERROR)
     return false;
 #endif
   return true;
