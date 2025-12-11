@@ -1,0 +1,197 @@
+#include "cctls.h"
+
+/* 兼容C89/C90 */
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
+  #define CC_INLINE static inline
+#else
+  #define CC_INLINE static
+#endif
+
+#if _WIN32
+  #define ccsocket_init_errno() do {errno = 0; WSASetLastError(0);}while(0)
+  #define ccsocket_is_errno(err) (WSA##err == WSAGetLastError())
+  #define ccsocket_set_errno(err) do{errno = err; WSASetLastError(WSA##err);}while(0)
+#else
+#ifndef EWOULDBLOCK
+  #define EWOULDBLOCK EAGAIN
+#endif
+  #define ccsocket_init_errno() errno = 0
+  #define ccsocket_is_errno(err) (err == errno)
+  #define ccsocket_set_errno(err) errno = err
+#endif
+
+#include <errno.h>
+#include <assert.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+
+/**
+ * 最低版本要求`OpenSSL 1.1.1`, 更低的版本现代化的特性没有! ：）
+ */
+#if OPENSSL_VERSION_NUMBER < 0x10101000
+  #error "OSSL Version to old."
+#endif
+
+static tls_realloc_t tls_realloc = realloc;
+
+static void* cctls_malloc(size_t num, const char *file, int line)
+{
+  return tls_realloc(NULL, num);
+}
+
+static void* cctls_realloc(void *addr, size_t num, const char *file, int line)
+{
+  return tls_realloc(addr, num);
+}
+
+static void cctls_free(void *addr, const char *file, int line)
+{
+  tls_realloc(addr, 0);
+}
+
+int cctls_init(tls_realloc_t alloc)
+{
+  /* 定制OpenSSL的内存分配器 */
+  if (alloc)
+    tls_realloc = alloc;
+  CRYPTO_set_mem_functions(cctls_malloc, cctls_realloc, cctls_free);
+  /* TODO: 如何最优雅的初始化呢? */
+  OPENSSL_init_ssl( OPENSSL_INIT_SSL_DEFAULT, NULL);
+  return 0;
+}
+
+void cctls_get_error(tls_t* tls, int retcode, char err[MAX_ERRORLEN])
+{
+  assert(tls);
+  ERR_error_string_n(retcode, err, MAX_ERRORLEN);
+}
+
+tls_t* cctls_create1(cctls_mode_t mode, ccsocket_t s)
+{
+  assert(mode == CCTLS_SERVER_MODE || mode == CCTLS_CLIENT_MODE);
+  SSL_CTX *ctx = SSL_CTX_new(SSLv23_method());
+  if (!ctx)
+    return NULL;
+  SSL *ssl = SSL_new(ctx);
+  if (!ssl) {
+    SSL_CTX_free(ctx);
+    return NULL;
+  }
+  SSL_set_SSL_CTX(ssl, ctx);
+  if (s > INVALID_SOCKET)
+    cctls_set_fd(ssl, s);
+  switch (mode)
+  {
+    case CCTLS_SERVER_MODE:
+      SSL_set_accept_state(ssl);
+      break;
+    case CCTLS_CLIENT_MODE:
+      SSL_set_connect_state(ssl);
+      break;
+    default:
+      cctls_destroy(ssl);
+      return NULL;
+  }
+  return ssl;
+}
+
+void cctls_destroy(tls_t* tls)
+{
+  if (!tls)
+    return;
+  SSL_CTX *ctx = SSL_get_SSL_CTX(tls);
+  SSL_free(tls);
+  SSL_CTX_free(ctx);
+}
+
+void cctls_set_fd(tls_t* tls, ccsocket_t s)
+{
+  SSL_set_fd(tls, s);
+}
+
+ccsocket_t cctls_get_fd(tls_t* tls)
+{
+  return tls ? SSL_get_fd(tls) : INVALID_SOCKET;
+}
+
+ccsocket_stcode_t cctls_do_handshake(tls_t* tls, int *retcode)
+{
+  assert(tls && retcode);
+  ccsocket_init_errno();
+  int code = SSL_do_handshake(tls);
+  if (code == 1) 
+    return CC_OPCODE_OK;
+  int ecode = SSL_get_error(tls, code);
+  if (retcode)
+    *retcode = ecode;
+  // printf("cctls_do_handshake: code = %d, ecode = %d\n", code, ecode);
+  switch (ecode)
+  {
+    case SSL_ERROR_WANT_READ:
+      return CC_OPCODE_WANT_REVENT;
+    case SSL_ERROR_WANT_WRITE:
+      return CC_OPCODE_WANT_WEVENT;
+  }
+  return CC_OPCODE_ERROR;
+}
+
+CC_INLINE
+ccsocket_stcode_t _cctls_get_events(tls_t *tls, int code)
+{
+  // printf("cctls_get_events: code = %d, ecode = %d\n", code, SSL_get_error(tls, code));
+  if (code == 1)
+    return CC_OPCODE_OK;
+  if (ccsocket_is_errno(EWOULDBLOCK))
+  {
+    if (SSL_want_read(tls)) {
+      return CC_OPCODE_WANT_REVENT;
+    } else if (SSL_want_write(tls)) {
+      return CC_OPCODE_WANT_WEVENT;
+    }
+  }
+  return CC_OPCODE_ERROR;
+}
+
+ccsocket_stcode_t cctls_recv(tls_t *tls, void *buffer, size_t *len)
+{
+  assert(tls && buffer && len);
+  ccsocket_init_errno();
+  return _cctls_get_events(tls, SSL_read_ex(tls, buffer, *len, len));
+}
+
+ccsocket_stcode_t cctls_send(tls_t *tls, const void *buffer, size_t *len)
+{
+  assert(tls && buffer && len);
+  ccsocket_init_errno();
+  return _cctls_get_events(tls, SSL_write_ex(tls, buffer, *len, len));
+}
+
+// ccsocket_sendf_state_t cctls_sendfile(tls_t *tls, int fd)
+// {
+//   return CC_SENDERROR;
+// }
+
+void cctls_set_servername(tls_t* tls, const char *domain)
+{
+  SSL_set_tlsext_host_name(tls, domain);
+}
+
+void cctls_set_alpn(tls_t* tls, const char **protocols)
+{
+#define ALPN_BUFFER_SIZE 4096
+  if (!protocols)
+    return;
+  int i = 0; uint32_t bsize = 0; int maxlen = ALPN_BUFFER_SIZE;
+  char buffer[ALPN_BUFFER_SIZE]; uint8_t *protocol = (uint8_t*)buffer;
+  while (protocols[i])
+  {
+    uint8_t len = strlen(protocols[i]);
+    protocol[i] = len;
+    snprintf((char *)protocol + bsize, len+1, "%s", protocols[i]);
+    bsize += len + 1; i++;
+  }
+  /* nothing todo. */
+  if (protocol == (uint8_t*)buffer)
+    return;
+  SSL_set_alpn_protos(tls, (const uint8_t *)buffer, bsize);
+}
