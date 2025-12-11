@@ -8,6 +8,7 @@
   #include <Windows.h>
   #define cc_usleep Sleep
 #else
+  #include <fcntl.h>
   #include <unistd.h>
   #define cc_usleep(timeout) usleep((timeout) * 1000)
 #endif
@@ -25,11 +26,11 @@ CCSOCKET_TEST_FUNCTION(cctest_sockpair, {
   char buf[1024]; memset(buf, 0x0, 1024);
   assert(ccsocketpair(sv, CC_NONBLOCK|CC_CLOEXEC));
   int wsize;
-  bool ok1 = ccsocket_send(sv[0], buffer, strlen(buffer), &wsize);
-  assert(ok1 && wsize == strlen(buffer));
+  ccsocket_stcode_t state1 = ccsocket_send(sv[0], buffer, strlen(buffer), &wsize);
+  assert(state1 == CC_OPCODE_OK && wsize == strlen(buffer));
   int rsize;
-  bool ok2 = ccsocket_recv(sv[1], buf, 1024, &rsize);
-  assert(ok2 && rsize == strlen(buffer));
+  ccsocket_stcode_t state2 = ccsocket_recv(sv[1], buf, 1024, &rsize);
+  assert(state2 == CC_OPCODE_OK && rsize == strlen(buffer));
   assert(!ccsocket_close(sv[0]));
   assert(!ccsocket_close(sv[1]));
 })
@@ -102,13 +103,13 @@ CCSOCKET_TEST_FUNCTION(cctest_check_timeout, {
   const char *req = "GET / HTTP/1.1\r\nHost: www.qq.com\r\n\r\n";
   // printf("len = %d\n", ccsocket_send(c4, req, strlen(req)));
   int wlen;
-  bool ok1 = ccsocket_send(c4, req, strlen(req), &wlen);
-  assert(ok1 && wlen == strlen(req));
+  ccsocket_stcode_t state1 = ccsocket_send(c4, req, strlen(req), &wlen);
+  assert(state1 == CC_OPCODE_OK && wlen == strlen(req));
 
   char buf[1024]; memset(buf, 0x0, 1024);
   int rlen;
-  bool ok2 = ccsocket_recv(c4, buf, sizeof(buf), &rlen);
-  assert(ok2 && rlen > 0);
+  ccsocket_stcode_t state2 = ccsocket_recv(c4, buf, sizeof(buf), &rlen);
+  assert(state2 == CC_OPCODE_OK && rlen > 0);
   // printf("len = %d\n", len);
   // printf("res = '\n%s'", buf);
 
@@ -117,11 +118,11 @@ CCSOCKET_TEST_FUNCTION(cctest_check_timeout, {
   assert(ccsocket_set_rcvtimeout(c4, 2));
 
   wlen = 0;
-  ok1 = ccsocket_send(c4, req, strlen(req), &wlen);
-  assert(ok1 && wlen == strlen(req));
+  state1 = ccsocket_send(c4, req, strlen(req), &wlen);
+  assert(state1 == CC_OPCODE_OK && wlen == strlen(req));
   rlen = 0;
-  ok2 = ccsocket_recv(c4, buf, sizeof(buf), &rlen);
-  assert(!ok2 || rlen < 1);
+  state2 = ccsocket_recv(c4, buf, sizeof(buf), &rlen);
+  assert(state2 == CC_OPCODE_OK || rlen < 1);
   /* close*/
   assert(!ccsocket_close(c4));
 })
@@ -163,8 +164,11 @@ CCSOCKET_TEST_FUNCTION(cctest_check_setsockopt, {
   /**
    * `ccsocket_enable_accept_defer` must after call listen method on bsd.
    */
-  assert(ccsocket_listen(s4, addr4, port));
-  assert(ccsocket_listen(s6, addr6, port));
+  bool ok;
+  ok = ccsocket_listen(s4, addr4, port);
+  assert(ok);
+  ok = ccsocket_listen(s6, addr6, port);
+  assert(ok);
 
   assert(ccsocket_enable_accept_defer(s4));
   assert(ccsocket_enable_accept_defer(s6));
@@ -181,24 +185,26 @@ CCSOCKET_TEST_FUNCTION(cctest_check_setsockopt, {
   int no = 0; ccsocket_t c; const char *buf = "hello";
 
   do {
-      cc_usleep(100);
-      c = ccsocket_accept(s4, CC_NOFLAG);
-      if (c > 0) {
-          no++; ccsocket_close(c); // printf("s4 accepted.\n");
-      }
-      c = ccsocket_accept(s6, CC_NOFLAG);
-      if (c > 0) {
-          no++; ccsocket_close(c); // printf("s6 accepted.\n");
-      }
-      if (!c4ok && ccsocket_is_connected(c4) == CC_CONNECTED) {
-          assert(ccsocket_send(c4, buf, sizeof(buf), NULL)); c4ok = true;
-      }
-      if (!c6ok && ccsocket_is_connected(c6) == CC_CONNECTED) {
-          assert(ccsocket_send(c6, buf, sizeof(buf), NULL)); c6ok = true;
-      }
-      // sleep a few minutes.
-      if (no < 2)
-        printf("no = %d, c4ok = %d, c6ok = %d\n", no, c4ok, c6ok);
+    cc_usleep(100);
+    c = ccsocket_accept(s4, CC_NOFLAG);
+    if (c > 0) {
+      no++; int ok = !ccsocket_close(c); assert(ok); // printf("s4 accepted.\n");
+    }
+    c = ccsocket_accept(s6, CC_NOFLAG);
+    if (c > 0) {
+      no++; int ok = !ccsocket_close(c); assert(ok); // printf("s6 accepted.\n");
+    }
+    if (!c4ok && ccsocket_is_connected(c4) == CC_CONNECTED) {
+      ccsocket_stcode_t state = ccsocket_send(c4, buf, sizeof(buf), NULL);
+      assert(CC_OPCODE_OK == state); c4ok = true;
+    }
+    if (!c6ok && ccsocket_is_connected(c6) == CC_CONNECTED) {
+      ccsocket_stcode_t state = ccsocket_send(c6, buf, sizeof(buf), NULL);
+      assert(CC_OPCODE_OK == state); c6ok = true;
+    }
+    // sleep a few minutes.
+    if (no < 2)
+      printf("no = %d, c4ok = %d, c6ok = %d\n", no, c4ok, c6ok);
   } while (no < 2);
 
   assert(!ccsocket_close(s4));
@@ -206,6 +212,61 @@ CCSOCKET_TEST_FUNCTION(cctest_check_setsockopt, {
   assert(!ccsocket_close(c4));
   assert(!ccsocket_close(c6));
 })
+
+// 'httpc.test' in project dir.
+const char *path[] = {
+  "httpc.txt",
+  "../httpc.txt",
+  "../../httpc.txt",
+  "..\\httpc.txt",
+  "..\\..\\httpc.txt",
+  NULL,
+};
+CCSOCKET_TEST_FUNCTION(cctest_check_sendfile, {
+// CCSOCKET_TEST_FUNCTION(cctest_check_sendfile, {
+  ccsocket_t c4 = ccsocket1(CC_INET4, CC_TCP, CC_NONBLOCK | CC_CLOEXEC);
+  assert(c4 > 0);
+  ccsocket_connect(c4, "61.241.54.211", 80); // qq.com
+  /* nonblock connect like event-driven. */
+  do {
+    assert(ccsocket_is_connected(c4) != CC_CONNERROR);
+    if (ccsocket_is_connected(c4) == CC_CONNECTED)
+      break;
+    cc_usleep(10);
+  } while (1);
+
+  int fd = -1;
+  for (size_t i = 0; i < (sizeof(path) / sizeof(void*)); i++)
+  {
+    if (!path[i]) break;
+    fd = open(path[i], O_RDONLY);
+    if (fd > 0) break;
+  }
+  // sendfile
+  assert(fd > 0);
+  do {
+    int state = ccsocket_sendfile(c4, fd);
+    if (state == CC_SENDALL)
+      break;
+    assert(state != CC_SENDERROR);
+  } while (1);
+  // recv
+  int rsize; char buffer[1024];  memset(buffer, 0x0, 1024);
+  do {
+    ccsocket_stcode_t state = ccsocket_recv(c4, buffer, 1024, &rsize);
+    if (state == CC_OPCODE_OK)
+      break;
+    assert(state != CC_OPCODE_ERROR);
+    cc_usleep(10);
+  } while(1);
+  // printf("http resp = \n'%s'\n", buffer);
+  assert(!close(fd));
+  assert(!ccsocket_close(c4));
+})
+
+// CCSOCKET_TEST_FUNCTION(cctest_check_tls, {
+
+// })
 
 int main(int argc, char const *argv[])
 {
@@ -215,4 +276,6 @@ int main(int argc, char const *argv[])
   cctest_check_timeout();
   cctest_check_ip_version();
   cctest_check_setsockopt();
+  cctest_check_sendfile();
+  // cctest_check_tls();
 }
