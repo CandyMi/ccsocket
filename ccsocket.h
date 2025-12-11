@@ -35,15 +35,19 @@ typedef enum {
     CC_NONBLOCK = 2, // with non-block
 } ccsocket_flags_t;
 
-/* Used for ccsocket_send* and ccsocket_recv* */
+/* Used for `ccsocket_recv`/`ccsocket_send` and `cctls_recv`/`cctls_send`. */
 typedef enum {
 #define CC_OPCODE_ERROR CC_OPCODE_ERROR
-    CC_OPCODE_ERROR  = -1,
-#define CC_OPCODE_WAIT  CC_OPCODE_WAIT
-    CC_OPCODE_WAIT   =  0,
+    CC_OPCODE_ERROR         = -1,
 #define CC_OPCODE_OK    CC_OPCODE_OK
-    CC_OPCODE_OK     =  1,
-} ccsocket_opcode_t;
+    CC_OPCODE_OK            =  0,
+#define CC_OPCODE_WAIT  CC_OPCODE_WAIT
+    CC_OPCODE_WAIT          =  1,
+#define CC_OPCODE_WANT_REVENT CC_OPCODE_WANT_REVENT
+    CC_OPCODE_WANT_REVENT   =  2,
+#define CC_OPCODE_WANT_WEVENT CC_OPCODE_WANT_WEVENT
+    CC_OPCODE_WANT_WEVENT   =  3,
+} ccsocket_stcode_t;
 
 /* Used for ccsocket* */
 typedef enum {
@@ -138,12 +142,12 @@ CCSOCKET_EXPORT bool ccsocket_connect(ccsocket_t s, const char *addr, uint16_t p
 CCSOCKET_EXPORT ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s);
 
 /* Read data sent by the peer from the `ccsocket`. */
-CCSOCKET_EXPORT ccsocket_opcode_t ccsocket_recv(ccsocket_t s, char *buf, size_t bsize, int *rsize);
+CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_recv(ccsocket_t s, char *buf, size_t bsize, int *rsize);
 /* Sneaking a view of the data sent by the other end through a ccsocket. (platform must be supported) */
-CCSOCKET_EXPORT ccsocket_opcode_t ccsocket_peek(ccsocket_t s, char* buf, size_t bsize, int *rsize);
+CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_peek(ccsocket_t s, char* buf, size_t bsize, int *rsize);
 
 /* send buffer to peer `ccsocket` */
-CCSOCKET_EXPORT ccsocket_opcode_t ccsocket_send(ccsocket_t s, const void *buf, size_t bsize, int *wsize);
+CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_send(ccsocket_t s, const void *buf, size_t bsize, int *wsize);
 
 // /* Read data sent by the peer from the `ccsocket`. */
 // CCSOCKET_EXPORT int ccsocket_recv(ccsocket_t s, char *buf, size_t bsize);

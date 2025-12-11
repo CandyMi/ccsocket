@@ -609,7 +609,7 @@ ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s)
 //   return (int)recv((SOCKET)s, (char *)buf, (int)bsize, flags);
 // }
 
-ccsocket_opcode_t ccsocket_send(ccsocket_t s, const void *buf, size_t bsize, int *wsize)
+ccsocket_stcode_t ccsocket_send(ccsocket_t s, const void *buf, size_t bsize, int *wsize)
 {
   int flags = 0;
 #if defined(MSG_NOSIGNAL)
@@ -628,7 +628,7 @@ ccsocket_opcode_t ccsocket_send(ccsocket_t s, const void *buf, size_t bsize, int
 }
 
 CC_INLINE
-ccsocket_opcode_t ccsocket_recv_internal(ccsocket_t s, char *buf, size_t bsize, int *rsize, int flags)
+ccsocket_stcode_t ccsocket_recv_internal(ccsocket_t s, char *buf, size_t bsize, int *rsize, int flags)
 {
   int r = (int)recv((SOCKET)s, (char *)buf, (int)bsize, flags);
   if (r == SOCKET_ERROR) {
@@ -643,13 +643,13 @@ ccsocket_opcode_t ccsocket_recv_internal(ccsocket_t s, char *buf, size_t bsize, 
 }
 
 /* recv for copy */
-ccsocket_opcode_t ccsocket_recv(ccsocket_t s, char *buf, size_t bsize, int *rsize)
+ccsocket_stcode_t ccsocket_recv(ccsocket_t s, char *buf, size_t bsize, int *rsize)
 {
   return ccsocket_recv_internal(s, buf, bsize, rsize, 0);
 }
 
 /* recv for peek */
-ccsocket_opcode_t ccsocket_peek(ccsocket_t s, char* buf, size_t bsize, int *rsize)
+ccsocket_stcode_t ccsocket_peek(ccsocket_t s, char* buf, size_t bsize, int *rsize)
 {
 #ifdef MSG_PEEK
   return ccsocket_recv_internal(s, buf, bsize, rsize, MSG_PEEK);
