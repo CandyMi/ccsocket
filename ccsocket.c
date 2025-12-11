@@ -25,6 +25,8 @@
 #ifndef NDEBUG
   #include <stdio.h>
   #define ccsocket_dump(msg, ...) fprintf(stdout, "[libccsocket]: " msg "\n", ##__VA_ARGS__)
+#else
+  #define ccsocket_dump(msg, ...)
 #endif
 
 #if _WIN32
@@ -269,11 +271,11 @@ ccsocket_t ccsocket2(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsock
   {
     case CC_TCP:
       proto_r = SOCK_STREAM;
-      // flag_r = IPPROTO_TCP;
+      flag_r = IPPROTO_TCP;
       break;
     case CC_UDP:
       proto_r = SOCK_DGRAM;
-      // flag_r = IPPROTO_UDP;
+      flag_r = IPPROTO_UDP;
       break;
     case CC_ICMP:
       proto_r = SOCK_RAW;
@@ -319,24 +321,6 @@ ccsocket_t ccsocket2(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsock
   return s;
 }
 
-#if _WIN32
-#define CCSOCKET_DEFFTER_TIMES (3)
-static int ccsocket_cond_accept_cb(
-  IN     LPWSABUF    lpCallerId,
-  IN     LPWSABUF    lpCallerData,
-  IN OUT LPQOS       lpSQOS,
-  IN OUT LPQOS       lpGQOS,
-  IN     LPWSABUF    lpCalleeId,
-  IN     LPWSABUF    lpCalleeData,
-  OUT    GROUP FAR * g,
-  IN     DWORD_PTR   dwCallbackData
-) {
-  /* 有数据来才接入 */
-  return (lpCallerData && lpCallerData->len > 0)
-      || *dwCallbackData == 0 ? CF_ACCEPT : CF_DEFER ;
-}
-#endif
-
 /* 准入 ccsocket */
 ccsocket_t ccsocket_accept2(ccsocket_t s, char *ip, uint16_t *port, ccsocket_flags_t flags)
 {
@@ -348,7 +332,7 @@ ccsocket_t ccsocket_accept2(ccsocket_t s, char *ip, uint16_t *port, ccsocket_fla
       return false;
     sap = &sa; sasizep = &sasize; sasize = ccsizeof(sap);
   }
-  ccsocket_t c; int flags_r = 0;
+  ccsocket_t c = INVALID_SOCKET; int flags_r = 0;
 #if defined(SOCK_NONBLOCK) && defined(SOCK_CLOEXEC)
   if (flags & CC_NONBLOCK)
     flags_r |= SOCK_NONBLOCK;
@@ -356,14 +340,7 @@ ccsocket_t ccsocket_accept2(ccsocket_t s, char *ip, uint16_t *port, ccsocket_fla
     flags_r |= SOCK_CLOEXEC;
   c = accept4(s, (struct sockaddr*)sap, sasizep, flags_r);
 #else
-  #if _WIN32
-  bool enable = 0; socklen_t len = sizeof(enable); DWORD times = 0;
-  if (getsockopt(s, SOL_SOCKET, (char *)&enable, &len) != INVALID_SOCKET)
-    times = 1;
-  c = WSAAccept(s, (struct sockaddr*)sap, sasizep, ccsocket_cond_accept_cb, &times);
-  #else
   c = accept(s, (struct sockaddr*)sap, sasizep);
-  #endif
 #endif
   if (c == INVALID_SOCKET) {
     if (ccsocket_is_errno(EINTR))
@@ -744,10 +721,6 @@ Id Refs Address                Size Name
 #define ACCF_NAME "dataready"
   struct accept_filter_arg afa; memset(&afa, 0x0, sizeof(afa)); strcpy(afa.af_name, ACCF_NAME);
   if (setsockopt((SOCKET)s, SOL_SOCKET, SO_ACCEPTFILTER, &afa, sizeof(afa)) == SOCKET_ERROR)
-    return false;
-#elif defined(SO_CONDITIONAL_ACCEPT)
-  bool enable = true;
-  if (setsockopt((SOCKET)s, SOL_SOCKET, SO_CONDITIONAL_ACCEPT, (char*)&enable, sizeof(enable)) == SOCKET_ERROR)
     return false;
 #endif
   return true;
