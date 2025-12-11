@@ -6,25 +6,18 @@
 #include <assert.h>
 #if _WIN32
   #include <Windows.h>
-  #pragma comment(lib, "Ws2_32.lib") // for `select`
+  #define cc_usleep Sleep
 #else
   #include <unistd.h>
-  #include <sys/select.h>
+  #define cc_usleep(timeout) usleep((timeout) * 1000)
 #endif
 
-void cc_usleep(int timeout)
-{
-  struct timeval tv = {
-    (timeout - timeout % 1000) / 1000,
-    (timeout % 1000) * 1000,
-  };
-  select(0, NULL, NULL, NULL, &tv);
-}
-
 static int i = 0;
-#define CCSOCKET_TEST_FUNCTION(fname, code)    \
-static void fname() { code; printf(         \
-"%02d. test case : '%s' successed.\n",++i, __FUNCTION__); }
+#define CCSOCKET_TEST_FUNCTION(fname, code)                              \
+static void fname() {                                                    \
+    code;                                                                \
+    printf("%02d. test case : '%s' successed.\n",++i, __FUNCTION__);     \
+}
 
 /* test socketpair in all platform. */
 CCSOCKET_TEST_FUNCTION(cctest_sockpair, {
@@ -144,35 +137,72 @@ CCSOCKET_TEST_FUNCTION(cctest_check_ip_version, {
 })
 
 CCSOCKET_TEST_FUNCTION(cctest_check_setsockopt, {
-  ccsocket_t c4 = ccsocket(CC_INET4, CC_TCP);
-  ccsocket_t c6 = ccsocket(CC_INET6, CC_TCP);
+  ccsocket_t s4 = ccsocket(CC_INET4, CC_TCP);
+  ccsocket_t s6 = ccsocket(CC_INET6, CC_TCP);
+  assert(s4 > 0);
+  assert(s6 > 0);
+
+  assert(ccsocket_get_family(s4) == CC_INET4);
+  assert(ccsocket_get_family(s6) == CC_INET6);
+
+  assert(ccsocket_set_nonblock(s4, true));
+  assert(ccsocket_set_nonblock(s6, true));
+
+  assert(ccsocket_set_cloexec(s4, true));
+  assert(ccsocket_set_cloexec(s6, true));
+
+  assert(ccsocket_set_nodelay(s4, true));
+  assert(ccsocket_set_nodelay(s6, true));
+
+  assert(ccsocket_set_keepalive(s4, true));
+  assert(ccsocket_set_keepalive(s6, true));
+
+  const char *addr4 = "127.0.0.1";
+  const char *addr6 = "::1";
+  uint16_t port = 7888;
+  /**
+   * `ccsocket_enable_accept_defer` must after call listen method on bsd.
+   */
+  assert(ccsocket_listen(s4, addr4, port));
+  assert(ccsocket_listen(s6, addr6, port));
+
+  assert(ccsocket_enable_accept_defer(s4));
+  assert(ccsocket_enable_accept_defer(s6));
+
+  ccsocket_t c4 = ccsocket1(CC_INET4, CC_TCP, CC_NONBLOCK | CC_CLOEXEC);
+  ccsocket_t c6 = ccsocket1(CC_INET6, CC_TCP, CC_NONBLOCK | CC_CLOEXEC);
   assert(c4 > 0);
   assert(c6 > 0);
 
-  assert(ccsocket_get_family(c4) == CC_INET4);
-  assert(ccsocket_get_family(c4) == CC_INET4);
+  ccsocket_connect(c4, addr4, port);
+  ccsocket_connect(c6, addr6, port);
 
-  assert(ccsocket_set_nonblock(c4, true));
-  assert(ccsocket_set_nonblock(c6, true));
+  bool c4ok = false; bool c6ok = false;
+  int no = 0; ccsocket_t c; const char *buf = "hello";
 
-  assert(ccsocket_set_cloexec(c4, true));
-  assert(ccsocket_set_cloexec(c6, true));
+  do {
+      cc_usleep(100);
+      c = ccsocket_accept(s4, CC_NOFLAG);
+      if (c > 0) {
+          no++; ccsocket_close(c); // printf("s4 accepted.\n");
+      }
+      c = ccsocket_accept(s6, CC_NOFLAG);
+      if (c > 0) {
+          no++; ccsocket_close(c); // printf("s6 accepted.\n");
+      }
+      if (!c4ok && ccsocket_is_connected(c4) == CC_CONNECTED) {
+          assert(ccsocket_send(c4, buf, sizeof(buf), NULL)); c4ok = true;
+      }
+      if (!c6ok && ccsocket_is_connected(c6) == CC_CONNECTED) {
+          assert(ccsocket_send(c6, buf, sizeof(buf), NULL)); c6ok = true;
+      }
+      // sleep a few minutes.
+      if (no < 2)
+        printf("no = %d, c4ok = %d, c6ok = %d\n", no, c4ok, c6ok);
+  } while (no < 2);
 
-  assert(ccsocket_set_nodelay(c4, true));
-  assert(ccsocket_set_nodelay(c6, true));
-
-  assert(ccsocket_set_keepalive(c4, true));
-  assert(ccsocket_set_keepalive(c6, true));
-
-  /**
-   * `ccsocket_enable_accept_defer` must after call listen method.
-   */
-  assert(ccsocket_listen(c4, "127.0.0.1", 7888));
-  assert(ccsocket_listen(c6, "::1", 7888));
-
-  assert(ccsocket_enable_accept_defer(c4));
-  assert(ccsocket_enable_accept_defer(c6));
-
+  assert(!ccsocket_close(s4));
+  assert(!ccsocket_close(s6));
   assert(!ccsocket_close(c4));
   assert(!ccsocket_close(c6));
 })
