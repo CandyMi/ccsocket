@@ -276,8 +276,61 @@ CCSOCKET_TEST_FUNCTION(cctest_check_sendfile, {
   assert(!ccsocket_close(c4));
 })
 
+// #include "cctls.h"
 // CCSOCKET_TEST_FUNCTION(cctest_check_tls, {
+//   ccsocket_t c4 = ccsocket1(CC_INET4, CC_TCP, CC_NONBLOCK | CC_CLOEXEC);
+//   assert(c4 > 0);
+//   ccsocket_connect(c4, "61.241.54.211", 443); // qq.com
+//   /* nonblock connect like event-driven. */
+//   do {
+//     ccsocket_conn_state_t state = ccsocket_is_connected(c4);
+//     //printf("ccsocket_conn_state_t state = %d\n", state);
+//     if (state == CC_CONNECTED)
+//       break;
+//     assert(state != CC_CONNERROR);
+//     cc_usleep(10);
+//   } while (1);
 
+//   // init
+//   cctls_init(realloc);
+
+//   tls_t *ctx = cctls_create1(CCTLS_CLIENT_MODE, c4);
+//   assert(ctx);
+
+//   cctls_set_servername(ctx, "www.qq.com");
+
+//   const char *protocols[5]; int i = 0;
+//   protocols[i++] = "http/1.1";
+//   protocols[i++] = "h2";
+//   protocols[i++] = "http/1.1";
+//   protocols[i++] = "h2";
+//   protocols[i++] = NULL;
+//   cctls_set_alpn(ctx, protocols);
+
+//   do {
+//     ccsocket_stcode_t state = cctls_do_handshake(ctx, NULL);
+//     if (state == CC_CONNECTED)
+//       break;
+//     assert(state != CC_CONNERROR);
+//     cc_usleep(10);
+//   } while (1);
+
+//   const char *req = "GET / HTTP/1.1\r\nHost: www.qq.com\r\n\r\n";
+//   size_t len = strlen(req);
+//   ccsocket_stcode_t state = cctls_send(ctx, req, &len);
+//   assert(state == CC_OPCODE_OK && len == strlen(req));
+
+//   size_t rsize = 1024; char buffer[1024];  memset(buffer, 0x0, rsize);
+//   do {
+//     ccsocket_stcode_t state = cctls_recv(ctx, buffer, &rsize);
+//     if (state == CC_OPCODE_OK)
+//       break;
+//     assert(state != CC_OPCODE_ERROR);
+//     cc_usleep(10);
+//   } while(1);
+//   // printf("cctls -> \n'%s'\n", buffer);
+
+//   assert(!ccsocket_close(c4));
 // })
 
 int main(int argc, char const *argv[])
