@@ -233,6 +233,7 @@ int ccsocket_wrap_ip_and_port(ccsocket_t s, struct sockaddr_storage* sa, const c
       break;
     }
     default:
+      ccsocket_set_errno(EINVAL);
       return -1;
   }
   return 0;
@@ -454,14 +455,11 @@ bool ccsocketpair1(ccsocket_t sv[2], ccsocket_flags_t flags)
   }
   /* 创建 socket 1 */
   ccsocket_t c = ccsocket1(CC_INET4, CC_TCP, CC_NOFLAG);
-  ccsocket_set_nonblock(c, true);
-  if (!ccsocket_connect(c, addr, port)) {
-    int code = WSAGetLastError();
-    if (code != WSAEINPROGRESS && code != WSAEWOULDBLOCK) {
-      ccsocket_close(srv); /* 创建失败 */
+  if (c == SOCKET_ERROR || !ccsocket_connect(c, addr, port)) {
+    if (c != SOCKET_ERROR)
       ccsocket_close(c);   /* 创建失败 */
-      return false;
-    }
+    ccsocket_close(srv); /* 创建失败 */
+    return false;
   }
   /* 创建 socket 2 */
   ccsocket_t s = ccsocket_accept(srv, flags);
@@ -470,7 +468,6 @@ bool ccsocketpair1(ccsocket_t sv[2], ccsocket_flags_t flags)
     ccsocket_close(c);   /* 创建失败 */
     return false;
   }
-  ccsocket_set_nonblock(c, false);
   ccsocket_set_flags(c, flags);
   sv[0] = c, sv[1] = s;
   /* 别忘记销毁监听套接字哦 */
@@ -504,32 +501,25 @@ bool ccsocket_connect(ccsocket_t s, const char *addr, uint16_t port)
 ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s)
 {
   ccsocket_init_errno();
-  ccsocket_conn_state_t state = CC_CONNECTING;
+  ccsocket_conn_state_t state = CC_CONNECTED;
 #if _WIN32
-  if (SOCKET_ERROR == ccsocket_connect(s, NULL, 0))
-  {
-    switch (WSAGetLastError())
-    {
-      case WSAEISCONN:
-        state = CC_CONNECTED;
-        break;
-      case WSAEALREADY:
-      case WSAEWOULDBLOCK:
-      case WSAEINPROGRESS:
-        state = CC_CONNECTING;
-        break;
-      default:
-        state = CC_CONNERROR;
+  if (!ccsocket_connect(s, NULL, 0)) {
+    if (ccsocket_is_errno(EINTR)) {
+      return ccsocket_is_connected(s);
     }
-  } else {
-    state = CC_CONNECTED;
+    if (!ccsocket_is_errno(EISCONN)) {
+      if (ccsocket_is_errno(EALREADY) || ccsocket_is_errno(EWOULDBLOCK) || ccsocket_is_errno(EINPROGRESS)) {
+        state = CC_CONNECTING;
+      } else {
+        state = CC_CONNERROR;
+      }
+    }
   }
 #else
   int error = 0; socklen_t len = sizeof(error);
   int r = getsockopt((SOCKET)s, SOL_SOCKET, SO_ERROR, &error, (socklen_t*)&len);
   // printf("getsockopt r = %d, error = %d, errno = %d\n", r, error, errno);
   if (r || error) {
-    errno = error;
     return CC_CONNERROR;
   }
   /**
@@ -556,7 +546,6 @@ ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s)
     else if (errno != EISCONN)
       return CC_CONNERROR;
   }
-  state = CC_CONNECTED;
 #endif
   return state;
 }
@@ -905,18 +894,14 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
   // lseek(fd, size, SEEK_SET);
   return ccsocket_sendfile(s, fd);
 #else
-#ifndef SEEK_CUR
-  #define SEEK_CUR    1
-#endif
-#ifndef SEEK_END
-  #define SEEK_END    2
-#endif
-#ifndef SEEK_SET
-  #define SEEK_SET    0
-#endif
 #if _WIN32
-  #define read _read
-  #define lseek _lseeki64
+  #if _WIN64
+    #define read  _read
+    #define lseek _lseeki64
+  #else
+    #define read  _read
+    #define lseek _lseek
+  #endif
   typedef int64_t off_t;
 #endif
 #define CC_SENDFILE_PER_LEN 1024
@@ -924,16 +909,19 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
   uint32_t bsize = CC_SENDFILE_PER_LEN;
   char buffer[CC_SENDFILE_PER_LEN];
   off_t offset = lseek(fd, 0, SEEK_CUR);
+  //ccsocket_dump("1. fd = %d, errcode = %d, %lld", fd, errno, offset);
   if (offset == SOCKET_ERROR)
     return CC_SENDERROR;
   off_t eof = lseek(fd, 0, SEEK_END);
+  //ccsocket_dump("2. fd = %d, errcode = %d, %lld", fd, errno, eof);
   if (eof == SOCKET_ERROR)
     return CC_SENDERROR;
   while (offset < eof) {
     int rsize = read(fd, buffer, bsize);
     if (rsize == SOCKET_ERROR)
       return CC_SENDERROR;
-    if (!ccsocket_send(s, buffer, rsize, &wsize)) {
+    if (ccsocket_send(s, buffer, rsize, &wsize) != CC_OPCODE_OK) {
+      //ccsocket_dump("3. fd = %d, errcode = %d, wsacode = %d", fd, errno, WSAGetLastError());
       lseek(fd, offset, SEEK_SET);
       if (ccsocket_is_errno(EINTR))
         return CC_SENDNEXT;
