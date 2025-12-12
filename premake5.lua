@@ -21,6 +21,12 @@ workspace "ccsocket"
     targetprefix ""
     buildoptions { "/source-charset:utf-8" }
 
+newoption {
+  trigger = "WITH_OSSL",
+  value = "VALUE",
+  description = "ccsocket with tls",
+}
+
 local function ccbuild (
   project_name, project_type,
   project_language, project_files,
@@ -52,6 +58,7 @@ local function ccbuild (
     end
 
     filter "not system:windows"
+      pic "On"
       -- 设置 rpath 标志
       linkoptions {
         "-Wl,-rpath,./",
@@ -59,16 +66,25 @@ local function ccbuild (
       }
 end
 
-ccbuild(
-  'ccsocket-dynamic', 'SharedLib', 'C',
-  {'ccsocket.c', 'ccsocket.h'},
-  nil, 'ccsocket', 'build'
-)
+local libsrc = {'ccsocket.c', 'ccsocket.h'}
+local ossl
+if _OPTIONS["WITH_OSSL"] then
+  libsrc[#libsrc+1] = "cctls.c"
+  libsrc[#libsrc+1] = "cctls.h"
+  ossl = {}
+  ossl[#ossl+1] = "ssl"
+  ossl[#ossl+1] = "crypto"
+end
 
 ccbuild(
   'ccsocket-static', 'StaticLib', 'C',
-  {'ccsocket.c', 'ccsocket.h'},
-  nil, 'ccsocket', 'build'
+  libsrc, ossl, 'ccsocket', 'build'
+)
+
+ccbuild(
+  'ccsocket-dynamic', 'SharedLib', 'C',
+  libsrc, ossl, 'ccsocket', 'build',
+  {'ccsocket-static'}
 )
 
 ccbuild(
