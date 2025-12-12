@@ -49,7 +49,7 @@ CCSOCKET_EXPORT ccsocket_stcode_t cctls_recv(tls_t *tls, void *buffer, size_t *l
 CCSOCKET_EXPORT ccsocket_stcode_t cctls_send(tls_t *tls, const void *buffer, size_t *len);
 
 /* set alpn for tls client. */
-CCSOCKET_EXPORT void cctls_set_alpn(tls_t* tls, const char **protocols);
+CCSOCKET_EXPORT void cctls_set_alpn(tls_t *tls, const char *protocols[]);
 
 /* set peer server name for tls client. */
 CCSOCKET_EXPORT void cctls_set_servername(tls_t* tls, const char *domain);

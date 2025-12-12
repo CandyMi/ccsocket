@@ -60,7 +60,7 @@ int cctls_init(tls_realloc_t alloc)
   return 0;
 }
 
-void cctls_get_error(tls_t* tls, int retcode, char err[MAX_ERRORLEN])
+void cctls_get_error(tls_t *tls, int retcode, char err[MAX_ERRORLEN])
 {
   assert(tls);
   ERR_error_string_n(retcode, err, MAX_ERRORLEN);
@@ -95,7 +95,7 @@ tls_t* cctls_create1(cctls_mode_t mode, ccsocket_t s)
   return ssl;
 }
 
-void cctls_destroy(tls_t* tls)
+void cctls_destroy(tls_t *tls)
 {
   if (!tls)
     return;
@@ -104,19 +104,19 @@ void cctls_destroy(tls_t* tls)
   SSL_CTX_free(ctx);
 }
 
-void cctls_set_fd(tls_t* tls, ccsocket_t s)
+void cctls_set_fd(tls_t *tls, ccsocket_t s)
 {
   SSL_set_fd(tls, s);
 }
 
-ccsocket_t cctls_get_fd(tls_t* tls)
+ccsocket_t cctls_get_fd(tls_t *tls)
 {
   return tls ? SSL_get_fd(tls) : INVALID_SOCKET;
 }
 
-ccsocket_stcode_t cctls_do_handshake(tls_t* tls, int *retcode)
+ccsocket_stcode_t cctls_do_handshake(tls_t *tls, int *retcode)
 {
-  assert(tls && retcode);
+  assert(tls);
   ccsocket_init_errno();
   int code = SSL_do_handshake(tls);
   if (code == 1) 
@@ -171,27 +171,27 @@ ccsocket_stcode_t cctls_send(tls_t *tls, const void *buffer, size_t *len)
 //   return CC_SENDERROR;
 // }
 
-void cctls_set_servername(tls_t* tls, const char *domain)
+void cctls_set_servername(tls_t *tls, const char *domain)
 {
   SSL_set_tlsext_host_name(tls, domain);
 }
 
-void cctls_set_alpn(tls_t* tls, const char **protocols)
+void cctls_set_alpn(tls_t *tls, const char *protocols[])
 {
-#define ALPN_BUFFER_SIZE 4096
+#define ALPN_BUFFER_SIZE 1024
   if (!protocols)
     return;
-  int i = 0; uint32_t bsize = 0; int maxlen = ALPN_BUFFER_SIZE;
   char buffer[ALPN_BUFFER_SIZE]; uint8_t *protocol = (uint8_t*)buffer;
-  while (protocols[i])
-  {
+  int i = 0; uint32_t bsize = 0;
+  while (protocols[i]) {
     uint8_t len = strlen(protocols[i]);
-    protocol[i] = len;
-    snprintf((char *)protocol + bsize, len+1, "%s", protocols[i]);
-    bsize += len + 1; i++;
+    *protocol++ = len;
+    snprintf((char *)protocol, ALPN_BUFFER_SIZE - bsize, "%s", protocols[i]);
+    bsize += len + 1; protocol += len; i++;
   }
   /* nothing todo. */
   if (protocol == (uint8_t*)buffer)
     return;
+  buffer[bsize] = 0;
   SSL_set_alpn_protos(tls, (const uint8_t *)buffer, bsize);
 }
