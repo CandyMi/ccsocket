@@ -1,3 +1,4 @@
+#define _CRT_SECURE_NO_WARNINGS
 #include "ccsocket.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -5,8 +6,12 @@
 #include <errno.h>
 #include <assert.h>
 #if _WIN32
+  #include <io.h>
+  #include <fcntl.h>
   #include <Windows.h>
   #define cc_usleep Sleep
+  #define close _close
+  #define open  _open
 #else
   #include <fcntl.h>
   #include <unistd.h>
@@ -24,7 +29,8 @@ static void fname() {                                                    \
 CCSOCKET_TEST_FUNCTION(cctest_sockpair, {
   ccsocket_t sv[2]; const char *buffer = "1024";
   char buf[1024]; memset(buf, 0x0, 1024);
-  assert(ccsocketpair(sv, CC_NONBLOCK|CC_CLOEXEC));
+  bool ok = ccsocketpair(sv, CC_NONBLOCK | CC_CLOEXEC);
+  assert(ok);
   int wsize;
   ccsocket_stcode_t state1 = ccsocket_send(sv[0], buffer, strlen(buffer), &wsize);
   assert(state1 == CC_OPCODE_OK && wsize == strlen(buffer));
@@ -65,8 +71,10 @@ CCSOCKET_TEST_FUNCTION(cctest_listen_and_connect, {
   ss6 = ccsocket_accept(s6, CC_NONBLOCK|CC_CLOEXEC);
   assert(!ss6);
   /* connect to ipv6 and ipv4 */
-  ccsocket_connect(c4, ipv4, port);
-  ccsocket_connect(c6, ipv6, port);
+  bool ok;
+  ok = ccsocket_connect(c4, ipv4, port);
+  ok = ccsocket_connect(c6, ipv6, port);
+  assert(ok || !ok);
   /* check connection status. */
   ccsocket_conn_state_t c4state = ccsocket_is_connected(c4);
   assert(c4state == CC_CONNECTING || c4state == CC_CONNECTED);
@@ -80,8 +88,10 @@ CCSOCKET_TEST_FUNCTION(cctest_listen_and_connect, {
   assert(ss4 > 0);
   assert(ss6 > 0);
   /* verify client was connected. */
-  assert(ccsocket_is_connected(c4) == CC_CONNECTED);
-  assert(ccsocket_is_connected(c6) == CC_CONNECTED);
+  c4state = ccsocket_is_connected(c4);
+  assert(c4state == CC_CONNECTED);
+  c6state = ccsocket_is_connected(c6);
+  assert(c6state == CC_CONNECTED);
   /* close all sockets.*/
   // sleep(10);
   assert(!ccsocket_close(s4));
@@ -178,8 +188,8 @@ CCSOCKET_TEST_FUNCTION(cctest_check_setsockopt, {
   assert(c4 > 0);
   assert(c6 > 0);
 
-  ccsocket_connect(c4, addr4, port);
-  ccsocket_connect(c6, addr6, port);
+  ok = ccsocket_connect(c4, addr4, port);
+  ok = ccsocket_connect(c6, addr6, port);
 
   bool c4ok = false; bool c6ok = false;
   int no = 0; ccsocket_t c; const char *buf = "hello";
@@ -223,15 +233,16 @@ const char *path[] = {
   NULL,
 };
 CCSOCKET_TEST_FUNCTION(cctest_check_sendfile, {
-// CCSOCKET_TEST_FUNCTION(cctest_check_sendfile, {
   ccsocket_t c4 = ccsocket1(CC_INET4, CC_TCP, CC_NONBLOCK | CC_CLOEXEC);
   assert(c4 > 0);
   ccsocket_connect(c4, "61.241.54.211", 80); // qq.com
   /* nonblock connect like event-driven. */
   do {
-    assert(ccsocket_is_connected(c4) != CC_CONNERROR);
-    if (ccsocket_is_connected(c4) == CC_CONNECTED)
+    ccsocket_conn_state_t state = ccsocket_is_connected(c4);
+    //printf("ccsocket_conn_state_t state = %d\n", state);
+    if (state == CC_CONNECTED)
       break;
+    assert(state != CC_CONNERROR);
     cc_usleep(10);
   } while (1);
 
@@ -245,10 +256,11 @@ CCSOCKET_TEST_FUNCTION(cctest_check_sendfile, {
   // sendfile
   assert(fd > 0);
   do {
-    int state = ccsocket_sendfile(c4, fd);
+    ccsocket_sendf_state_t state = ccsocket_sendfile(c4, fd);
     if (state == CC_SENDALL)
       break;
     assert(state != CC_SENDERROR);
+    cc_usleep(10);
   } while (1);
   // recv
   int rsize; char buffer[1024];  memset(buffer, 0x0, 1024);
