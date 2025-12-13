@@ -152,18 +152,18 @@ ccsocket_stcode_t _cctls_get_events(tls_t *tls, int code)
   return CC_OPCODE_ERROR;
 }
 
-ccsocket_stcode_t cctls_recv(tls_t *tls, void *buffer, size_t *len)
+ccsocket_stcode_t cctls_recv(tls_t *tls, void *buffer, size_t len, int *rsize)
 {
-  assert(tls && buffer && len);
+  assert(tls && buffer && rsize);
   ccsocket_init_errno();
-  return _cctls_get_events(tls, SSL_read_ex(tls, buffer, *len, len));
+  return _cctls_get_events(tls, SSL_read_ex(tls, buffer, len, (size_t*)rsize));
 }
 
-ccsocket_stcode_t cctls_send(tls_t *tls, const void *buffer, size_t *len)
+ccsocket_stcode_t cctls_send(tls_t *tls, const void *buffer, size_t len, int *wsize)
 {
-  assert(tls && buffer && len);
+  assert(tls && buffer && wsize);
   ccsocket_init_errno();
-  return _cctls_get_events(tls, SSL_write_ex(tls, buffer, *len, len));
+  return _cctls_get_events(tls, SSL_write_ex(tls, buffer, len, (size_t*)wsize));
 }
 
 // ccsocket_sendf_state_t cctls_sendfile(tls_t *tls, int fd)
@@ -178,15 +178,15 @@ void cctls_set_servername(tls_t *tls, const char *domain)
 
 void cctls_set_alpn(tls_t *tls, const char *protocols[])
 {
-#define ALPN_BUFFER_SIZE 1024
+#define TLS_ALPN_MAX_SIZE 512
   if (!protocols)
     return;
-  char buffer[ALPN_BUFFER_SIZE]; uint8_t *protocol = (uint8_t*)buffer;
+  char buffer[TLS_ALPN_MAX_SIZE]; uint8_t *protocol = (uint8_t*)buffer;
   int i = 0; uint32_t bsize = 0;
   while (protocols[i]) {
     uint8_t len = strlen(protocols[i]);
-    *protocol++ = len;
-    snprintf((char *)protocol, ALPN_BUFFER_SIZE - bsize, "%s", protocols[i]);
+    /* copy data into buffer. */
+    *protocol++ = len; memcpy(protocol, protocols[i], len);
     bsize += len + 1; protocol += len; i++;
   }
   /* nothing todo. */
@@ -194,4 +194,5 @@ void cctls_set_alpn(tls_t *tls, const char *protocols[])
     return;
   buffer[bsize] = 0;
   SSL_set_alpn_protos(tls, (const uint8_t *)buffer, bsize);
+#undef TLS_ALPN_MAX_SIZE
 }

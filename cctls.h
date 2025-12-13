@@ -43,10 +43,10 @@ CCSOCKET_EXPORT ccsocket_stcode_t cctls_do_handshake(tls_t* tls, int *retcode);
 CCSOCKET_EXPORT void cctls_get_error(tls_t* tls, int retcode, char err[MAX_ERRORLEN]);
 
 /* recv tls data */
-CCSOCKET_EXPORT ccsocket_stcode_t cctls_recv(tls_t *tls, void *buffer, size_t *len);
+CCSOCKET_EXPORT ccsocket_stcode_t cctls_recv(tls_t *tls, void *buffer, size_t len, int *rsize);
 
 /* send tls data */
-CCSOCKET_EXPORT ccsocket_stcode_t cctls_send(tls_t *tls, const void *buffer, size_t *len);
+CCSOCKET_EXPORT ccsocket_stcode_t cctls_send(tls_t *tls, const void *buffer, size_t len, int *wsize);
 
 /* set alpn for tls client. */
 CCSOCKET_EXPORT void cctls_set_alpn(tls_t *tls, const char *protocols[]);
