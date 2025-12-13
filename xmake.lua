@@ -3,8 +3,13 @@
 add_rules("mode.debug", "mode.release")
 
 local stdc = "c99"
-local stdcxx = "c++11"
 local output = "build"
+
+if is_mode("debug") then
+    add_defines("DEBUG")
+else
+    add_defines("NDEBUG")
+end
 
 -- 生成.o文件
 target("ccsocket-object")
