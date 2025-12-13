@@ -17,7 +17,7 @@
   #include <unistd.h>
   #define cc_usleep(timeout) usleep((timeout) * 1000)
 #endif
-
+static const char *http_server_ip = "157.255.130.195";
 static int i = 0;
 #define CCSOCKET_TEST_FUNCTION(fname, code)                              \
 static void fname() {                                                    \
@@ -106,11 +106,11 @@ CCSOCKET_TEST_FUNCTION(cctest_listen_and_connect, {
 CCSOCKET_TEST_FUNCTION(cctest_check_timeout, {
   ccsocket_t c4 = ccsocket(CC_INET4, CC_TCP);
   assert(c4 > 0);
-  ccsocket_connect(c4, "61.241.54.211", 80); // qq.com
+  ccsocket_connect(c4, http_server_ip, 80); // cfadmin.cn
   assert(ccsocket_is_connected(c4) == CC_CONNECTED);
 
   /* 1. not timeout. */
-  const char *req = "GET / HTTP/1.1\r\nHost: www.qq.com\r\n\r\n";
+  const char *req = "GET / HTTP/1.1\r\nHost: cfadmin.cn\r\n\r\n";
   // printf("len = %d\n", ccsocket_send(c4, req, strlen(req)));
   int wlen;
   ccsocket_stcode_t state1 = ccsocket_send(c4, req, strlen(req), &wlen);
@@ -235,7 +235,7 @@ const char *path[] = {
 CCSOCKET_TEST_FUNCTION(cctest_check_sendfile, {
   ccsocket_t c4 = ccsocket1(CC_INET4, CC_TCP, CC_NONBLOCK | CC_CLOEXEC);
   assert(c4 > 0);
-  ccsocket_connect(c4, "61.241.54.211", 80); // qq.com
+  ccsocket_connect(c4, http_server_ip, 80); // cfadmin.cn
   /* nonblock connect like event-driven. */
   do {
     ccsocket_conn_state_t state = ccsocket_is_connected(c4);
@@ -280,7 +280,7 @@ CCSOCKET_TEST_FUNCTION(cctest_check_sendfile, {
 // CCSOCKET_TEST_FUNCTION(cctest_check_tls, {
 //   ccsocket_t c4 = ccsocket1(CC_INET4, CC_TCP, CC_NONBLOCK | CC_CLOEXEC);
 //   assert(c4 > 0);
-//   ccsocket_connect(c4, "61.241.54.211", 443); // qq.com
+//   ccsocket_connect(c4, http_server_ip, 443); // cfadmin.cn
 //   /* nonblock connect like event-driven. */
 //   do {
 //     ccsocket_conn_state_t state = ccsocket_is_connected(c4);
@@ -296,8 +296,10 @@ CCSOCKET_TEST_FUNCTION(cctest_check_sendfile, {
 
 //   tls_t *ctx = cctls_create1(CCTLS_CLIENT_MODE, c4);
 //   assert(ctx);
-
-//   cctls_set_servername(ctx, "www.qq.com");
+//   // cctls_set_version(ctx, CCTLS_VERSION_1_1, CCTLS_VERSION_1_1);
+//   // cctls_set_version(ctx, CCTLS_VERSION_1_2, CCTLS_VERSION_1_2);
+//   cctls_set_version(ctx, CCTLS_VERSION_1_2, CCTLS_VERSION_1_3);
+//   cctls_set_servername(ctx, "cfadmin.cn");
 
 //   const char *protocols[5]; int i = 0;
 //   protocols[i++] = "http/1.1";
@@ -316,7 +318,7 @@ CCSOCKET_TEST_FUNCTION(cctest_check_sendfile, {
 //   } while (1);
 
 //   int wsize; int rsize;
-//   const char *req = "GET / HTTP/1.1\r\nHost: www.qq.com\r\n\r\n";
+//   const char *req = "GET / HTTP/1.1\r\nHost: cfadmin.cn\r\n\r\n";
 //   size_t wlen = strlen(req);
 //   // printf("%zu\n", wlen);
 //   ccsocket_stcode_t state = cctls_send(ctx, req, wlen, &wsize);
