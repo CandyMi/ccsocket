@@ -315,14 +315,18 @@ CCSOCKET_TEST_FUNCTION(cctest_check_sendfile, {
 //     cc_usleep(10);
 //   } while (1);
 
+//   int wsize; int rsize;
 //   const char *req = "GET / HTTP/1.1\r\nHost: www.qq.com\r\n\r\n";
-//   size_t len = strlen(req);
-//   ccsocket_stcode_t state = cctls_send(ctx, req, &len);
-//   assert(state == CC_OPCODE_OK && len == strlen(req));
+//   size_t wlen = strlen(req);
+//   // printf("%zu\n", wlen);
+//   ccsocket_stcode_t state = cctls_send(ctx, req, wlen, &wsize);
+//   // printf("%zu, %d, %d\n", wlen, wsize, state);
+//   assert(state == CC_OPCODE_OK && wlen == wsize);
 
-//   size_t rsize = 1024; char buffer[1024];  memset(buffer, 0x0, rsize);
+//   size_t rlen = 1024;
+//   char buffer[1024]; memset(buffer, 0x0, rlen);
 //   do {
-//     ccsocket_stcode_t state = cctls_recv(ctx, buffer, &rsize);
+//     ccsocket_stcode_t state = cctls_recv(ctx, buffer, rlen, &rsize);
 //     if (state == CC_OPCODE_OK)
 //       break;
 //     assert(state != CC_OPCODE_ERROR);
@@ -330,6 +334,7 @@ CCSOCKET_TEST_FUNCTION(cctest_check_sendfile, {
 //   } while(1);
 //   // printf("cctls -> \n'%s'\n", buffer);
 
+//   cctls_destroy(ctx);
 //   assert(!ccsocket_close(c4));
 // })
 
