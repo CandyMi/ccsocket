@@ -7,10 +7,21 @@ typedef void tls_t; // 抽象套接字
 
 typedef enum {
 #define CCTLS_CLIENT_MODE CCTLS_CLIENT_MODE
-  CCTLS_CLIENT_MODE = 1, // 连接到服务器选这个
+  CCTLS_CLIENT_MODE = 1, // when you wanna connect to server.
 #define CCTLS_SERVER_MODE CCTLS_SERVER_MODE
-  CCTLS_SERVER_MODE = 2, // 监听客户端就选这个
+  CCTLS_SERVER_MODE = 2, // when you wanna listen client coming.
 } cctls_mode_t;
+
+typedef enum {
+#define CCTLS_VERSION_1_0 CCTLS_VERSION_1_0
+  CCTLS_VERSION_1_0 = 0,
+#define CCTLS_VERSION_1_1 CCTLS_VERSION_1_1
+  CCTLS_VERSION_1_1 = 1,
+#define CCTLS_VERSION_1_2 CCTLS_VERSION_1_2
+  CCTLS_VERSION_1_2 = 2,
+#define CCTLS_VERSION_1_3 CCTLS_VERSION_1_3
+  CCTLS_VERSION_1_3 = 3,
+} cctls_version_t;
 
 #ifdef __cplusplus
 extern "C" {
@@ -29,6 +40,9 @@ CCSOCKET_EXPORT tls_t* cctls_create1(cctls_mode_t mode, ccsocket_t s);
 
 /* tls context destory. */
 CCSOCKET_EXPORT void cctls_destroy(tls_t *ctx);
+
+/* set cctls version. */
+CCSOCKET_EXPORT void cctls_set_version(tls_t *tls, cctls_version_t min_ver, cctls_version_t max_ver);
 
 /* set socket to tls context */
 CCSOCKET_EXPORT ccsocket_t cctls_get_fd(tls_t* tls);

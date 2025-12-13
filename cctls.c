@@ -32,6 +32,13 @@
   #error "OSSL Version to old."
 #endif
 
+static int tls_versions[] = {
+  TLS1_VERSION,
+  TLS1_1_VERSION,
+  TLS1_2_VERSION,
+  TLS1_3_VERSION,
+};
+
 static tls_realloc_t tls_realloc = realloc;
 
 static void* cctls_malloc(size_t num, const char *file, int line)
@@ -92,6 +99,7 @@ tls_t* cctls_create1(cctls_mode_t mode, ccsocket_t s)
       cctls_destroy(ssl);
       return NULL;
   }
+  cctls_set_version(ssl, CCTLS_VERSION_1_0, CCTLS_VERSION_1_3);
   return ssl;
 }
 
@@ -164,6 +172,15 @@ ccsocket_stcode_t cctls_send(tls_t *tls, const void *buffer, size_t len, int *ws
   assert(tls && buffer && wsize);
   ccsocket_init_errno();
   return _cctls_get_events(tls, SSL_write_ex(tls, buffer, len, (size_t*)wsize));
+}
+
+void cctls_set_version(tls_t *tls, cctls_version_t min_ver, cctls_version_t max_ver)
+{
+  assert(min_ver >= CCTLS_VERSION_1_0 && min_ver <= CCTLS_VERSION_1_3);
+  assert(max_ver >= CCTLS_VERSION_1_0 && max_ver <= CCTLS_VERSION_1_3);
+  assert(min_ver <= max_ver);
+  SSL_set_min_proto_version(tls, tls_versions[min_ver]);
+  SSL_set_max_proto_version(tls, tls_versions[max_ver]);
 }
 
 // ccsocket_sendf_state_t cctls_sendfile(tls_t *tls, int fd)
