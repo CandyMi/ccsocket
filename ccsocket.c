@@ -865,16 +865,19 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
   off_t offset = lseek(fd, 0, SEEK_CUR);
   if (offset == -1)
     return CC_SENDERROR;
+  off_t eof = lseek(fd, 0, SEEK_END);
+  if (eof == -1)
+    return CC_SENDERROR;
+  lseek(fd, offset, SEEK_SET);
   off_t wsize = sendfile(s, fd, &offset, (size_t)INT64_MAX);
   if (wsize == SOCKET_ERROR) {
     if (ccsocket_is_errno(EINTR))
       return CC_SENDNEXT;
     return ccsocket_is_errno(EWOULDBLOCK) ? CC_SENDWAIT : CC_SENDERROR;
   }
-  off_t eof = lseek(fd, 0, SEEK_END);
-  if (offset == eof)
+  lseek(fd, offset + wsize, SEEK_SET);
+  if (offset + wsize == eof)
     return CC_SENDALL;
-  lseek(fd, offset, SEEK_SET);
   return ccsocket_sendfile(s, fd);
 #elif _AIX
   off_t offset = lseek(fd, 0, SEEK_CUR);
