@@ -839,24 +839,27 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
 {
   ccsocket_init_errno();
 #if defined(__APPLE__) || defined(__FreeBSD__) || defined(__DragonFlyBSD__)
-  off_t size = 0;
+  off_t wsize = 0;
   off_t offset = lseek(fd, 0, SEEK_CUR);
   if (offset == -1)
     return CC_SENDERROR;
+  off_t eof = lseek(fd, 0, SEEK_END);
+  if (eof == -1)
+    return CC_SENDERROR;
+  lseek(fd, offset, SEEK_SET);
   #if defined(__APPLE__)
-  int r = sendfile(fd, (SOCKET)s, offset, &size, NULL, 0);
+  int r = sendfile(fd, (SOCKET)s, offset, &wsize, NULL, 0);
   #else
-  int r = sendfile(fd, (SOCKET)s, offset, 0, NULL, &size, 0);
+  int r = sendfile(fd, (SOCKET)s, offset, 0, NULL, &wsize, 0);
   #endif
   if (r == SOCKET_ERROR) {
     if (ccsocket_is_errno(EINTR))
       return CC_SENDNEXT;
     return ccsocket_is_errno(EWOULDBLOCK) ? CC_SENDWAIT : CC_SENDERROR;
   }
-  off_t eof = lseek(fd, 0, SEEK_END);
-  if (size == eof)
+  lseek(fd, offset + wsize, SEEK_SET);
+  if (offset + wsize == eof)
     return CC_SENDALL;
-  lseek(fd, size, SEEK_SET);
   return ccsocket_sendfile(s, fd);
 #elif defined(__linux__) || defined(__sun__)
   off_t offset = lseek(fd, 0, SEEK_CUR);
