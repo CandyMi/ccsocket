@@ -933,6 +933,17 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
 #endif
 }
 
+CC_INLINE
+bool ccsocket_addrinfo_already_in(ccaddrinfo_t *addr, ccaddrinfo_t *cur)
+{
+  for (; addr && addr != cur; addr = addr->next) {
+    // ccsocket_dump("'%s' == '%s' ? %d", addr->address, cur->address, !strcmp(addr->address, cur->address));
+    if (!strcmp(addr->address, cur->address))
+      return true;
+  }
+  return false;
+}
+
 bool ccsocket_getaddrinfo(const char *domain, ccaddrinfo_t **addrlist)
 {
   ccsocket_init_errno();
@@ -953,12 +964,13 @@ bool ccsocket_getaddrinfo(const char *domain, ccaddrinfo_t **addrlist)
   /* init results */
   ccaddrinfo_t *cur = (ccaddrinfo_t*)malloc(sizeof(ccaddrinfo_t));
   if (!cur)
-      return false;
+    return false;
   memset(cur, 0x0, sizeof(ccaddrinfo_t));
 
-  *addrlist = cur;
+  *addrlist = cur; ccaddrinfo_t *after = NULL;
   struct addrinfo *link = addrs;
-  do {
+  while (link)
+  {
     if (link->ai_family == AF_INET) {
       cur->af = CC_INET4;
 #if _WIN32
@@ -980,15 +992,29 @@ bool ccsocket_getaddrinfo(const char *domain, ccaddrinfo_t **addrlist)
       cur->next = NULL;
       break;
     }
-
+    /* address already in link-list ? */
+    if (ccsocket_addrinfo_already_in(*addrlist, cur)) {
+      cur->af = CC_FAMILY_INVALID;
+      link = link->ai_next;
+      continue;
+    }
+    /* allocate next address. */
     if (link->ai_next) {
       cur->next = (ccaddrinfo_t*)malloc(sizeof(ccaddrinfo_t));
       if (!cur->next)
-          break;
+        break;
+      after = cur;
       cur = cur->next;
       memset(cur, 0x0, sizeof(ccaddrinfo_t));
     }
-  } while (link = link->ai_next);
+    /* next */
+    link = link->ai_next;
+  }
+  /* check point is invalid. */
+  if (cur->af == CC_FAMILY_INVALID && after) {
+    ccsocket_freeaddrinfo(after->next);
+    after->next = NULL;
+  }
   freeaddrinfo(addrs);
   return true;
 }
