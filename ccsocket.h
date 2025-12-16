@@ -14,6 +14,10 @@
     #define INVALID_SOCKET (~0)
 #endif
 
+#ifndef OPTIONAL
+  #define OPTIONAL // When modifying a method parameter, it means that this parameter is optional and can be `NULL`.
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -51,15 +55,15 @@ typedef enum {
 
 /* Used for ccsocket* */
 typedef enum {
-#define CC_DOMAIN_INVALID  CC_DOMAIN_INVALID
-    CC_DOMAIN_INVALID = -1,
+#define CC_FAMILY_INVALID   CC_FAMILY_INVALID 
+    CC_FAMILY_INVALID = -1,
 #define CC_UNIX  CC_UNIX
     CC_UNIX  = 0, // AF_UNIX  -> LOCAL
 #define CC_INET4 CC_INET4
     CC_INET4 = 1, // AF_INET  -> IPv4
 #define CC_INET6 CC_INET6
     CC_INET6 = 2, // AF_INET6 -> IPv6
-} ccsocket_domain_t;
+} ccsocket_family_t;
 
 /* Used for ccsocket* */
 typedef enum {
@@ -110,7 +114,7 @@ CCSOCKET_EXPORT bool ccsocketpair1(ccsocket_t sv[2], ccsocket_flags_t flags);
 #define ccsocket1(domain, protocol, flags) ccsocket2((domain), (protocol), (ccsocket_flags_t)(flags))
 
 /* `ccsocket/ccsocket1` ABI (Try to avoid using it directly.) */
-CCSOCKET_EXPORT ccsocket_t ccsocket2(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsocket_flags_t flags);
+CCSOCKET_EXPORT ccsocket_t ccsocket2(ccsocket_family_t domain, ccsocket_protocol_t proto, ccsocket_flags_t flags);
 
 /* accept a client from listen `ccsocket`, return `(ccsocket_t)0` when non-block mode syscall want wait events. */
 #define ccsocket_accept(s, flags) ccsocket_accept2((s), NULL, NULL, (ccsocket_flags_t)(flags))
@@ -119,7 +123,7 @@ CCSOCKET_EXPORT ccsocket_t ccsocket2(ccsocket_domain_t domain, ccsocket_protocol
 #define ccsocket_accept1(s, paddr, pport, flags) ccsocket_accept2((s), (paddr), (pport), (ccsocket_flags_t)(flags))
 
 /* `ccsocket_accept/ccsocket_accept1` ABI (Try to avoid using it directly.) */
-CCSOCKET_EXPORT ccsocket_t ccsocket_accept2(ccsocket_t s, char *addr, uint16_t *port, ccsocket_flags_t flags);
+CCSOCKET_EXPORT ccsocket_t ccsocket_accept2(ccsocket_t s, OPTIONAL char *addr, OPTIONAL uint16_t *port, ccsocket_flags_t flags);
 
 /* listen a `ccsocket` (Only a listener) */
 CCSOCKET_EXPORT bool ccsocket_listen(ccsocket_t s, const char *addr, uint16_t port);
@@ -142,12 +146,12 @@ CCSOCKET_EXPORT bool ccsocket_connect(ccsocket_t s, const char *addr, uint16_t p
 CCSOCKET_EXPORT ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s);
 
 /* Read data sent by the peer from the `ccsocket`. */
-CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_recv(ccsocket_t s, char *buf, size_t bsize, int *rsize);
+CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_recv(ccsocket_t s, char *buf, size_t bsize, OPTIONAL int *rsize);
 /* Sneaking a view of the data sent by the other end through a ccsocket. (platform must be supported) */
-CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_peek(ccsocket_t s, char* buf, size_t bsize, int *rsize);
+CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_peek(ccsocket_t s, char* buf, size_t bsize, OPTIONAL int *rsize);
 
 /* send buffer to peer `ccsocket` */
-CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_send(ccsocket_t s, const void *buf, size_t bsize, int *wsize);
+CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_send(ccsocket_t s, const void *buf, size_t bsize, OPTIONAL int *wsize);
 
 // /* Read data sent by the peer from the `ccsocket`. */
 // CCSOCKET_EXPORT int ccsocket_recv(ccsocket_t s, char *buf, size_t bsize);
@@ -180,7 +184,7 @@ CCSOCKET_EXPORT int ccsocket_get_family(ccsocket_t s);
 /* Check the ip protocol version from `addr` stirng.
  * return once of `CC_INET4`, `CC_INET6`, `CC_DOMAIN_INVALID`.
  */
-CCSOCKET_EXPORT ccsocket_domain_t ccsocket_get_version(const char *addr);
+CCSOCKET_EXPORT ccsocket_family_t ccsocket_get_version(const char *addr);
 
 /**
  * enable accept defer in listen tcp socket, becare unless you know it's behavior.
@@ -210,6 +214,20 @@ CCSOCKET_EXPORT bool ccsocket_set_nonblock(ccsocket_t s, bool on);
 
 /* Used to enable/disable whether "sockets will be automatically inherited by sub-processes". */
 CCSOCKET_EXPORT bool ccsocket_set_cloexec(ccsocket_t s, bool on);
+
+/* addrinfo */
+typedef struct ccaddrinfo_t
+{
+    ccsocket_family_t      af;
+    char          address[65];
+    struct ccaddrinfo_t *next;
+} ccaddrinfo_t;
+
+/* getaddrinfo for domain */
+CCSOCKET_EXPORT bool ccsocket_getaddrinfo(const char *domain, ccaddrinfo_t **addrlist);
+
+/* free addrlist */
+CCSOCKET_EXPORT void ccsocket_freeaddrinfo(ccaddrinfo_t *addrlist);
 
 #ifdef __cplusplus
 }
