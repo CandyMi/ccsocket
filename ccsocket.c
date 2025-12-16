@@ -940,7 +940,7 @@ bool ccsocket_getaddrinfo(const char *domain, ccaddrinfo_t **addrlist)
   memset(&hints, 0x0, sizeof(hints));
 
   /* init fields. */
-  hints.ai_flags = AI_ALL;
+  hints.ai_flags = AI_PASSIVE;
 
   /* init family */
   hints.ai_family = AF_UNSPEC;
