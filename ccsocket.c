@@ -2,7 +2,7 @@
   #define _GNU_SOURCE
 #endif
 
-/* 兼容C89/C90 */
+/* for supported C89/C90 */
 #if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199409L)
   #define CC_INLINE static inline
 #else
@@ -54,7 +54,7 @@
   ) {
       if (fdwReason == DLL_PROCESS_ATTACH) {
           //printf("init.\n");
-          WSADATA wsaData; // 用于初始化套接字
+          WSADATA wsaData; // for init winsock
           if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
               WSACleanup();
               exit(1);
@@ -75,6 +75,7 @@
   #include <fcntl.h>
   #include <unistd.h>
   #include <sys/un.h>
+  #include <netdb.h>
   #include <arpa/inet.h>
   #include <netinet/in.h>
   #include <netinet/tcp.h>
@@ -189,7 +190,7 @@ int _ccsocket_get_family(ccsocket_t s, struct sockaddr_storage* sa)
 {
   socklen_t addrlen = sizeof(*sa); memset(sa, 0x0, sizeof(*sa));
 #if _WIN32
-  WSAPROTOCOL_INFOA info; int len = sizeof(info); // WinSock使用getsockname会失败. :<
+  WSAPROTOCOL_INFOA info; int len = sizeof(info); // getsockname will failed when used in winsock. :<
   int r = getsockopt((SOCKET)s, SOL_SOCKET, SO_PROTOCOL_INFO, (char*)&info, &len);
   sa->ss_family = info.iAddressFamily;
 #else
@@ -204,9 +205,7 @@ int ccsocket_wrap_ip_and_port(ccsocket_t s, struct sockaddr_storage* sa, const c
   int r = _ccsocket_get_family(s, sa);
   if (r)
     return r;
-  // 根据协议转换IP与端口
-  //struct sockaddr_in*  in;
-  //struct sockaddr_in6* in6;
+
   switch ((int)sa->ss_family)
   {
 #if defined(AF_UNIX)
@@ -220,7 +219,7 @@ int ccsocket_wrap_ip_and_port(ccsocket_t s, struct sockaddr_storage* sa, const c
     case AF_INET:
     case AF_INET6:
     {
-#if _WIN32 // 为了兼容MingW的环境, 同时可以在低版本的编译器可用.
+#if _WIN32 // for mingw and msvc
       int len = ccsizeof(sa);
       if (WSAStringToAddress((char*)addr, sa->ss_family, NULL, (struct sockaddr*)sa, &len)) return -1;
 #else
@@ -244,8 +243,8 @@ int ccsocket_close(ccsocket_t s)
   return closesocket(s);
 }
 
-/* 创建 ccsocket 顺便设置标记 */
-ccsocket_t ccsocket2(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsocket_flags_t flags)
+/* create ccsocket with flags */
+ccsocket_t ccsocket2(ccsocket_family_t domain, ccsocket_protocol_t proto, ccsocket_flags_t flags)
 {
   int domain_r = AF_UNSPEC;
   switch (domain)
@@ -261,7 +260,7 @@ ccsocket_t ccsocket2(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsock
     case CC_INET6:
       domain_r = AF_INET6;
       break;
-    case CC_DOMAIN_INVALID:
+    case CC_FAMILY_INVALID:
     default:
       return SOCKET_ERROR;
   }
@@ -289,19 +288,19 @@ ccsocket_t ccsocket2(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsock
 
   bool isset = false;
   if (flags & CC_NONBLOCK) {
-#if defined(SOCK_NONBLOCK) // 避免子进程继承
+#if defined(SOCK_NONBLOCK) // for nonblocking
     isset = true;
     proto_r |= SOCK_NONBLOCK;
 #endif
   }
   if (flags & CC_CLOEXEC) {
-#if defined(SOCK_CLOEXEC) // 直接
+#if defined(SOCK_CLOEXEC) // for closexec
     isset = true;
     proto_r |= SOCK_CLOEXEC;
 #endif
   }
-  // 创建
-#if _WIN32 // 创建支持重叠I/O
+
+#if _WIN32 // for support overlap io in winsock.
   ccsocket_t s = WSASocket(domain_r, proto_r, flag_r, NULL, 0, WSA_FLAG_OVERLAPPED);
 #else
   ccsocket_t s = socket(domain_r, proto_r, flag_r);
@@ -309,8 +308,7 @@ ccsocket_t ccsocket2(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsock
   if (s == INVALID_SOCKET)
     return INVALID_SOCKET;
   /**
-  * 如果之前没有设置, 则再这里完成.
-  * 但是在多线程环境下这不能绝对保证.
+  * not safe on `cloexec`
   */
   if (!isset && flags) {
     int r = ccsocket_set_flags(s, flags);
@@ -322,8 +320,8 @@ ccsocket_t ccsocket2(ccsocket_domain_t domain, ccsocket_protocol_t proto, ccsock
   return s;
 }
 
-/* 准入 ccsocket */
-ccsocket_t ccsocket_accept2(ccsocket_t s, char *ip, uint16_t *port, ccsocket_flags_t flags)
+/* accept ccsocket */
+ccsocket_t ccsocket_accept2(ccsocket_t s, OPTIONAL char *ip, OPTIONAL uint16_t *port, ccsocket_flags_t flags)
 {
   ccsocket_init_errno(); socklen_t sasize = 0;
   struct sockaddr_storage* sap = NULL; socklen_t* sasizep = NULL;
@@ -382,11 +380,11 @@ bool ccsocket_listen_internal(ccsocket_t s, const char *ip, uint16_t port)
   return true;
 }
 
-/* 监听 ccsocket */
+/* listen ccsocket */
 bool ccsocket_listen(ccsocket_t s, const char *ip, uint16_t port)
 {
   /**
-   * 确保端口/地址被独占, 解决部分平台安全问题.
+   * ensure that the socket is an exclusive listener.
    */
 #if defined(SO_EXCLUSIVEADDRUSE)
   int Enable = 1; ccsocket_init_errno();
@@ -406,7 +404,7 @@ bool ccsocket_listen(ccsocket_t s, const char *ip, uint16_t port)
   return ccsocket_listen_internal(s, ip, port);
 }
 
-/* 监听 ccsocket 实现负载均衡(仅部分平台) */
+/* listen ccsocket for loadbalance (part) */
 bool ccsocket_listen1(ccsocket_t s, const char *ip, uint16_t port)
 {
 #if defined(SO_REUSEPORT_LB)
@@ -429,7 +427,7 @@ bool ccsocket_listen1(ccsocket_t s, const char *ip, uint16_t port)
   return ccsocket_listen_internal(s, ip, port);
 }
 
-/* 创建双向连接的SOCK_STREAM管道 */
+/* like socketpair */
 bool ccsocketpair1(ccsocket_t sv[2], ccsocket_flags_t flags)
 {
   ccsocket_init_errno();
@@ -442,35 +440,35 @@ bool ccsocketpair1(ccsocket_t sv[2], ccsocket_flags_t flags)
   ccsocket_t srv = ccsocket1(CC_INET4, CC_TCP, CC_NOFLAG);
   if (srv == SOCKET_ERROR)
     return false;
-  /* 开启监听(`port`为0表示随机端口) */
+  /* listen random port */
   if (!ccsocket_listen_internal(srv, "127.0.0.1", 0)) {
-    ccsocket_close(srv); /* 创建失败 */
+    ccsocket_close(srv); /* failed */
     return false;
   }
   char addr[MAX_ADDRLEN]; uint16_t port;
-  /* 获得监听服务器地址 */
+  /* get listen ip and port */
   if (!ccsocket_get_sockname(srv, addr, &port)) {
-    ccsocket_close(srv); /* 创建失败 */
+    ccsocket_close(srv); /* failed */
     return false;
   }
-  /* 创建 socket 1 */
+  /* create socket 1 */
   ccsocket_t c = ccsocket1(CC_INET4, CC_TCP, CC_NOFLAG);
   if (c == SOCKET_ERROR || !ccsocket_connect(c, addr, port)) {
     if (c != SOCKET_ERROR)
-      ccsocket_close(c);   /* 创建失败 */
-    ccsocket_close(srv); /* 创建失败 */
+      ccsocket_close(c); /* failed */
+    ccsocket_close(srv); /* failed */
     return false;
   }
-  /* 创建 socket 2 */
+  /* create socket 2 */
   ccsocket_t s = ccsocket_accept(srv, flags);
   if (s == SOCKET_ERROR) {
-    ccsocket_close(srv); /* 创建失败 */
-    ccsocket_close(c);   /* 创建失败 */
+    ccsocket_close(srv); /* failed */
+    ccsocket_close(c);   /* failed */
     return false;
   }
   ccsocket_set_flags(c, flags);
   sv[0] = c, sv[1] = s;
-  /* 别忘记销毁监听套接字哦 */
+  /* destroy */
   ccsocket_close(srv);
 #else
   int r = socketpair(AF_UNIX, SOCK_STREAM, 0, sv);
@@ -484,7 +482,7 @@ bool ccsocketpair1(ccsocket_t sv[2], ccsocket_flags_t flags)
   return true;
 }
 
-/* 连接 ccsocket */
+/* connect ccsocket */
 bool ccsocket_connect(ccsocket_t s, const char *addr, uint16_t port)
 {
   struct sockaddr_storage sa;
@@ -523,9 +521,7 @@ ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s)
     return CC_CONNERROR;
   }
   /**
-   * 如果还没发生错误, 就尝试获取对端地址
-   * 获取地址失败可能是因为一些平台未连接成功时不会设置的.
-   * 因此这里需要做一些额外的判断来处理这种特殊的情况.
+   * no sure.
    */
   char addr[MAX_ADDRLEN]; uint16_t port;
   if (!ccsocket_get_peername(s, addr, &port)) {
@@ -534,10 +530,7 @@ ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s)
       return CC_CONNECTING;
   }
   /**
-   * 即使能获取到对端地址, 也可能尚未完成连接.
-   * 因此需要再次调用 connect 来判断连接状态.
-   * EINPROGRESS 表示连接正在进行中.
-   * EALREADY 表示还在继续尝试链接.
+   * test state for connect again
    */
   if (!ccsocket_connect(s, addr, port)) {
     // printf("ccsocket_connect errno = %d\n", errno);
@@ -598,7 +591,7 @@ ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s)
 //   return (int)recv((SOCKET)s, (char *)buf, (int)bsize, flags);
 // }
 
-ccsocket_stcode_t ccsocket_send(ccsocket_t s, const void *buf, size_t bsize, int *wsize)
+ccsocket_stcode_t ccsocket_send(ccsocket_t s, const void *buf, size_t bsize, OPTIONAL int *wsize)
 {
   int flags = 0;
 #if defined(MSG_NOSIGNAL)
@@ -632,13 +625,13 @@ ccsocket_stcode_t ccsocket_recv_internal(ccsocket_t s, char *buf, size_t bsize, 
 }
 
 /* recv for copy */
-ccsocket_stcode_t ccsocket_recv(ccsocket_t s, char *buf, size_t bsize, int *rsize)
+ccsocket_stcode_t ccsocket_recv(ccsocket_t s, char *buf, size_t bsize, OPTIONAL int *rsize)
 {
   return ccsocket_recv_internal(s, buf, bsize, rsize, 0);
 }
 
 /* recv for peek */
-ccsocket_stcode_t ccsocket_peek(ccsocket_t s, char* buf, size_t bsize, int *rsize)
+ccsocket_stcode_t ccsocket_peek(ccsocket_t s, char* buf, size_t bsize, OPTIONAL int *rsize)
 {
 #ifdef MSG_PEEK
   return ccsocket_recv_internal(s, buf, bsize, rsize, MSG_PEEK);
@@ -767,7 +760,7 @@ int ccsocket_get_family(ccsocket_t s)
   struct sockaddr_storage sa;
   int r = _ccsocket_get_family(s, &sa);
   if (r)
-    return CC_DOMAIN_INVALID;
+    return CC_FAMILY_INVALID;
 
   switch (sa.ss_family)
   {
@@ -780,10 +773,10 @@ int ccsocket_get_family(ccsocket_t s)
     case AF_INET6:
       return CC_INET6;
   }
-  return CC_DOMAIN_INVALID;
+  return CC_FAMILY_INVALID;
 }
 
-ccsocket_domain_t ccsocket_get_version(const char *addr)
+ccsocket_family_t ccsocket_get_version(const char *addr)
 {
   struct sockaddr_in sa4; memset(&sa4, 0x0, sizeof(sa4));
 #if _WIN32
@@ -802,7 +795,7 @@ ccsocket_domain_t ccsocket_get_version(const char *addr)
 #endif
     return CC_INET6;
   ccsocket_set_errno(EINVAL);
-  return CC_DOMAIN_INVALID;
+  return CC_FAMILY_INVALID;
 }
 
 bool ccsocket_set_nonblock(ccsocket_t s, bool on)
@@ -858,7 +851,7 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
     return ccsocket_is_errno(EWOULDBLOCK) ? CC_SENDWAIT : CC_SENDERROR;
   }
   lseek(fd, offset + wsize, SEEK_SET);
-  if (offset + wsize == eof)
+  if ((offset + wsize) == eof)
     return CC_SENDALL;
   return ccsocket_sendfile(s, fd);
 #elif defined(__linux__) || defined(__sun__)
@@ -875,9 +868,9 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
       return CC_SENDNEXT;
     return ccsocket_is_errno(EWOULDBLOCK) ? CC_SENDWAIT : CC_SENDERROR;
   }
-  lseek(fd, offset + wsize, SEEK_SET);
-  if (offset + wsize == eof)
+  if (offset == eof)
     return CC_SENDALL;
+  lseek(fd, offset, SEEK_SET);
   return ccsocket_sendfile(s, fd);
 #elif _AIX
   off_t offset = lseek(fd, 0, SEEK_CUR);
@@ -938,4 +931,74 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
   }
   return CC_SENDALL;
 #endif
+}
+
+bool ccsocket_getaddrinfo(const char *domain, ccaddrinfo_t **addrlist)
+{
+  ccsocket_init_errno();
+  struct addrinfo hints;
+  memset(&hints, 0x0, sizeof(hints));
+
+  /* init fields. */
+  hints.ai_flags = AI_ALL;
+
+  /* init family */
+  hints.ai_family = AF_UNSPEC;
+
+  struct addrinfo *addrs = NULL;
+  if (getaddrinfo(domain, NULL, &hints, &addrs) || !addrs) {
+    return false;
+  }
+
+  /* init results */
+  ccaddrinfo_t *cur = (ccaddrinfo_t*)malloc(sizeof(ccaddrinfo_t));
+  if (!cur)
+      return false;
+  memset(cur, 0x0, sizeof(ccaddrinfo_t));
+
+  *addrlist = cur;
+  struct addrinfo *link = addrs;
+  do {
+    if (link->ai_family == AF_INET) {
+      cur->af = CC_INET4;
+#if _WIN32
+      DWORD len = INET6_ADDRSTRLEN;
+      WSAAddressToString(link->ai_addr, ccsizeof((const struct sockaddr_storage*)link->ai_addr), NULL, cur->address, &len);
+#else
+      inet_ntop(AF_INET, &((struct sockaddr_in*)link->ai_addr)->sin_addr, cur->address, INET6_ADDRSTRLEN);
+#endif
+    } else if (link->ai_family == AF_INET6) {
+      cur->af = CC_INET6;
+#if _WIN32
+      DWORD len = INET6_ADDRSTRLEN;
+      WSAAddressToString(link->ai_addr, ccsizeof((const struct sockaddr_storage*)link->ai_addr), NULL, cur->address, &len);
+#else
+      inet_ntop(AF_INET6, &((struct sockaddr_in6*)link->ai_addr)->sin6_addr, cur->address, INET6_ADDRSTRLEN);
+#endif
+    } else {
+      cur->af = CC_FAMILY_INVALID;
+      cur->next = NULL;
+      break;
+    }
+
+    if (link->ai_next) {
+      cur->next = (ccaddrinfo_t*)malloc(sizeof(ccaddrinfo_t));
+      if (!cur->next)
+          break;
+      cur = cur->next;
+      memset(cur, 0x0, sizeof(ccaddrinfo_t));
+    }
+  } while (link = link->ai_next);
+  freeaddrinfo(addrs);
+  return true;
+}
+
+void ccsocket_freeaddrinfo(ccaddrinfo_t *addrlist)
+{
+  while (addrlist)
+  {
+    ccaddrinfo_t *addr = addrlist->next;
+    free(addrlist);
+    addrlist = addr;
+  }
 }
