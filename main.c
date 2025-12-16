@@ -144,7 +144,7 @@ CCSOCKET_TEST_FUNCTION(cctest_check_ip_version, {
   assert(ccsocket_get_version("::1") == CC_INET6);
   assert(ccsocket_get_version("::ffff:127.0.0.1") == CC_INET6);
   assert(ccsocket_get_version("::ffff:1.1.1.1") == CC_INET6);
-  assert(ccsocket_get_version("www.163.com") == CC_DOMAIN_INVALID);
+  assert(ccsocket_get_version("www.163.com") == CC_FAMILY_INVALID);
 })
 
 CCSOCKET_TEST_FUNCTION(cctest_check_setsockopt, {
@@ -276,6 +276,18 @@ CCSOCKET_TEST_FUNCTION(cctest_check_sendfile, {
   assert(!ccsocket_close(c4));
 })
 
+CCSOCKET_TEST_FUNCTION(cctest_check_getaddrinfo, {
+  ccaddrinfo_t *addrlist = NULL;
+  bool ok = ccsocket_getaddrinfo("www.163.com", &addrlist);
+  assert(ok); int i = 1;
+  ccaddrinfo_t *addr = addrlist;
+  while (addr) {
+    printf("%02d. family = %d, addr = '%s'\n", i++, addr->af, addr->address);
+    addr = addr->next;
+  }
+  ccsocket_freeaddrinfo(addrlist);
+})
+
 // #include "cctls.h"
 // CCSOCKET_TEST_FUNCTION(cctest_check_tls, {
 //   ccsocket_t c4 = ccsocket1(CC_INET4, CC_TCP, CC_NONBLOCK | CC_CLOEXEC);
@@ -346,6 +358,7 @@ int main(int argc, char const *argv[])
   cctest_socketnew();
   cctest_listen_and_connect();
   cctest_check_timeout();
+  cctest_check_getaddrinfo();
   cctest_check_ip_version();
   cctest_check_setsockopt();
   cctest_check_sendfile();
