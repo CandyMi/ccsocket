@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <signal.h>
 #include <assert.h>
 #if _WIN32
   #include <io.h>
@@ -17,13 +18,30 @@
   #include <unistd.h>
   #define cc_usleep(timeout) usleep((timeout) * 1000)
 #endif
-static const char *http_server_ip = "157.255.130.195";
+static const char *http_server_domain = "cfadmin.cn";
 static int i = 0;
 #define CCSOCKET_TEST_FUNCTION(fname, code)                              \
 static void fname() {                                                    \
     code;                                                                \
     printf("%02d. test case : '%s' successed.\n",++i, __FUNCTION__);     \
 }
+
+static void ccsigaction (int sig)
+{
+  printf("ccsigaction: %d\n", sig);
+  exit(0);
+}
+
+static void cc_wait() {
+  while (true)
+  { cc_usleep(1000); }  
+}
+
+CCSOCKET_TEST_FUNCTION(cctest_signal, {
+  signal(SIGINT,    ccsigaction);
+  signal(SIGTERM,   ccsigaction);
+  signal(SIGBREAK,  ccsigaction);
+})
 
 /* test socketpair in all platform. */
 CCSOCKET_TEST_FUNCTION(cctest_sockpair, {
@@ -106,7 +124,12 @@ CCSOCKET_TEST_FUNCTION(cctest_listen_and_connect, {
 CCSOCKET_TEST_FUNCTION(cctest_check_timeout, {
   ccsocket_t c4 = ccsocket(CC_INET4, CC_TCP);
   assert(c4 > 0);
-  ccsocket_connect(c4, http_server_ip, 80); // cfadmin.cn
+
+  ccaddrinfo_t *addrlist = NULL;
+  bool r = ccsocket_getaddrinfo(http_server_domain, &addrlist);
+  assert(r && addrlist);
+
+  ccsocket_connect(c4, addrlist->address, 80); // cfadmin.cn
   assert(ccsocket_is_connected(c4) == CC_CONNECTED);
 
   /* 1. not timeout. */
@@ -235,7 +258,12 @@ const char *path[] = {
 CCSOCKET_TEST_FUNCTION(cctest_check_sendfile, {
   ccsocket_t c4 = ccsocket1(CC_INET4, CC_TCP, CC_NONBLOCK | CC_CLOEXEC);
   assert(c4 > 0);
-  ccsocket_connect(c4, http_server_ip, 80); // cfadmin.cn
+
+  ccaddrinfo_t* addrlist = NULL;
+  bool r = ccsocket_getaddrinfo(http_server_domain, &addrlist);
+  assert(r&& addrlist);
+
+  ccsocket_connect(c4, addrlist->address, 80); // cfadmin.cn
   /* nonblock connect like event-driven. */
   do {
     ccsocket_conn_state_t state = ccsocket_is_connected(c4);
@@ -288,72 +316,79 @@ CCSOCKET_TEST_FUNCTION(cctest_check_getaddrinfo, {
   ccsocket_freeaddrinfo(addrlist);
 })
 
-// #include "cctls.h"
-// CCSOCKET_TEST_FUNCTION(cctest_check_tls, {
-//   ccsocket_t c4 = ccsocket1(CC_INET4, CC_TCP, CC_NONBLOCK | CC_CLOEXEC);
-//   assert(c4 > 0);
-//   ccsocket_connect(c4, http_server_ip, 443); // cfadmin.cn
-//   /* nonblock connect like event-driven. */
-//   do {
-//     ccsocket_conn_state_t state = ccsocket_is_connected(c4);
-//     //printf("ccsocket_conn_state_t state = %d\n", state);
-//     if (state == CC_CONNECTED)
-//       break;
-//     assert(state != CC_CONNERROR);
-//     cc_usleep(10);
-//   } while (1);
+//  #include "cctls.h"
+//  //CCSOCKET_TEST_FUNCTION(cctest_check_tls, {
+// void cctest_check_tls() {
+//    ccsocket_t c4 = ccsocket1(CC_INET4, CC_TCP, CC_NONBLOCK | CC_CLOEXEC);
+//    assert(c4 > 0);
 
-//   // init
-//   cctls_init(realloc);
+//    ccaddrinfo_t* addrlist = NULL;
+//    bool r = ccsocket_getaddrinfo(http_server_domain, &addrlist);
+//    assert(r && addrlist);
 
-//   tls_t *ctx = cctls_create1(CCTLS_CLIENT_MODE, c4);
-//   assert(ctx);
-//   // cctls_set_version(ctx, CCTLS_VERSION_1_1, CCTLS_VERSION_1_1);
-//   // cctls_set_version(ctx, CCTLS_VERSION_1_2, CCTLS_VERSION_1_2);
-//   cctls_set_version(ctx, CCTLS_VERSION_1_2, CCTLS_VERSION_1_3);
-//   cctls_set_servername(ctx, "cfadmin.cn");
+//    ccsocket_connect(c4, addrlist->address, 443); // cfadmin.cn
+//    /* nonblock connect like event-driven. */
+//    do {
+//      ccsocket_conn_state_t state = ccsocket_is_connected(c4);
+//      //printf("ccsocket_conn_state_t state = %d\n", state);
+//      if (state == CC_CONNECTED)
+//        break;
+//      assert(state != CC_CONNERROR);
+//      cc_usleep(10);
+//    } while (1);
 
-//   const char *protocols[5]; int i = 0;
-//   protocols[i++] = "http/1.1";
-//   protocols[i++] = "h2";
-//   protocols[i++] = "http/1.1";
-//   protocols[i++] = "h2";
-//   protocols[i++] = NULL;
-//   cctls_set_alpn(ctx, protocols);
+//    // init
+//    cctls_init(realloc);
 
-//   do {
-//     ccsocket_stcode_t state = cctls_do_handshake(ctx, NULL);
-//     if (state == CC_CONNECTED)
-//       break;
-//     assert(state != CC_CONNERROR);
-//     cc_usleep(10);
-//   } while (1);
+//    tls_t *ctx = cctls_create1(CCTLS_CLIENT_MODE, c4);
+//    assert(ctx);
+//    // cctls_set_version(ctx, CCTLS_VERSION_1_1, CCTLS_VERSION_1_1);
+//    // cctls_set_version(ctx, CCTLS_VERSION_1_2, CCTLS_VERSION_1_2);
+//    cctls_set_version(ctx, CCTLS_VERSION_1_2, CCTLS_VERSION_1_3);
+//    cctls_set_servername(ctx, "cfadmin.cn");
 
-//   int wsize; int rsize;
-//   const char *req = "GET / HTTP/1.1\r\nHost: cfadmin.cn\r\n\r\n";
-//   size_t wlen = strlen(req);
-//   // printf("%zu\n", wlen);
-//   ccsocket_stcode_t state = cctls_send(ctx, req, wlen, &wsize);
-//   // printf("%zu, %d, %d\n", wlen, wsize, state);
-//   assert(state == CC_OPCODE_OK && wlen == wsize);
+//    const char *protocols[5]; int i = 0;
+//    protocols[i++] = "http/1.1";
+//    protocols[i++] = "h2";
+//    protocols[i++] = "http/1.1";
+//    protocols[i++] = "h2";
+//    protocols[i++] = NULL;
+//    cctls_set_alpn(ctx, protocols);
 
-//   size_t rlen = 1024;
-//   char buffer[1024]; memset(buffer, 0x0, rlen);
-//   do {
-//     ccsocket_stcode_t state = cctls_recv(ctx, buffer, rlen, &rsize);
-//     if (state == CC_OPCODE_OK)
-//       break;
-//     assert(state != CC_OPCODE_ERROR);
-//     cc_usleep(10);
-//   } while(1);
-//   // printf("cctls -> \n'%s'\n", buffer);
+//    do {
+//      ccsocket_stcode_t state = cctls_do_handshake(ctx, NULL);
+//      if (state == CC_CONNECTED)
+//        break;
+//      assert(state != CC_CONNERROR);
+//      cc_usleep(10);
+//    } while (1);
 
-//   cctls_destroy(ctx);
-//   assert(!ccsocket_close(c4));
-// })
+//    int wsize; int rsize;
+//    const char *req = "GET / HTTP/1.1\r\nHost: cfadmin.cn\r\n\r\n";
+//    size_t wlen = strlen(req);
+//    // printf("%zu\n", wlen);
+//    ccsocket_stcode_t state = cctls_send(ctx, req, wlen, &wsize);
+//    // printf("%zu, %d, %d\n", wlen, wsize, state);
+//    assert(state == CC_OPCODE_OK && wlen == wsize);
+
+//    size_t rlen = 1024;
+//    char buffer[1024]; memset(buffer, 0x0, rlen);
+//    do {
+//      ccsocket_stcode_t state = cctls_recv(ctx, buffer, rlen, &rsize);
+//      if (state == CC_OPCODE_OK)
+//        break;
+//      assert(state != CC_OPCODE_ERROR);
+//      cc_usleep(10);
+//    } while(1);
+//    // printf("cctls -> \n'%s'\n", buffer);
+
+//    cctls_destroy(ctx);
+//    assert(!ccsocket_close(c4));
+//  }
 
 int main(int argc, char const *argv[])
 {
+  cctest_signal();
   cctest_sockpair();
   cctest_socketnew();
   cctest_listen_and_connect();
@@ -363,4 +398,6 @@ int main(int argc, char const *argv[])
   cctest_check_setsockopt();
   cctest_check_sendfile();
   // cctest_check_tls();
+
+  cc_wait();
 }
