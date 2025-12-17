@@ -897,11 +897,12 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
   #if _WIN64
     #define read  _read
     #define lseek _lseeki64
+    typedef int64_t off_t;
   #else
     #define read  _read
     #define lseek _lseek
+    typedef int32_t off_t;
   #endif
-  typedef int64_t off_t;
 #endif
 #define CC_SENDFILE_PER_LEN 1024
   int wsize;
