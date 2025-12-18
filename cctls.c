@@ -11,6 +11,7 @@
   #define ccsocket_init_errno() do {errno = 0; WSASetLastError(0);}while(0)
   #define ccsocket_is_errno(err) (WSA##err == WSAGetLastError())
   #define ccsocket_set_errno(err) do{errno = err; WSASetLastError(WSA##err);}while(0)
+  #pragma comment(lib, "Crypt32.lib")
 #else
 #ifndef EWOULDBLOCK
   #define EWOULDBLOCK EAGAIN
@@ -85,7 +86,7 @@ tls_t* cctls_create1(cctls_mode_t mode, ccsocket_t s)
     return NULL;
   }
   SSL_set_SSL_CTX(ssl, ctx);
-  if (s > INVALID_SOCKET)
+  if (s > (ccsocket_t)INVALID_SOCKET)
     cctls_set_fd(ssl, s);
   switch (mode)
   {
@@ -114,7 +115,7 @@ void cctls_destroy(tls_t *tls)
 
 void cctls_set_fd(tls_t *tls, ccsocket_t s)
 {
-  SSL_set_fd(tls, s);
+  SSL_set_fd(tls, (int)s);
 }
 
 ccsocket_t cctls_get_fd(tls_t *tls)
@@ -164,14 +165,24 @@ ccsocket_stcode_t cctls_recv(tls_t *tls, void *buffer, size_t len, int *rsize)
 {
   assert(tls && buffer && rsize);
   ccsocket_init_errno();
-  return _cctls_get_events(tls, SSL_read_ex(tls, buffer, len, (size_t*)rsize));
+  size_t sz = 0;
+  int code = SSL_read_ex(tls, buffer, len, &sz);
+  if (sz > 0 && rsize) {
+      *rsize = (int)sz;
+  }
+  return _cctls_get_events(tls, code);
 }
 
 ccsocket_stcode_t cctls_send(tls_t *tls, const void *buffer, size_t len, int *wsize)
 {
   assert(tls && buffer && wsize);
   ccsocket_init_errno();
-  return _cctls_get_events(tls, SSL_write_ex(tls, buffer, len, (size_t*)wsize));
+  size_t sz = 0;
+  int code = SSL_write_ex(tls, buffer, len, &sz);
+  if (sz > 0 && wsize) {
+      *wsize = (int)sz;
+  }
+  return _cctls_get_events(tls, code);
 }
 
 void cctls_set_version(tls_t *tls, cctls_version_t min_ver, cctls_version_t max_ver)
@@ -201,7 +212,7 @@ void cctls_set_alpn(tls_t *tls, const char *protocols[])
   char buffer[TLS_ALPN_MAX_SIZE]; uint8_t *protocol = (uint8_t*)buffer;
   int i = 0; uint32_t bsize = 0;
   while (protocols[i]) {
-    uint8_t len = strlen(protocols[i]);
+    uint8_t len = strlen(protocols[i]) & 0xff;
     /* copy data into buffer. */
     *protocol++ = len; memcpy(protocol, protocols[i], len);
     bsize += len + 1; protocol += len; i++;
