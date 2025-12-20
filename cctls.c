@@ -21,6 +21,7 @@
   #define ccsocket_set_errno(err) errno = err
 #endif
 
+#include <string.h>
 #include <errno.h>
 #include <assert.h>
 #include <openssl/ssl.h>
@@ -212,9 +213,9 @@ void cctls_set_alpn(tls_t *tls, const char *protocols[])
   char buffer[TLS_ALPN_MAX_SIZE]; uint8_t *protocol = (uint8_t*)buffer;
   int i = 0; uint32_t bsize = 0;
   while (protocols[i]) {
-    uint8_t len = strlen(protocols[i]) & 0xff;
+    size_t len = strlen(protocols[i]);
     /* copy data into buffer. */
-    *protocol++ = len; memcpy(protocol, protocols[i], len);
+    *protocol++ = len & 0xff; memcpy(protocol, protocols[i], len);
     bsize += len + 1; protocol += len; i++;
   }
   /* nothing todo. */
