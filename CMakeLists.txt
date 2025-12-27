@@ -46,7 +46,7 @@ endif()
 #   set(ccsocket_source ${ccsocket_source} ccicmp.c)
 # endif (WITH_ICMP)
 
-option(WITH_OSSL "ccsocket with tls" ON)
+option(WITH_OSSL "ccsocket with tls" OFF)
 if (WITH_OSSL)
   message("-- Compiler with 'OpenSSL'.")
   set(ccsocket_source ${ccsocket_source} cctls.c)
