@@ -162,6 +162,18 @@ ccsocket_stcode_t _cctls_get_events(tls_t *tls, int code)
   return CC_OPCODE_ERROR;
 }
 
+ccsocket_stcode_t cctls_peek(tls_t *tls, void *buffer, size_t len, int *rsize)
+{
+  assert(tls && buffer && rsize);
+  ccsocket_init_errno();
+  size_t sz = 0;
+  int code = SSL_peek_ex(tls, buffer, len, &sz);
+  if (sz > 0 && rsize) {
+      *rsize = (int)sz;
+  }
+  return _cctls_get_events(tls, code);
+}
+
 ccsocket_stcode_t cctls_recv(tls_t *tls, void *buffer, size_t len, int *rsize)
 {
   assert(tls && buffer && rsize);

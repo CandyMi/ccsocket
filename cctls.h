@@ -56,6 +56,9 @@ CCSOCKET_EXPORT ccsocket_stcode_t cctls_do_handshake(tls_t* tls, int *retcode);
 /* get error information from `retcode` */
 CCSOCKET_EXPORT void cctls_get_error(tls_t* tls, int retcode, char err[MAX_ERRORLEN]);
 
+/* peek tls data */
+CCSOCKET_EXPORT ccsocket_stcode_t cctls_peek(tls_t *tls, void *buffer, size_t len, int *rsize);
+
 /* recv tls data */
 CCSOCKET_EXPORT ccsocket_stcode_t cctls_recv(tls_t *tls, void *buffer, size_t len, int *rsize);
 
