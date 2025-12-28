@@ -847,7 +847,7 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
   #endif
   if (r == SOCKET_ERROR) {
     if (ccsocket_is_errno(EINTR))
-      return CC_SENDNEXT;
+      return ccsocket_sendfile(s, fd);
     return ccsocket_is_errno(EWOULDBLOCK) ? CC_SENDWAIT : CC_SENDERROR;
   }
   lseek(fd, offset + wsize, SEEK_SET);
@@ -865,7 +865,7 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
   off_t wsize = sendfile(s, fd, &offset, (size_t)INT64_MAX);
   if (wsize == SOCKET_ERROR) {
     if (ccsocket_is_errno(EINTR))
-      return CC_SENDNEXT;
+      return ccsocket_sendfile(s, fd);
     return ccsocket_is_errno(EWOULDBLOCK) ? CC_SENDWAIT : CC_SENDERROR;
   }
   if (offset == eof)
@@ -884,7 +884,7 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
   int wsize = send_file(s, &params, 0);
   if (wsize == SOCKET_ERROR) {
     if (ccsocket_is_errno(EINTR))
-      return CC_SENDNEXT;
+      return ccsocket_sendfile(s, fd);
     return ccsocket_is_errno(EWOULDBLOCK) ? CC_SENDWAIT : CC_SENDERROR;
   }
   offset = offset + params.bytes_sent;
@@ -924,7 +924,7 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
       //ccsocket_dump("3. fd = %d, errcode = %d, wsacode = %d", fd, errno, WSAGetLastError());
       lseek(fd, offset, SEEK_SET);
       if (ccsocket_is_errno(EINTR))
-        return CC_SENDNEXT;
+        return ccsocket_sendfile(s, fd);
       return ccsocket_is_errno(EWOULDBLOCK) ? CC_SENDWAIT : CC_SENDERROR;
     }
     offset += wsize;

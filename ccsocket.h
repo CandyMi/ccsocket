@@ -95,8 +95,10 @@ typedef enum {
     CC_SENDALL    =  0,  // send completed.
 #define CC_SENDWAIT  CC_SENDWAIT
     CC_SENDWAIT   =  1,  // send buffer was fully.(wait a seconds)
-#define CC_SENDNEXT  CC_SENDNEXT
-    CC_SENDNEXT   =  2,  // try call `ccsocket_sendfile` again.
+#define CC_SENF_WANT_REVENT CC_SENF_WANT_REVENT
+    CC_SENF_WANT_REVENT   =  CC_OPCODE_WANT_REVENT,
+#define CC_SENF_WANT_WEVENT CC_SENF_WANT_WEVENT
+    CC_SENF_WANT_WEVENT   =  CC_OPCODE_WANT_WEVENT,
 } ccsocket_sendf_state_t;
 
 /* close ccsocket */
