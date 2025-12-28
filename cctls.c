@@ -8,6 +8,16 @@
 #endif
 
 #if _WIN32
+  #include <io.h>
+  #if _WIN64
+    #define read  _read
+    #define lseek _lseeki64
+    typedef int64_t off_t;
+  #else
+    #define read  _read
+    #define lseek _lseek
+    typedef int32_t off_t;
+  #endif
   #define ccsocket_init_errno() do {errno = 0; WSASetLastError(0);}while(0)
   #define ccsocket_is_errno(err) (WSA##err == WSAGetLastError())
   #define ccsocket_set_errno(err) do{errno = err; WSASetLastError(WSA##err);}while(0)
@@ -19,6 +29,7 @@
   #define ccsocket_init_errno() errno = 0
   #define ccsocket_is_errno(err) (err == errno)
   #define ccsocket_set_errno(err) errno = err
+  #include <unistd.h>
 #endif
 
 #include <string.h>
@@ -27,14 +38,11 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
-/**
- * 最低版本要求`OpenSSL 1.1.1`, 更低的版本现代化的特性没有! ：）
- */
 #if OPENSSL_VERSION_NUMBER < 0x10101000
-  #error "OSSL Version to old."
+  #error "We wanna openssl version must more than 1.1.1. : )"
 #endif
 
-static int tls_versions[] = {
+static const int tls_versions[] = {
   TLS1_VERSION,
   TLS1_1_VERSION,
   TLS1_2_VERSION,
@@ -198,6 +206,45 @@ ccsocket_stcode_t cctls_send(tls_t *tls, const void *buffer, size_t len, int *ws
   return _cctls_get_events(tls, code);
 }
 
+ccsocket_sendf_state_t cctls_sendfile(tls_t *tls, int fd)
+{
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+  off_t cur = lseek(fd, 0, SEEK_CUR);
+  if (-1 == cur)
+    return CC_SENDERROR;
+  off_t max = lseek(fd, 0, SEEK_END);
+  if (-1 == max)
+    return CC_SENDERROR;
+  if (-1 == lseek(fd, cur, SEEK_SET))
+    return CC_SENDERROR;
+  ssize_t wsize = SSL_sendfile(tls, fd, cur, max - cur, 0);
+  if (wsize == -1)
+    return (ccsocket_sendf_state_t)_cctls_get_events(tls, -1);
+  lseek(fd, cur + wsize, SEEK_SET);
+  if (cur + wsize == max)
+    return CC_SENDALL;
+  return cctls_sendfile(tls, fd);
+#else
+  #define CC_SENDFILE_PER_LEN 1024
+  char buf[CC_SENDFILE_PER_LEN];
+  off_t cur = lseek(fd, 0, SEEK_CUR);
+  if (cur == -1)
+    return CC_SENDERROR;
+  while (1)
+  {
+    ssize_t rsize = pread(fd, buf, CC_SENDFILE_PER_LEN, cur);
+    if (rsize == 0)
+      return CC_SENDALL;
+    size_t wsize;
+    if (!SSL_write_ex(tls, buf, (size_t)rsize, &wsize))
+      return (ccsocket_sendf_state_t)_cctls_get_events(tls, -1);
+    cur += wsize;
+    lseek(fd, cur, SEEK_SET);
+  }
+  #undef CC_SENDFILE_PER_LEN
+#endif
+}
+
 void cctls_set_version(tls_t *tls, cctls_version_t min_ver, cctls_version_t max_ver)
 {
   assert(min_ver >= CCTLS_VERSION_1_0 && min_ver <= CCTLS_VERSION_1_3);
@@ -206,11 +253,6 @@ void cctls_set_version(tls_t *tls, cctls_version_t min_ver, cctls_version_t max_
   SSL_set_min_proto_version(tls, tls_versions[min_ver]);
   SSL_set_max_proto_version(tls, tls_versions[max_ver]);
 }
-
-// ccsocket_sendf_state_t cctls_sendfile(tls_t *tls, int fd)
-// {
-//   return CC_SENDERROR;
-// }
 
 void cctls_set_servername(tls_t *tls, const char *domain)
 {

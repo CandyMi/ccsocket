@@ -65,6 +65,9 @@ CCSOCKET_EXPORT ccsocket_stcode_t cctls_recv(tls_t *tls, void *buffer, size_t le
 /* send tls data */
 CCSOCKET_EXPORT ccsocket_stcode_t cctls_send(tls_t *tls, const void *buffer, size_t len, int *wsize);
 
+/* send tls file data */
+CCSOCKET_EXPORT ccsocket_sendf_state_t cctls_sendfile(tls_t *tls, int fd);
+
 /* set alpn for tls client. */
 CCSOCKET_EXPORT void cctls_set_alpn(tls_t *tls, const char *protocols[]);
 
