@@ -3,7 +3,7 @@
 
 #include "ccsocket.h"
 
-typedef void tls_t; // 抽象套接字
+typedef void tls_t;
 
 typedef enum {
 #define CCTLS_CLIENT_MODE CCTLS_CLIENT_MODE
@@ -44,17 +44,17 @@ CCSOCKET_EXPORT void cctls_destroy(tls_t *ctx);
 /* set cctls version. */
 CCSOCKET_EXPORT void cctls_set_version(tls_t *tls, cctls_version_t min_ver, cctls_version_t max_ver);
 
-/* set socket to tls context */
-CCSOCKET_EXPORT ccsocket_t cctls_get_fd(tls_t* tls);
+/* get socket to tls context */
+CCSOCKET_EXPORT ccsocket_t cctls_get_fd(tls_t *tls);
 
-/* get socket from tls context */
-CCSOCKET_EXPORT void cctls_set_fd(tls_t* tls, ccsocket_t s);
+/* set socket from tls context */
+CCSOCKET_EXPORT void cctls_set_fd(tls_t *tls, ccsocket_t s);
 
 /* Perform a tls handshake immediately after the socket connection is established. */
-CCSOCKET_EXPORT ccsocket_stcode_t cctls_do_handshake(tls_t* tls, int *retcode);
+CCSOCKET_EXPORT ccsocket_stcode_t cctls_do_handshake(tls_t *tls, int *retcode);
 
 /* get error information from `retcode` */
-CCSOCKET_EXPORT void cctls_get_error(tls_t* tls, int retcode, char err[MAX_ERRORLEN]);
+CCSOCKET_EXPORT void cctls_get_error(tls_t *tls, int retcode, char err[MAX_ERRORLEN]);
 
 /* peek tls data */
 CCSOCKET_EXPORT ccsocket_stcode_t cctls_peek(tls_t *tls, void *buffer, size_t len, int *rsize);
@@ -72,7 +72,7 @@ CCSOCKET_EXPORT ccsocket_sendf_state_t cctls_sendfile(tls_t *tls, int fd);
 CCSOCKET_EXPORT void cctls_set_alpn(tls_t *tls, const char *protocols[]);
 
 /* set peer server name for tls client. */
-CCSOCKET_EXPORT void cctls_set_servername(tls_t* tls, const char *domain);
+CCSOCKET_EXPORT void cctls_set_servername(tls_t *tls, const char *domain);
 
 #ifdef __cplusplus
 }
