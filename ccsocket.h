@@ -6,16 +6,31 @@
 #include <stdbool.h>
 
 #if _WIN32
-    #define CCSOCKET_EXPORT __declspec(dllexport)
-    typedef intptr_t ccsocket_t;
+  #define CCSOCKET_EXPORT __declspec(dllexport)
+  #include <winsock2.h>
+  #define ccsocket_get_iov_len(iov, idx) (iov)[idx].len
+  #define ccsocket_set_iov_len(iov, idx, len) (iov)[idx].len = (ULONG)(len)
+  #define ccsocket_get_iov_buf(iov, idx) (iov)[idx].buf
+  #define ccsocket_set_iov_buf(iov, idx, buf) (iov)[idx].buf = (CHAR*)(buf)
+  typedef WSABUF ccsocket_iovec_t;
+  typedef intptr_t ccsocket_t;
 #else
-    #define CCSOCKET_EXPORT __attribute__((visibility("default")))
-    typedef int ccsocket_t;
-    #define INVALID_SOCKET (~0)
+  #define CCSOCKET_EXPORT __attribute__((visibility("default")))
+  #define INVALID_SOCKET (~0)
+  #include <sys/uio.h>
+  #define ccsocket_get_iov_len(iov, idx) (iov)[idx].iov_len
+  #define ccsocket_set_iov_len(iov, idx, len) (iov)[idx].iov_len = (size_t)(len)
+  #define ccsocket_get_iov_buf(iov, idx) (iov)[idx].iov_base
+  #define ccsocket_set_iov_buf(iov, idx, buf) (iov)[idx].iov_base = (void*)(buf)
+  typedef struct iovec ccsocket_iovec_t;
+  typedef int ccsocket_t;
 #endif
 
+/* init ccsocket_iovec_t */
+#define ccsocket_init_iov(iov, count) memset(iov, 0, sizeof(ccsocket_iovec_t) * (count))
+
 #ifndef OPTIONAL
-  #define OPTIONAL // When modifying a method parameter, it means that this parameter is optional and can be `NULL`.
+  #define OPTIONAL /* When modifying a method parameter, it means that this parameter is optional and can be `NULL`. */
 #endif
 
 #ifdef __cplusplus
@@ -154,6 +169,9 @@ CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_peek(ccsocket_t s, char* buf, size_t 
 
 /* send buffer to peer `ccsocket` */
 CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_send(ccsocket_t s, const void *buf, size_t bsize, OPTIONAL int *wsize);
+
+/* send iovec buffer to peer `ccsocket` */
+CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_sendv(ccsocket_t s, ccsocket_iovec_t *iov, int iovcnt, int *wsize);
 
 // /* Read data sent by the peer from the `ccsocket`. */
 // CCSOCKET_EXPORT int ccsocket_recv(ccsocket_t s, char *buf, size_t bsize);
