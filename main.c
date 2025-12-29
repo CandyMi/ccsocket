@@ -134,11 +134,22 @@ CCSOCKET_TEST_FUNCTION(cctest_check_timeout, {
   ccsocket_connect(c4, addrlist->address, 80); // cfadmin.cn
   assert(ccsocket_is_connected(c4) == CC_CONNECTED);
 
-  /* 1. not timeout. */
+  ///* 1. not timeout. */
   const char *req = "GET / HTTP/1.1\r\nHost: cfadmin.cn\r\n\r\n";
-  // printf("len = %d\n", ccsocket_send(c4, req, strlen(req)));
+  //// printf("len = %d\n", ccsocket_send(c4, req, strlen(req)));
+  //int wlen;
+  //ccsocket_stcode_t state1 = ccsocket_send(c4, req, strlen(req), &wlen);
+  //assert(state1 == CC_OPCODE_OK && wlen == strlen(req));
+
+  ccsocket_iovec_t vec[3]; ccsocket_init_iov(vec, 3);
+  const char* req1 = "GET / HTTP/1.1\r\n";
+  ccsocket_set_iov_buf(vec, 0, req1);
+  ccsocket_set_iov_len(vec, 0, strlen(req1));
+  const char* req2 = "Host: cfadmin.cn\r\n\r\n";
+  ccsocket_set_iov_buf(vec, 1, req2);
+  ccsocket_set_iov_len(vec, 1, strlen(req2));
   int wlen;
-  ccsocket_stcode_t state1 = ccsocket_send(c4, req, strlen(req), &wlen);
+  ccsocket_stcode_t state1 = ccsocket_sendv(c4, vec, 2, &wlen);
   assert(state1 == CC_OPCODE_OK && wlen == strlen(req));
 
   char buf[1024]; memset(buf, 0x0, 1024);
