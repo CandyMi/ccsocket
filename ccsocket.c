@@ -5,6 +5,10 @@
 /* for supported C89/C90 */
 #if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199409L)
   #define CC_INLINE static inline
+#elif defined(__cplusplus)
+  #define CC_INLINE static inline
+#elif _MSC_VER >= 1200
+  #define CC_INLINE static __inline
 #else
   #define CC_INLINE static
 #endif
@@ -563,16 +567,6 @@ ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s)
 //   return (int)sendto((SOCKET)s, (const char *)buf, (int)bsize, flags, (const struct sockaddr *)sap, slen);
 // }
 
-// /* 发送 ccsocket */
-// int ccsocket_send(ccsocket_t s, const void* buf, size_t bsize)
-// {
-//   int flags = 0;
-// #if defined(MSG_NOSIGNAL)
-//   flags |= MSG_NOSIGNAL;
-// #endif
-//   return (int)send((SOCKET)s, (const char *)buf, (int)bsize, flags);
-// }
-
 // int ccsocket_recvfrom(ccsocket_t s, void *buf, size_t bsize, char *addr, uint16_t *port)
 // {
 //   struct sockaddr_storage sa;
@@ -585,14 +579,6 @@ ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s)
 //     ccsocket2addr(&sa, addr, port);
 //   }
 //   return r;
-// }
-
-// /* 接收 ccsocket */
-// int ccsocket_recv(ccsocket_t s, char* buf, size_t bsize)
-// {
-//   int flags = 0;
-//   // TODO: 
-//   return (int)recv((SOCKET)s, (char *)buf, (int)bsize, flags);
 // }
 
 ccsocket_stcode_t ccsocket_send(ccsocket_t s, const void *buf, size_t bsize, OPTIONAL int *wsize)

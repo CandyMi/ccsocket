@@ -236,11 +236,11 @@ CCSOCKET_EXPORT bool ccsocket_set_nonblock(ccsocket_t s, bool on);
 CCSOCKET_EXPORT bool ccsocket_set_cloexec(ccsocket_t s, bool on);
 
 /* addrinfo */
-typedef struct ccaddrinfo_t
+typedef struct ccaddrinfo
 {
-    ccsocket_family_t      af;
-    char          address[65];
-    struct ccaddrinfo_t *next;
+  char address[65];
+  ccsocket_family_t af;
+  struct ccaddrinfo *next;
 } ccaddrinfo_t;
 
 /* getaddrinfo for domain */
