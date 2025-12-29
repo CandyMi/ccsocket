@@ -317,6 +317,10 @@ ccsocket_t ccsocket2(ccsocket_family_t domain, ccsocket_protocol_t proto, ccsock
       s = INVALID_SOCKET;
     }
   }
+#if defined(SO_NOSIGPIPE)
+  int enable = 1;
+  setsockopt(s, SOL_SOCKET, SO_NOSIGPIPE, (char*)&enable, sizeof(enable));
+#endif
   return s;
 }
 
