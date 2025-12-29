@@ -79,7 +79,7 @@ int cctls_init(tls_realloc_t alloc)
 
 void cctls_get_error(tls_t *tls, int retcode, char err[MAX_ERRORLEN])
 {
-  assert(tls);
+  assert(tls && err);
   ERR_error_string_n(retcode, err, MAX_ERRORLEN);
 }
 
