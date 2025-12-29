@@ -609,6 +609,26 @@ ccsocket_stcode_t ccsocket_send(ccsocket_t s, const void *buf, size_t bsize, OPT
   return CC_OPCODE_OK;
 }
 
+ccsocket_stcode_t ccsocket_sendv(ccsocket_t s, ccsocket_iovec_t *iov, int iovcnt, int *wsize)
+{
+  int w = 0; ccsocket_init_errno(); int wsz = 0;
+#if _WIN32
+  w = WSASend((SOCKET)s, iov, iovcnt, &wsz, 0, NULL, NULL);
+#else
+  w = writev(s, iov, iovcnt);
+  if (w > 0) wsz = w;
+#endif
+  if (w == SOCKET_ERROR) {
+    if (ccsocket_is_errno(EINTR))
+      return ccsocket_sendv(s, iov, iovcnt, wsize);
+    if (ccsocket_is_errno(EWOULDBLOCK))
+      return CC_OPCODE_WAIT;
+    return CC_OPCODE_ERROR;
+  }
+  if (wsize) *wsize = (int)wsz;
+  return CC_OPCODE_OK;
+}
+
 CC_INLINE
 ccsocket_stcode_t ccsocket_recv_internal(ccsocket_t s, char *buf, size_t bsize, int *rsize, int flags)
 {
