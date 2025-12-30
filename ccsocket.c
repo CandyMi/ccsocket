@@ -79,6 +79,7 @@
   #include <fcntl.h>
   #include <unistd.h>
   #include <sys/un.h>
+  #include <sys/uio.h>
   #include <netdb.h>
   #include <arpa/inet.h>
   #include <netinet/in.h>
@@ -593,13 +594,13 @@ ccsocket_stcode_t ccsocket_sendv1(ccsocket_t s, ccsocket_iovec_t *iov, int iovcn
   int w = 0; int wsz = 0;
   ccsocket_init_errno();
 #if _WIN32
-  w = WSASend((SOCKET)s, iov, iovcnt, (LPDWORD)&wsz, 0, NULL, NULL);
+  w = WSASend((SOCKET)s, (LPWSABUF)iov, iovcnt, (LPDWORD)&wsz, 0, NULL, NULL);
 #else
 #if defined(MSG_NOSIGNAL)
   flags |= MSG_NOSIGNAL;
 #endif
   struct msghdr msg; memset(&msg, 0x0, sizeof(msg));
-  msg.msg_iov = iov; msg.msg_iovlen = iovcnt;
+  msg.msg_iov = (struct iovec *)iov; msg.msg_iovlen = iovcnt;
   w = sendmsg(s, &msg, flags);
   if (w > 0) wsz = w;
 #endif
