@@ -761,7 +761,7 @@ bool ccsocket_get_sockname(ccsocket_t s, char *addr, uint16_t *port)
   return ccsocket2addr(&sa, addr, port);
 }
 
-int ccsocket_get_family(ccsocket_t s)
+ccsocket_family_t ccsocket_get_family(ccsocket_t s)
 {
   struct sockaddr_storage sa;
   int r = _ccsocket_get_family(s, &sa);
