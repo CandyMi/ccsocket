@@ -3,28 +3,36 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <string.h>
 #include <stdbool.h>
 
 #if _WIN32
   #define CCSOCKET_EXPORT __declspec(dllexport)
-  #include <winsock2.h>
   #define ccsocket_get_iov_len(iov, idx) (iov)[idx].len
-  #define ccsocket_set_iov_len(iov, idx, slen) ccsocket_get_iov_len(iov, idx) = (ULONG)(slen)
+  #define ccsocket_set_iov_len(iov, idx, slen) ccsocket_get_iov_len(iov, idx) = (uint32_t)(slen)
   #define ccsocket_get_iov_buf(iov, idx) (iov)[idx].buf
-  #define ccsocket_set_iov_buf(iov, idx, sbuf) ccsocket_get_iov_buf(iov, idx) = (CHAR*)(sbuf)
-  typedef WSABUF ccsocket_iovec_t;
+  #define ccsocket_set_iov_buf(iov, idx, sbuf) ccsocket_get_iov_buf(iov, idx) = (char*)(sbuf)
   typedef intptr_t ccsocket_t;
 #else
   #define CCSOCKET_EXPORT __attribute__((visibility("default")))
   #define INVALID_SOCKET (~0)
-  #include <sys/uio.h>
   #define ccsocket_get_iov_len(iov, idx) (iov)[idx].iov_len
   #define ccsocket_set_iov_len(iov, idx, slen) ccsocket_get_iov_len(iov, idx) = (size_t)(slen)
   #define ccsocket_get_iov_buf(iov, idx) (iov)[idx].iov_base
   #define ccsocket_set_iov_buf(iov, idx, sbuf) ccsocket_get_iov_buf(iov, idx) = (void*)(sbuf)
-  typedef struct iovec ccsocket_iovec_t;
   typedef int ccsocket_t;
 #endif
+
+typedef struct ccsocket_iovec
+{
+#if _WIN32 /* WSABUF */
+  uint32_t len;
+  char*    buf;
+#else  /* struct iovec */
+  void*  iov_base;
+  size_t iov_len;
+#endif
+} ccsocket_iovec_t;
 
 /* init ccsocket_iovec_t */
 #define ccsocket_init_iov(iov, count) memset(iov, 0, sizeof(ccsocket_iovec_t) * (count))
