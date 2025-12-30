@@ -167,11 +167,13 @@ CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_recv(ccsocket_t s, char *buf, size_t 
 /* Sneaking a view of the data sent by the other end through a ccsocket. (platform must be supported) */
 CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_peek(ccsocket_t s, char* buf, size_t bsize, OPTIONAL int *rsize);
 
+#define ccsocket_send(s, buf, bsize, wsizep) ccsocket_send1((s), (buf), (bsize), (wsizep), 0)
 /* send buffer to peer `ccsocket` */
-CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_send(ccsocket_t s, const void *buf, size_t bsize, OPTIONAL int *wsize);
+CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_send1(ccsocket_t s, const void *buf, size_t bsize, OPTIONAL int *wsize, int flags);
 
+#define ccsocket_sendv(s, iov, iovcnt, wsizep) ccsocket_sendv1((s), (iov), (iovcnt), (wsizep), 0)
 /* send iovec buffer to peer `ccsocket` */
-CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_sendv(ccsocket_t s, ccsocket_iovec_t *iov, int iovcnt, int *wsize);
+CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_sendv1(ccsocket_t s, ccsocket_iovec_t *iov, int iovcnt, OPTIONAL int *wsize, int flags);
 
 // /* Read data sent by the peer from the `ccsocket`. */
 // CCSOCKET_EXPORT int ccsocket_recv(ccsocket_t s, char *buf, size_t bsize);
