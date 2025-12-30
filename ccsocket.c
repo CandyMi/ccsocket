@@ -581,36 +581,31 @@ ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s)
 //   return r;
 // }
 
-ccsocket_stcode_t ccsocket_send(ccsocket_t s, const void *buf, size_t bsize, OPTIONAL int *wsize)
+ccsocket_stcode_t ccsocket_send1(ccsocket_t s, const void *buf, size_t bsize, OPTIONAL int *wsize, int flags)
 {
-  int flags = 0;
-#if defined(MSG_NOSIGNAL)
-  flags |= MSG_NOSIGNAL;
-#endif
-  int w = (int)send((SOCKET)s, (const char *)buf, (int)bsize, flags);
-  if (w == SOCKET_ERROR) {
-    if (ccsocket_is_errno(EINTR))
-      return ccsocket_send(s, buf, bsize, wsize);
-    if (ccsocket_is_errno(EWOULDBLOCK))
-      return CC_OPCODE_WAIT;
-    return CC_OPCODE_ERROR;
-  }
-  if (wsize) *wsize = w;
-  return CC_OPCODE_OK;
+  ccsocket_iovec_t iov[1]; ccsocket_init_iov(iov, 1);
+  ccsocket_set_iov_len(iov, 0, bsize); ccsocket_set_iov_buf(iov, 0, buf);
+  return ccsocket_sendv1(s, iov, 1, wsize, flags);
 }
 
-ccsocket_stcode_t ccsocket_sendv(ccsocket_t s, ccsocket_iovec_t *iov, int iovcnt, int *wsize)
+ccsocket_stcode_t ccsocket_sendv1(ccsocket_t s, ccsocket_iovec_t *iov, int iovcnt, OPTIONAL int *wsize, int flags)
 {
-  int w = 0; ccsocket_init_errno(); int wsz = 0;
+  int w = 0; int wsz = 0;
+  ccsocket_init_errno();
 #if _WIN32
   w = WSASend((SOCKET)s, iov, iovcnt, &wsz, 0, NULL, NULL);
 #else
-  w = writev(s, iov, iovcnt);
+#if defined(MSG_NOSIGNAL)
+  flags |= MSG_NOSIGNAL;
+#endif
+  struct msghdr msg; memset(&msg, 0x0, sizeof(msg));
+  msg.msg_iov = iov; msg.msg_iovlen = iovcnt;
+  w = sendmsg(s, &msg, flags);
   if (w > 0) wsz = w;
 #endif
   if (w == SOCKET_ERROR) {
     if (ccsocket_is_errno(EINTR))
-      return ccsocket_sendv(s, iov, iovcnt, wsize);
+      return ccsocket_sendv1(s, iov, iovcnt, wsize, flags);
     if (ccsocket_is_errno(EWOULDBLOCK))
       return CC_OPCODE_WAIT;
     return CC_OPCODE_ERROR;
