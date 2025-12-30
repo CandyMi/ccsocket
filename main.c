@@ -131,7 +131,14 @@ CCSOCKET_TEST_FUNCTION(cctest_check_timeout, {
   bool r = ccsocket_getaddrinfo(http_server_domain, &addrlist);
   assert(r && addrlist);
 
-  ccsocket_connect(c4, addrlist->address, 80); // cfadmin.cn
+  ccaddrinfo_t *addr = addrlist;
+  while (addr) {
+    if (addr->af == CC_INET4)
+      break;
+    addr = addr->next;
+  }
+
+  ccsocket_connect(c4, addr->address, 80); // cfadmin.cn
   assert(ccsocket_is_connected(c4) == CC_CONNECTED);
 
   ///* 1. not timeout. */
@@ -171,6 +178,7 @@ CCSOCKET_TEST_FUNCTION(cctest_check_timeout, {
   assert(state2 == CC_OPCODE_OK || rlen < 1);
   /* close*/
   assert(!ccsocket_close(c4));
+  ccsocket_freeaddrinfo(addrlist);
 })
 
 CCSOCKET_TEST_FUNCTION(cctest_check_ip_version, {
@@ -276,7 +284,13 @@ CCSOCKET_TEST_FUNCTION(cctest_check_sendfile, {
   bool r = ccsocket_getaddrinfo(http_server_domain, &addrlist);
   assert(r&& addrlist);
 
-  ccsocket_connect(c4, addrlist->address, 80); // cfadmin.cn
+  ccaddrinfo_t *addr = addrlist;
+  while (addr) {
+    if (addr->af == CC_INET4)
+      break;
+    addr = addr->next;
+  }
+  ccsocket_connect(c4, addr->address, 80); // cfadmin.cn
   /* nonblock connect like event-driven. */
   do {
     ccsocket_conn_state_t state = ccsocket_is_connected(c4);
@@ -315,11 +329,12 @@ CCSOCKET_TEST_FUNCTION(cctest_check_sendfile, {
   // printf("http resp = \n'%s'\n", buffer);
   assert(!close(fd));
   assert(!ccsocket_close(c4));
+  ccsocket_freeaddrinfo(addrlist);
 })
 
 CCSOCKET_TEST_FUNCTION(cctest_check_getaddrinfo, {
   ccaddrinfo_t *addrlist = NULL;
-  bool ok = ccsocket_getaddrinfo("www.163.com", &addrlist);
+  bool ok = ccsocket_getaddrinfo(http_server_domain, &addrlist);
   assert(ok); int i = 1;
   ccaddrinfo_t *addr = addrlist;
   while (addr) {
