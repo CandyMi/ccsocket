@@ -593,7 +593,7 @@ ccsocket_stcode_t ccsocket_sendv1(ccsocket_t s, ccsocket_iovec_t *iov, int iovcn
   int w = 0; int wsz = 0;
   ccsocket_init_errno();
 #if _WIN32
-  w = WSASend((SOCKET)s, iov, iovcnt, &wsz, 0, NULL, NULL);
+  w = WSASend((SOCKET)s, iov, iovcnt, (LPDWORD)&wsz, 0, NULL, NULL);
 #else
 #if defined(MSG_NOSIGNAL)
   flags |= MSG_NOSIGNAL;
