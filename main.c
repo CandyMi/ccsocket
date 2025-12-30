@@ -133,7 +133,7 @@ CCSOCKET_TEST_FUNCTION(cctest_check_timeout, {
 
   ccaddrinfo_t *addr = addrlist;
   while (addr) {
-    if (addr->af == CC_INET4)
+    if (addr->af == ccsocket_get_family(c4))
       break;
     addr = addr->next;
   }
@@ -286,7 +286,7 @@ CCSOCKET_TEST_FUNCTION(cctest_check_sendfile, {
 
   ccaddrinfo_t *addr = addrlist;
   while (addr) {
-    if (addr->af == CC_INET4)
+    if (addr->af == ccsocket_get_family(c4))
       break;
     addr = addr->next;
   }
