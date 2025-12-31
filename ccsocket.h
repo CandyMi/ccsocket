@@ -172,6 +172,8 @@ CCSOCKET_EXPORT ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s);
 
 /* Read data sent by the peer from the `ccsocket`. */
 CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_recv(ccsocket_t s, char *buf, size_t bsize, OPTIONAL int *rsize);
+/* Read  iovec data sent by the peer from the `ccsocket`. */
+CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_recv1(ccsocket_t s, ccsocket_iovec_t *iov, int iovcnt, OPTIONAL int *rsize);
 /* Sneaking a view of the data sent by the other end through a ccsocket. (platform must be supported) */
 CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_peek(ccsocket_t s, char* buf, size_t bsize, OPTIONAL int *rsize);
 
