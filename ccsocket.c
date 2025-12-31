@@ -22,12 +22,12 @@
 
 #include "ccsocket.h"
 
-#include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include <assert.h>
 #ifndef NDEBUG
-  #include <stdio.h>
   #define ccsocket_dump(msg, ...) fprintf(stdout, "[libccsocket]: " msg "\n", ##__VA_ARGS__)
 #else
   #define ccsocket_dump(msg, ...)
