@@ -27,7 +27,7 @@ typedef enum {
 extern "C" {
 #endif
 
-/* 自定义内存分配器, 传入标准库`realloc`或自行封装的分配器 */
+/* Optional user-defined memory allocator */
 typedef void*(*tls_realloc_t)(void*, size_t);
 
 /* init openssl */
