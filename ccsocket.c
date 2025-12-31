@@ -616,35 +616,52 @@ ccsocket_stcode_t ccsocket_sendv1(ccsocket_t s, ccsocket_iovec_t *iov, int iovcn
 }
 
 CC_INLINE
-ccsocket_stcode_t ccsocket_recv_internal(ccsocket_t s, char *buf, size_t bsize, int *rsize, int flags)
+ccsocket_stcode_t ccsocket_recv_internal(ccsocket_t s, ccsocket_iovec_t *iov, int iovcnt, OPTIONAL int *rsize, int flags)
 {
-  int r = (int)recv((SOCKET)s, (char *)buf, (int)bsize, flags);
+  int r = 0;
+#if _WIN32
+  DWORD rsz = 0;
+  r = WSARecv(s, (LPWSABUF)iov, iovcnt, (LPDWORD)&rsz, (LPDWORD)&flags, NULL, NULL);
+#else
+  int rsz = 0;
+  struct msghdr msg; memset(&msg, 0x0, sizeof(msg));
+  msg.msg_iov = (struct iovec *)iov; msg.msg_iovlen = iovcnt;
+  r = recvmsg(s, &msg, flags);
+  if (r > 0) rsz = r;
+#endif
   if (r == SOCKET_ERROR) {
+    // char buffer[255]; ccsocket_get_error(s, buffer); 
+    // ccsocket_dump("errno = %d, err = '%s'.", errno, buffer);
     if (ccsocket_is_errno(EINTR))
-      return ccsocket_recv(s, buf, bsize, rsize);
+      return ccsocket_recv_internal(s, iov, iovcnt, rsize, flags);
     if (ccsocket_is_errno(EWOULDBLOCK))
       return CC_OPCODE_WAIT;
     return CC_OPCODE_ERROR;
   }
-  if (rsize) *rsize = r;
+  if (rsize) *rsize = (int)rsz;
   return CC_OPCODE_OK;
+}
+
+/* recv for iov copy */
+ccsocket_stcode_t ccsocket_recv1(ccsocket_t s, ccsocket_iovec_t *iov, int iovcnt, OPTIONAL int *rsize)
+{
+  return ccsocket_recv_internal(s, iov, iovcnt, rsize, 0);
 }
 
 /* recv for copy */
 ccsocket_stcode_t ccsocket_recv(ccsocket_t s, char *buf, size_t bsize, OPTIONAL int *rsize)
 {
-  return ccsocket_recv_internal(s, buf, bsize, rsize, 0);
+  ccsocket_iovec_t iov[1]; ccsocket_init_iov(iov, 1);
+  ccsocket_set_iov_len(iov, 0, bsize); ccsocket_set_iov_buf(iov, 0, buf);
+  return ccsocket_recv_internal(s, iov, 1, rsize, 0);
 }
 
 /* recv for peek */
 ccsocket_stcode_t ccsocket_peek(ccsocket_t s, char* buf, size_t bsize, OPTIONAL int *rsize)
 {
-#ifdef MSG_PEEK
-  return ccsocket_recv_internal(s, buf, bsize, rsize, MSG_PEEK);
-#else
-  ccoscket_set_errno(ENOBUFS);
-  return CC_OPCODE_ERROR;
-#endif
+  ccsocket_iovec_t iov[1]; ccsocket_init_iov(iov, 1);
+  ccsocket_set_iov_len(iov, 0, bsize); ccsocket_set_iov_buf(iov, 0, buf);
+  return ccsocket_recv_internal(s, iov, 1, rsize, MSG_PEEK);
 }
 
 /* 开启/关闭 nodelay */
