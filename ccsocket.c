@@ -868,7 +868,7 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
   if (eof == -1)
     return CC_SENDERROR;
   lseek(fd, offset, SEEK_SET);
-  off_t wsize = sendfile(s, fd, &offset, (size_t)INT64_MAX);
+  off_t wsize = sendfile(s, fd, &offset, eof - offset);
   if (wsize == SOCKET_ERROR) {
     if (ccsocket_is_errno(EINTR))
       return ccsocket_sendfile(s, fd);
@@ -915,26 +915,23 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
   uint32_t bsize = CC_SENDFILE_PER_LEN;
   char buffer[CC_SENDFILE_PER_LEN];
   off_t offset = lseek(fd, 0, SEEK_CUR);
-  //ccsocket_dump("1. fd = %d, errcode = %d, %lld", fd, errno, offset);
   if (offset == SOCKET_ERROR)
     return CC_SENDERROR;
   off_t eof = lseek(fd, 0, SEEK_END);
-  //ccsocket_dump("2. fd = %d, errcode = %d, %lld", fd, errno, eof);
   if (eof == SOCKET_ERROR)
     return CC_SENDERROR;
+  lseek(fd, offset, SEEK_SET);
   while (offset < eof) {
     int rsize = read(fd, buffer, bsize);
     if (rsize == SOCKET_ERROR)
       return CC_SENDERROR;
     if (ccsocket_send(s, buffer, rsize, &wsize) != CC_OPCODE_OK) {
-      //ccsocket_dump("3. fd = %d, errcode = %d, wsacode = %d", fd, errno, WSAGetLastError());
       lseek(fd, offset, SEEK_SET);
       if (ccsocket_is_errno(EINTR))
         return ccsocket_sendfile(s, fd);
       return ccsocket_is_errno(EWOULDBLOCK) ? CC_SENDWAIT : CC_SENDERROR;
     }
     offset += wsize;
-    lseek(fd, offset, SEEK_SET);
   }
   return CC_SENDALL;
 #endif
