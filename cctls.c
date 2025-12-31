@@ -67,6 +67,7 @@ static const int tls_versions[] = {
   TLS1_3_VERSION,
 };
 
+static SSL_CTX * gctx = NULL;
 static tls_realloc_t tls_realloc = realloc;
 
 static void* cctls_malloc(size_t num, const char *file, int line)
@@ -88,6 +89,9 @@ int cctls_init(tls_realloc_t alloc)
 {
   if (alloc)
     tls_realloc = alloc;
+  if (!gctx) {
+      gctx = SSL_CTX_new(SSLv23_method());
+  }
   CRYPTO_set_mem_functions(cctls_malloc, cctls_realloc, cctls_free);
   OPENSSL_init_ssl(OPENSSL_INIT_SSL_DEFAULT, NULL);
   return 0;
@@ -107,15 +111,10 @@ cctls_mode_t cctls_get_mode(tls_t *tls)
 tls_t* cctls_create1(cctls_mode_t mode, ccsocket_t s)
 {
   assert(mode == CCTLS_SERVER_MODE || mode == CCTLS_CLIENT_MODE);
-  SSL_CTX *ctx = SSL_CTX_new(SSLv23_method());
-  if (!ctx)
+  SSL *ssl = SSL_new(gctx);
+  if (!ssl)
     return NULL;
-  SSL *ssl = SSL_new(ctx);
-  if (!ssl) {
-    SSL_CTX_free(ctx);
-    return NULL;
-  }
-  SSL_set_SSL_CTX(ssl, ctx);
+  SSL_set_SSL_CTX(ssl, gctx);
   if (s > (ccsocket_t)INVALID_SOCKET)
     cctls_set_fd(ssl, s);
   switch (mode)
@@ -130,6 +129,7 @@ tls_t* cctls_create1(cctls_mode_t mode, ccsocket_t s)
       cctls_destroy(ssl);
       return NULL;
   }
+  cctls_set_secure_level(ssl, 0); /* This retains compatibility with previous versions of OpenSSL */
   cctls_set_version(ssl, CCTLS_VERSION_1_0, CCTLS_VERSION_1_3);
   return ssl;
 }
@@ -138,9 +138,7 @@ void cctls_destroy(tls_t *tls)
 {
   if (!tls)
     return;
-  SSL_CTX *ctx = SSL_get_SSL_CTX(tls);
   SSL_free(tls);
-  SSL_CTX_free(ctx);
 }
 
 void cctls_set_fd(tls_t *tls, ccsocket_t s)
@@ -151,6 +149,11 @@ void cctls_set_fd(tls_t *tls, ccsocket_t s)
 ccsocket_t cctls_get_fd(tls_t *tls)
 {
   return tls ? SSL_get_fd(tls) : INVALID_SOCKET;
+}
+
+void cctls_set_secure_level(tls_t *tls, int level)
+{
+  SSL_set_security_level(tls, level);
 }
 
 CC_INLINE
