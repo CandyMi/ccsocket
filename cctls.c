@@ -1,14 +1,31 @@
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
+/* for supported C89/C90 */
+#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199409L)
+#define CC_INLINE static inline
+#elif defined(__cplusplus)
+#define CC_INLINE static inline
+#elif _MSC_VER >= 1200
+#define CC_INLINE static __inline
+#else
+#define CC_INLINE static
+#endif
+
+#define STRICT
+#define WIN32_LEAN_AND_MEAN
+
 #include "cctls.h"
 
-/* 兼容C89/C90 */
-#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
-  #define CC_INLINE static inline
-#else
-  #define CC_INLINE static
-#endif
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+#include <assert.h>
 
 #if _WIN32
   #include <io.h>
+  #define _OFF_T_DEFINED
   #if _WIN64
     #define read  _read
     #define lseek _lseeki64
@@ -17,6 +34,10 @@
     #define read  _read
     #define lseek _lseek
     typedef int32_t off_t;
+  #endif
+  #if defined(_MSC_VER)
+    #include <BaseTsd.h>
+    typedef SSIZE_T ssize_t;
   #endif
   #define ccsocket_init_errno() do {errno = 0; WSASetLastError(0);}while(0)
   #define ccsocket_is_errno(err) (WSA##err == WSAGetLastError())
@@ -32,9 +53,6 @@
   #include <unistd.h>
 #endif
 
-#include <string.h>
-#include <errno.h>
-#include <assert.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
@@ -68,12 +86,10 @@ static void cctls_free(void *addr, const char *file, int line)
 
 int cctls_init(tls_realloc_t alloc)
 {
-  /* 定制OpenSSL的内存分配器 */
   if (alloc)
     tls_realloc = alloc;
   CRYPTO_set_mem_functions(cctls_malloc, cctls_realloc, cctls_free);
-  /* TODO: 如何最优雅的初始化呢? */
-  OPENSSL_init_ssl( OPENSSL_INIT_SSL_DEFAULT, NULL);
+  OPENSSL_init_ssl(OPENSSL_INIT_SSL_DEFAULT, NULL);
   return 0;
 }
 
@@ -81,6 +97,11 @@ void cctls_get_error(tls_t *tls, int retcode, char err[MAX_ERRORLEN])
 {
   assert(tls && err);
   ERR_error_string_n(retcode, err, MAX_ERRORLEN);
+}
+
+cctls_mode_t cctls_get_mode(tls_t *tls)
+{
+  return SSL_is_server(tls) ? CCTLS_SERVER_MODE : CCTLS_CLIENT_MODE;
 }
 
 tls_t* cctls_create1(cctls_mode_t mode, ccsocket_t s)
@@ -132,38 +153,24 @@ ccsocket_t cctls_get_fd(tls_t *tls)
   return tls ? SSL_get_fd(tls) : INVALID_SOCKET;
 }
 
-ccsocket_stcode_t cctls_do_handshake(tls_t *tls, int *retcode)
-{
-  assert(tls);
-  ccsocket_init_errno();
-  int code = SSL_do_handshake(tls);
-  if (code == 1) 
-    return CC_OPCODE_OK;
-  int ecode = SSL_get_error(tls, code);
-  if (retcode)
-    *retcode = ecode;
-  // printf("cctls_do_handshake: code = %d, ecode = %d\n", code, ecode);
-  switch (ecode)
-  {
-    case SSL_ERROR_WANT_READ:
-      return CC_OPCODE_WANT_REVENT;
-    case SSL_ERROR_WANT_WRITE:
-      return CC_OPCODE_WANT_WEVENT;
-  }
-  return CC_OPCODE_ERROR;
-}
-
 CC_INLINE
 ccsocket_stcode_t _cctls_get_events(tls_t *tls, int code)
 {
   // printf("cctls_get_events: code = %d, ecode = %d\n", code, SSL_get_error(tls, code));
   if (code == 1)
     return CC_OPCODE_OK;
-  if (ccsocket_is_errno(EWOULDBLOCK))
+  
+  int state = SSL_get_error(tls, code);
+  switch (state)
   {
-    if (SSL_want_read(tls)) {
-      return CC_OPCODE_WANT_REVENT;
-    } else if (SSL_want_write(tls)) {
+    case SSL_ERROR_WANT_READ:
+    {
+      if (ccsocket_is_errno(EWOULDBLOCK))
+        return CC_OPCODE_WANT_REVENT;
+      break;
+    }
+    case SSL_ERROR_WANT_WRITE:
+    {
       return CC_OPCODE_WANT_WEVENT;
     }
   }
@@ -177,7 +184,7 @@ ccsocket_stcode_t cctls_peek(tls_t *tls, void *buffer, size_t len, int *rsize)
   size_t sz = 0;
   int code = SSL_peek_ex(tls, buffer, len, &sz);
   if (sz > 0 && rsize) {
-      *rsize = (int)sz;
+    *rsize = (int)sz;
   }
   return _cctls_get_events(tls, code);
 }
@@ -189,7 +196,7 @@ ccsocket_stcode_t cctls_recv(tls_t *tls, void *buffer, size_t len, int *rsize)
   size_t sz = 0;
   int code = SSL_read_ex(tls, buffer, len, &sz);
   if (sz > 0 && rsize) {
-      *rsize = (int)sz;
+    *rsize = (int)sz;
   }
   return _cctls_get_events(tls, code);
 }
@@ -201,8 +208,22 @@ ccsocket_stcode_t cctls_send(tls_t *tls, const void *buffer, size_t len, int *ws
   size_t sz = 0;
   int code = SSL_write_ex(tls, buffer, len, &sz);
   if (sz > 0 && wsize) {
-      *wsize = (int)sz;
+    *wsize = (int)sz;
   }
+  return _cctls_get_events(tls, code);
+}
+
+ccsocket_stcode_t cctls_do_handshake(tls_t* tls, int* retcode)
+{
+  assert(tls);
+  ccsocket_init_errno();
+  int code = SSL_do_handshake(tls);
+  if (code == 1)
+    return CC_OPCODE_OK;
+  int ecode = SSL_get_error(tls, code);
+  if (retcode)
+    *retcode = ecode;
+  // printf("cctls_do_handshake: code = %d, ecode = %d\n", code, ecode);
   return _cctls_get_events(tls, code);
 }
 
@@ -245,6 +266,15 @@ ccsocket_sendf_state_t cctls_sendfile(tls_t *tls, int fd)
 #endif
 }
 
+void cctls_set_aio(tls_t *tls)
+{
+  if (!SSL_get_rbio(tls))
+    SSL_set0_rbio(tls, BIO_new(BIO_s_mem()));
+
+  if (!SSL_get_wbio(tls))
+    SSL_set0_wbio(tls, BIO_new(BIO_s_mem()));
+}
+
 void cctls_set_version(tls_t *tls, cctls_version_t min_ver, cctls_version_t max_ver)
 {
   assert(min_ver >= CCTLS_VERSION_1_0 && min_ver <= CCTLS_VERSION_1_3);
@@ -261,7 +291,7 @@ void cctls_set_servername(tls_t *tls, const char *domain)
 
 void cctls_set_alpn(tls_t *tls, const char *protocols[])
 {
-#define TLS_ALPN_MAX_SIZE 512
+#define TLS_ALPN_MAX_SIZE 128 /* That's really enough. */
   if (!protocols)
     return;
   char buffer[TLS_ALPN_MAX_SIZE]; uint8_t *protocol = (uint8_t*)buffer;
@@ -270,7 +300,7 @@ void cctls_set_alpn(tls_t *tls, const char *protocols[])
     size_t len = strlen(protocols[i]);
     /* copy data into buffer. */
     *protocol++ = len & 0xff; memcpy(protocol, protocols[i], len);
-    bsize += len + 1; protocol += len; i++;
+    bsize += (uint32_t)len + 1; protocol += len; i++;
   }
   /* nothing todo. */
   if (protocol == (uint8_t*)buffer)
