@@ -38,6 +38,12 @@ CCSOCKET_EXPORT int cctls_init(tls_realloc_t alloc);
 /* create tls context with socket. */
 CCSOCKET_EXPORT tls_t* cctls_create1(cctls_mode_t mode, ccsocket_t s);
 
+/* get tls run mode (CCTLS_CLIENT_MODE/CCTLS_SERVER_MODE). */
+CCSOCKET_EXPORT cctls_mode_t cctls_get_mode(tls_t* tls);
+
+/* set tls securety level (0 ~ 5). */
+CCSOCKET_EXPORT void cctls_set_secure_level(tls_t* tls, int level);
+
 /* tls context destory. */
 CCSOCKET_EXPORT void cctls_destroy(tls_t *ctx);
 
