@@ -8,34 +8,36 @@
 
 #if _WIN32
   #define CCSOCKET_EXPORT __declspec(dllexport)
-  #define ccsocket_get_iov_len(iov, idx) (iov)[idx].len
-  #define ccsocket_set_iov_len(iov, idx, slen) ccsocket_get_iov_len(iov, idx) = (uint32_t)(slen)
-  #define ccsocket_get_iov_buf(iov, idx) (iov)[idx].buf
-  #define ccsocket_set_iov_buf(iov, idx, sbuf) ccsocket_get_iov_buf(iov, idx) = (char*)(sbuf)
+  typedef char*    cc_buf_t;
+  typedef uint32_t cc_len_t;
   typedef intptr_t ccsocket_t;
 #else
   #define CCSOCKET_EXPORT __attribute__((visibility("default")))
   #define INVALID_SOCKET (~0)
-  #define ccsocket_get_iov_len(iov, idx) (iov)[idx].iov_len
-  #define ccsocket_set_iov_len(iov, idx, slen) ccsocket_get_iov_len(iov, idx) = (size_t)(slen)
-  #define ccsocket_get_iov_buf(iov, idx) (iov)[idx].iov_base
-  #define ccsocket_set_iov_buf(iov, idx, sbuf) ccsocket_get_iov_buf(iov, idx) = (void*)(sbuf)
+  typedef void*   cc_buf_t;
+  typedef size_t  cc_len_t;
   typedef int ccsocket_t;
 #endif
 
 typedef struct ccsocket_iovec
 {
-#if _WIN32 /* WSABUF */
-  uint32_t len;
-  char*    buf;
-#else  /* struct iovec */
-  void*  iov_base;
-  size_t iov_len;
+#if _WIN32
+  cc_len_t  len;
+  cc_buf_t  buf;
+#else
+  cc_buf_t  buf;
+  cc_len_t  len;
 #endif
 } ccsocket_iovec_t;
 
 /* init ccsocket_iovec_t */
-#define ccsocket_init_iov(iov, count) memset(iov, 0, sizeof(ccsocket_iovec_t) * (count))
+#define ccsocket_init_iov(iov, count)         memset((iov), 0, sizeof(ccsocket_iovec_t)*(count))
+/* get/set ccsocket_iovec_t len */
+#define ccsocket_get_iov_len(iov, idx)        (iov)[idx].len
+#define ccsocket_set_iov_len(iov, idx, slen)  ccsocket_get_iov_len((iov), (idx)) = (cc_len_t)(slen)
+/* get/set ccsocket_iovec_t len */
+#define ccsocket_get_iov_buf(iov, idx)        (iov)[idx].buf
+#define ccsocket_set_iov_buf(iov, idx, sbuf)  ccsocket_get_iov_buf((iov), (idx)) = (cc_buf_t)(sbuf)
 
 #ifndef OPTIONAL
   #define OPTIONAL /* When modifying a method parameter, it means that this parameter is optional and can be `NULL`. */
