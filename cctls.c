@@ -238,7 +238,7 @@ ccsocket_stcode_t cctls_do_handshake(tls_t* tls, int* retcode)
 
 ccsocket_sendf_state_t cctls_sendfile(tls_t *tls, int fd)
 {
-#if OPENSSL_VERSION_NUMBER >= 0x30000000
+#if OPENSSL_VERSION_NUMBER >= 0x30000000 && !defined(_WIN32)
   off_t cur = lseek(fd, 0, SEEK_CUR);
   if (-1 == cur)
     return CC_SENDERROR;
@@ -248,28 +248,30 @@ ccsocket_sendf_state_t cctls_sendfile(tls_t *tls, int fd)
   if (-1 == lseek(fd, cur, SEEK_SET))
     return CC_SENDERROR;
   ssize_t wsize = SSL_sendfile(tls, fd, cur, max - cur, 0);
-  if (wsize == -1)
-    return (ccsocket_sendf_state_t)_cctls_get_events(tls, -1);
+  if (wsize < 0)
+    return (ccsocket_sendf_state_t)_cctls_get_events(tls, (int)wsize);
   lseek(fd, cur + wsize, SEEK_SET);
   if (cur + wsize == max)
     return CC_SENDALL;
   return cctls_sendfile(tls, fd);
 #else
-  #define CC_SENDFILE_PER_LEN 1024
+  #define CC_SENDFILE_PER_LEN 4096
   char buf[CC_SENDFILE_PER_LEN];
   off_t cur = lseek(fd, 0, SEEK_CUR);
   if (cur == -1)
     return CC_SENDERROR;
+  ssize_t rsize; ssize_t wsize;
   while (1)
   {
-    ssize_t rsize = pread(fd, buf, CC_SENDFILE_PER_LEN, cur);
+    rsize = read(fd, buf, CC_SENDFILE_PER_LEN);
     if (rsize == 0)
       return CC_SENDALL;
-    size_t wsize;
-    if (!SSL_write_ex(tls, buf, (size_t)rsize, &wsize))
+    wsize = 0;
+    if (!SSL_write_ex(tls, buf, (size_t)rsize, &wsize)) {
+      lseek(fd, cur, SEEK_SET);
       return (ccsocket_sendf_state_t)_cctls_get_events(tls, -1);
+    }
     cur += wsize;
-    lseek(fd, cur, SEEK_SET);
   }
   #undef CC_SENDFILE_PER_LEN
 #endif
