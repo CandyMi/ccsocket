@@ -179,7 +179,8 @@ ccsocket_stcode_t _cctls_get_events(tls_t *tls, int code)
     }
     case SSL_ERROR_WANT_WRITE:
     {
-      return CC_OPCODE_WANT_WEVENT;
+      if (ccsocket_is_errno(EWOULDBLOCK))
+        return CC_OPCODE_WANT_WEVENT;
     }
   }
   return CC_OPCODE_ERROR;
