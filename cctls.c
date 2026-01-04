@@ -102,6 +102,17 @@ int cctls_init(tls_realloc_t alloc)
   return 0;
 }
 
+static int my_passwd_cb(char* buf, int size, int rwflag, void* udata)
+{
+  size_t len = 0;
+  if (udata)
+  {
+    len = strlen((char*)udata);
+    memcpy(buf, udata, len);
+  }
+  return (int)len;
+}
+
 void cctls_get_error(tls_t *tls, int retcode, char err[MAX_ERRORLEN])
 {
   assert(tls && err);
