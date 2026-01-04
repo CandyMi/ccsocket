@@ -238,23 +238,27 @@ ccsocket_stcode_t cctls_do_handshake(tls_t* tls, int* retcode)
 
 ccsocket_sendf_state_t cctls_sendfile(tls_t *tls, int fd)
 {
-#if OPENSSL_VERSION_NUMBER >= 0x30000000 && !defined(_WIN32)
-  off_t cur = lseek(fd, 0, SEEK_CUR);
-  if (-1 == cur)
-    return CC_SENDERROR;
-  off_t max = lseek(fd, 0, SEEK_END);
-  if (-1 == max)
-    return CC_SENDERROR;
-  if (-1 == lseek(fd, cur, SEEK_SET))
-    return CC_SENDERROR;
-  ssize_t wsize = SSL_sendfile(tls, fd, cur, max - cur, 0);
-  if (wsize < 0)
-    return (ccsocket_sendf_state_t)_cctls_get_events(tls, (int)wsize);
-  lseek(fd, cur + wsize, SEEK_SET);
-  if (cur + wsize == max)
-    return CC_SENDALL;
-  return cctls_sendfile(tls, fd);
-#else
+  ccsocket_init_errno();
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+  BIO* wbio = SSL_get_wbio(tls);
+  if (wbio && BIO_get_ktls_send(wbio)) {
+    off_t cur = lseek(fd, 0, SEEK_CUR);
+    if (-1 == cur)
+      return CC_SENDERROR;
+    off_t max = lseek(fd, 0, SEEK_END);
+    if (-1 == max)
+      return CC_SENDERROR;
+    if (-1 == lseek(fd, cur, SEEK_SET))
+      return CC_SENDERROR;
+    ssize_t wsize = SSL_sendfile(tls, fd, cur, max - cur, 0);
+    if (wsize < 0)
+      return (ccsocket_sendf_state_t)_cctls_get_events(tls, (int)wsize);
+    lseek(fd, cur + wsize, SEEK_SET);
+    if (cur + wsize == max)
+      return CC_SENDALL;
+    return cctls_sendfile(tls, fd);
+  }
+#endif
   #define CC_SENDFILE_PER_LEN 4096
   char buf[CC_SENDFILE_PER_LEN];
   off_t cur = lseek(fd, 0, SEEK_CUR);
@@ -274,7 +278,6 @@ ccsocket_sendf_state_t cctls_sendfile(tls_t *tls, int fd)
     cur += wsize;
   }
   #undef CC_SENDFILE_PER_LEN
-#endif
 }
 
 void cctls_set_aio(tls_t *tls)
