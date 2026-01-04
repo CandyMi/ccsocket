@@ -54,6 +54,8 @@
 #endif
 
 #include <openssl/ssl.h>
+#include <openssl/pem.h>
+#include <openssl/opensslv.h>
 #include <openssl/err.h>
 
 #if OPENSSL_VERSION_NUMBER < 0x10101000
@@ -89,11 +91,14 @@ int cctls_init(tls_realloc_t alloc)
 {
   if (alloc)
     tls_realloc = alloc;
-  if (!gctx) {
-      gctx = SSL_CTX_new(SSLv23_method());
-  }
   CRYPTO_set_mem_functions(cctls_malloc, cctls_realloc, cctls_free);
-  OPENSSL_init_ssl(OPENSSL_INIT_SSL_DEFAULT, NULL);
+  if (!gctx) {
+    gctx = SSL_CTX_new(SSLv23_method());
+    SSL_CTX_set_default_verify_paths(gctx);
+    SSL_CTX_set_default_verify_dir(gctx);
+    SSL_CTX_set_default_verify_file(gctx);
+    SSL_CTX_set_default_verify_store(gctx);
+  }
   return 0;
 }
 
