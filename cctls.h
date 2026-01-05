@@ -38,6 +38,15 @@ CCSOCKET_EXPORT int cctls_init(tls_realloc_t alloc);
 /* create tls context with socket. */
 CCSOCKET_EXPORT tls_t* cctls_create1(cctls_mode_t mode, ccsocket_t s);
 
+/* clear/reset tls, reuse to new connection. */
+CCSOCKET_EXPORT void cctls_clear(tls_t* tls);
+
+/* dup new tls context. */
+CCSOCKET_EXPORT tls_t* cctls_dup(tls_t* tls);
+
+/* init cert and key to tls context from file. */
+CCSOCKET_EXPORT bool cctls_init_certificate_and_key(tls_t* tls, const char* chainfile, const char* keyfile);
+
 /* get tls run mode (CCTLS_CLIENT_MODE/CCTLS_SERVER_MODE). */
 CCSOCKET_EXPORT cctls_mode_t cctls_get_mode(tls_t* tls);
 
