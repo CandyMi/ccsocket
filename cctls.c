@@ -69,7 +69,6 @@ static const int tls_versions[] = {
   TLS1_3_VERSION,
 };
 
-static SSL_CTX * gctx = NULL;
 static tls_realloc_t tls_realloc = realloc;
 
 static void* cctls_malloc(size_t num, const char *file, int line)
@@ -87,22 +86,7 @@ static void cctls_free(void *addr, const char *file, int line)
   tls_realloc(addr, 0);
 }
 
-int cctls_init(tls_realloc_t alloc)
-{
-  if (alloc)
-    tls_realloc = alloc;
-  CRYPTO_set_mem_functions(cctls_malloc, cctls_realloc, cctls_free);
-  if (!gctx) {
-    gctx = SSL_CTX_new(SSLv23_method());
-    SSL_CTX_set_default_verify_paths(gctx);
-    SSL_CTX_set_default_verify_dir(gctx);
-    SSL_CTX_set_default_verify_file(gctx);
-    SSL_CTX_set_default_verify_store(gctx);
-  }
-  return 0;
-}
-
-static int my_passwd_cb(char* buf, int size, int rwflag, void* udata)
+static int ctls_mypassword_cb(char* buf, int size, int rwflag, void* udata)
 {
   size_t len = 0;
   if (udata)
@@ -111,6 +95,14 @@ static int my_passwd_cb(char* buf, int size, int rwflag, void* udata)
     memcpy(buf, udata, len);
   }
   return (int)len;
+}
+
+int cctls_init(tls_realloc_t alloc)
+{
+  if (alloc)
+    tls_realloc = alloc;
+  CRYPTO_set_mem_functions(cctls_malloc, cctls_realloc, cctls_free);
+  return 0;
 }
 
 void cctls_get_error(tls_t *tls, int retcode, char err[MAX_ERRORLEN])
@@ -127,12 +119,30 @@ cctls_mode_t cctls_get_mode(tls_t *tls)
 tls_t* cctls_create1(cctls_mode_t mode, ccsocket_t s)
 {
   assert(mode == CCTLS_SERVER_MODE || mode == CCTLS_CLIENT_MODE);
-  SSL *ssl = SSL_new(gctx);
+  SSL_CTX *ctx = SSL_CTX_new(SSLv23_method());
+  if (!ctx)
+    return NULL;
+
+  /* load default configure. */
+  SSL_CTX_set_default_verify_dir(ctx);
+  SSL_CTX_set_default_verify_file(ctx);
+  SSL_CTX_set_default_verify_paths(ctx);
+  SSL_CTX_set_default_verify_store(ctx);
+  /* More flexible compatibility configuration */
+  SSL_CTX_set_security_level(ctx, 0);
+  SSL_CTX_set_default_passwd_cb(ctx, ctls_mypassword_cb);
+  SSL_CTX_set_default_passwd_cb_userdata(ctx, NULL);
+  SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
+  SSL_CTX_set_min_proto_version(ctx, TLS1_VERSION);
+  SSL_CTX_set_max_proto_version(ctx, TLS1_3_VERSION);
+
+  SSL *ssl = SSL_new(ctx);
   if (!ssl)
     return NULL;
-  SSL_set_SSL_CTX(ssl, gctx);
+
   if (s > (ccsocket_t)INVALID_SOCKET)
     cctls_set_fd(ssl, s);
+
   switch (mode)
   {
     case CCTLS_SERVER_MODE:
@@ -145,8 +155,6 @@ tls_t* cctls_create1(cctls_mode_t mode, ccsocket_t s)
       cctls_destroy(ssl);
       return NULL;
   }
-  cctls_set_secure_level(ssl, 0); /* This retains compatibility with previous versions of OpenSSL */
-  cctls_set_version(ssl, CCTLS_VERSION_1_0, CCTLS_VERSION_1_3);
   return ssl;
 }
 
@@ -155,6 +163,31 @@ void cctls_destroy(tls_t *tls)
   if (!tls)
     return;
   SSL_free(tls);
+}
+
+void cctls_clear(tls_t* tls)
+{
+  if (tls) SSL_clear(tls);
+}
+
+tls_t* cctls_dup(tls_t* tls)
+{
+  SSL* s = SSL_dup(tls);
+  cctls_clear(s);
+  return s;
+}
+
+bool cctls_set_certificate_and_key(tls_t *tls, const char *chainfile, const char *keyfile)
+{
+  if (SSL_CTX_use_certificate_chain_file(SSL_get_SSL_CTX(tls), chainfile) <= 0) {
+    ERR_print_errors_fp(stderr);
+    return false;
+  }
+  if (SSL_CTX_use_PrivateKey_file(SSL_get_SSL_CTX(tls), keyfile, SSL_FILETYPE_PEM) <= 0) {
+    ERR_print_errors_fp(stderr);
+    return false;
+  }
+  return SSL_CTX_check_private_key(SSL_get_SSL_CTX(tls)) == 1; /* check it. */
 }
 
 void cctls_set_fd(tls_t *tls, ccsocket_t s)
