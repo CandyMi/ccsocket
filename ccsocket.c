@@ -419,17 +419,17 @@ bool ccsocket_listen1(ccsocket_t s, const char *ip, uint16_t port)
 #if defined(SO_REUSEPORT_LB)
   int Enable = 1;
   if (SOCKET_ERROR == setsockopt((SOCKET)s, SOL_SOCKET, SO_REUSEPORT_LB, (char*)&Enable, sizeof(Enable))) {
-    errno = EINVAL;
+    // errno = EINVAL;
     return false;
   }
 #elif defined(SO_REUSEPORT)
   if (!ccsocket_set_reuseport(s, true)) {
-    errno = EINVAL;
+    // errno = EINVAL;
     return false;
   }
 #elif _WIN32
   if (!ccsocket_set_reuseaddr(s, true)) {
-    WSASetLastError(EINVAL);
+    // WSASetLastError(EINVAL);
     return false;
   }
 #endif
@@ -801,6 +801,10 @@ ccsocket_family_t ccsocket_get_family(ccsocket_t s)
 
 ccsocket_family_t ccsocket_get_version(const char *addr)
 {
+  if (!addr) {
+    ccsocket_set_errno(EINVAL);
+    return CC_FAMILY_INVALID;
+  }
   struct sockaddr_in sa4; memset(&sa4, 0x0, sizeof(sa4));
 #if _WIN32
   socklen_t len4 = sizeof(sa4);
