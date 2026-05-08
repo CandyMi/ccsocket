@@ -67,9 +67,11 @@ CCSOCKET_TEST_FUNCTION(cctest_socketnew, {
   s4 = ccsocket1(CC_INET4, CC_TCP, CC_NONBLOCK|CC_CLOEXEC);
   s6 = ccsocket1(CC_INET6, CC_TCP, CC_NONBLOCK|CC_CLOEXEC);
   assert(s4 != INVALID_SOCKET && s6 != INVALID_SOCKET);
+  ccsocket_close(s4); ccsocket_close(s6);
   s4 = ccsocket1(CC_INET4, CC_UDP, CC_NONBLOCK|CC_CLOEXEC);
   s6 = ccsocket1(CC_INET6, CC_UDP, CC_NONBLOCK|CC_CLOEXEC);
   assert(s4 != INVALID_SOCKET && s6 != INVALID_SOCKET);
+  ccsocket_close(s4); ccsocket_close(s6);
 })
 
 CCSOCKET_TEST_FUNCTION(cctest_listen_and_connect, {
@@ -175,13 +177,14 @@ CCSOCKET_TEST_FUNCTION(cctest_check_timeout, {
   assert(state1 == CC_OPCODE_OK && wlen == strlen(req));
   rlen = 0;
   state2 = ccsocket_recv(c4, buf, sizeof(buf), &rlen);
-  assert(state2 == CC_OPCODE_OK || rlen < 1);
+  assert(state2 == CC_OPCODE_OK || state2 == CC_OPCODE_WAIT);
   /* close*/
   assert(!ccsocket_close(c4));
   ccsocket_freeaddrinfo(addrlist);
 })
 
 CCSOCKET_TEST_FUNCTION(cctest_check_ip_version, {
+  assert(ccsocket_get_version(NULL) == CC_FAMILY_INVALID);
   assert(ccsocket_get_version("1.1.1.1") == CC_INET4);
   assert(ccsocket_get_version("255.255.255.255") == CC_INET4);
   assert(ccsocket_get_version("::") == CC_INET6);
@@ -283,6 +286,9 @@ CCSOCKET_TEST_FUNCTION(cctest_check_sendfile, {
   ccaddrinfo_t* addrlist = NULL;
   bool r = ccsocket_getaddrinfo(http_server_domain, &addrlist);
   assert(r&& addrlist);
+
+  r = ccsocket_getaddrinfo(NULL, &addrlist);
+  assert(!r);
 
   ccaddrinfo_t *addr = addrlist;
   while (addr) {
