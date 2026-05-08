@@ -129,6 +129,7 @@ bool ccsocket2addr(const struct sockaddr_storage* sa, char *addr, uint16_t *port
     {
       const struct sockaddr_un* in = (const struct sockaddr_un*)sa;
       memcpy(addr, in->sun_path, strlen(in->sun_path));
+      addr[strlen(in->sun_path)] = '\0';
       *port = 0;
       break;
     }
