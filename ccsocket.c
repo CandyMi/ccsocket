@@ -1031,6 +1031,7 @@ bool ccsocket_getaddrinfo(const char *domain, ccaddrinfo_t **addrlist)
     }
     /* address already in link-list ? */
     if (ccsocket_addrinfo_already_in(*addrlist, cur)) {
+      memset(cur, 0x0, sizeof(*cur));
       cur->af = CC_FAMILY_INVALID;
     } else {
       cur->next = (ccaddrinfo_t*)malloc(sizeof(ccaddrinfo_t));
