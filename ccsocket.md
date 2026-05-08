@@ -424,16 +424,16 @@ void ccsocket_freeaddrinfo(ccaddrinfo_t *addrlist);
 | TCP | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | UDP | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | ICMP | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Unix Domain | ✅ | ✅ | ✅ | ✅¹ | ✅ | ✅ |
-| `socketpair` | ✅ | ✅ | ✅ | ✅² | ✅ | ✅ |
-| `sendfile` (零拷贝) | ✅ | ✅ | ✅ | ❌³ | ✅ | ✅ |
-| `accept4` | ✅ | ❌⁴ | ❌⁴ | ❌ | ❌ | ❌ |
-| `SO_REUSEPORT` | ✅ | ✅ | ✅⁵ | ❌ | ✅ | ✅ |
+| Unix Domain | ✅ | ✅ | ✅ | ✅[^1] | ✅ | ✅ |
+| `socketpair` | ✅ | ✅ | ✅ | ✅[^2] | ✅ | ✅ |
+| `sendfile` (零拷贝) | ✅ | ✅ | ✅ | ❌[^3] | ✅ | ✅ |
+| `accept4` | ✅ | ❌[^4] | ❌[^4] | ❌ | ❌ | ❌ |
+| `SO_REUSEPORT` | ✅ | ✅ | ✅[^5] | ❌ | ✅ | ✅ |
 | `TCP_DEFER_ACCEPT` | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | `SO_ACCEPTFILTER` | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ |
 
-> ¹ Windows 10 RS2+ (1703) 原生支持，更早版本不支持。
-> ² Windows 通过 TCP 回环模拟。
-> ³ Windows 回退为 `read()+send()`。
-> ⁴ macOS/FreeBSD 不支持 `accept4`，回退到 `accept()+fcntl`。
-> ⁵ FreeBSD 12+ 使用 `SO_REUSEPORT_LB`。
+[^1]: Windows 10 RS2+ (1703) 原生支持，更早版本不支持。
+[^2]: Windows 通过 TCP 回环模拟。
+[^3]: Windows 回退为 `read()+send()`。
+[^4]: macOS/FreeBSD 不支持 `accept4`，回退到 `accept()+fcntl`。
+[^5]: FreeBSD 12+ 使用 `SO_REUSEPORT_LB`。
