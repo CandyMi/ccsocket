@@ -541,6 +541,7 @@ ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s)
     // printf("ccsocket_get_peername errno = %d\n", errno);
     if (errno == ENOTCONN)
       return CC_CONNECTING;
+    return CC_CONNERROR;
   }
   /**
    * test state for connect again
