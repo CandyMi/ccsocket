@@ -342,7 +342,7 @@ ccsocket_t ccsocket_accept2(ccsocket_t s, OPTIONAL char *ip, OPTIONAL uint16_t *
   struct sockaddr_storage sa; memset(&sa, 0x0, sizeof(sa));
   if (ip && port) {
     if (_ccsocket_get_family(s, &sa))
-      return false;
+      return INVALID_SOCKET;
     sap = &sa; sasizep = &sasize; sasize = ccsizeof(sap);
   }
   ccsocket_t c = INVALID_SOCKET; int flags_r = 0;
