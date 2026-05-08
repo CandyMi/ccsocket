@@ -102,16 +102,19 @@
 CC_INLINE
 int ccsizeof(const struct sockaddr_storage* sa)
 {
-  switch ((int)sa->ss_family)
+  if (sa)
   {
-#if defined(AF_UNIX)
-    case AF_UNIX:
-      return sizeof(struct sockaddr_un);
-#endif
-    case AF_INET:
-      return sizeof(struct sockaddr_in);
-    case AF_INET6:
-      return sizeof(struct sockaddr_in6);
+    switch ((int)sa->ss_family)
+    {
+  #if defined(AF_UNIX)
+      case AF_UNIX:
+        return sizeof(struct sockaddr_un);
+  #endif
+      case AF_INET:
+        return sizeof(struct sockaddr_in);
+      case AF_INET6:
+        return sizeof(struct sockaddr_in6);
+    }
   }
   return 0;
 }
@@ -156,28 +159,29 @@ bool ccsocket2addr(const struct sockaddr_storage* sa, char *addr, uint16_t *port
 CC_INLINE
 int _ccsocket_set_flags(ccsocket_t s, ccsocket_flags_t flags, bool on)
 {
-  int r = -1;
 #if _WIN32
   u_long mode = on ? 1 : 0;
-  if (flags & CC_CLOEXEC)
-    r = SetHandleInformation((HANDLE)s, HANDLE_FLAG_INHERIT, 0) ? 0 : -1;
-  if (flags & CC_NONBLOCK)
-    r = ioctlsocket(s, FIONBIO, &mode);
-#else
+  int r = 0;
   if (flags & CC_CLOEXEC) {
-    if (on) {
-      r = fcntl(s, F_SETFD, FD_CLOEXEC | fcntl(s, F_GETFD));
-    } else {
-      r = fcntl(s, F_SETFD, FD_CLOEXEC ^ fcntl(s, F_GETFD));
-    }
+    if (!SetHandleInformation((HANDLE)s, HANDLE_FLAG_INHERIT, mode ? 0 : 1))
+      r = -1;
+  }
+  if (flags & CC_NONBLOCK) {
+    if (ioctlsocket(s, FIONBIO, &mode) != 0)
+      r = -1;
+  }
+#else
+  int r = -1;
+  if (flags & CC_CLOEXEC) {
+    int cur = fcntl(s, F_GETFD);
+    if (cur == -1) return r;
+    r = fcntl(s, F_SETFD, on ? (cur | FD_CLOEXEC) : (cur & ~FD_CLOEXEC));
     if (r) return r;
   }
   if (flags & CC_NONBLOCK) {
-    if (on) {
-      r = fcntl(s, F_SETFL, O_NONBLOCK | fcntl(s, F_GETFL));
-    } else {
-      r = fcntl(s, F_SETFL, O_NONBLOCK ^ fcntl(s, F_GETFL));
-    }
+    int cur = fcntl(s, F_GETFL);
+    if (cur == -1) return r;
+    r = fcntl(s, F_SETFL, on ? (cur | O_NONBLOCK) : (cur & ~O_NONBLOCK));
     if (r) return r;
   }
 #endif
