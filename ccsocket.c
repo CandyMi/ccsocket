@@ -634,6 +634,10 @@ ccsocket_stcode_t ccsocket_recv_internal(ccsocket_t s, ccsocket_iovec_t *iov, in
   msg.msg_iov = (struct iovec *)iov; msg.msg_iovlen = iovcnt;
   r = recvmsg(s, &msg, flags);
   if (r > 0) rsz = r;
+  if (r == 0) {
+    r = SOCKET_ERROR;
+    ccsocket_set_errno(ENOTCONN);
+  }
 #endif
   if (r == SOCKET_ERROR) {
     // char buffer[255]; ccsocket_get_error(s, buffer); 
