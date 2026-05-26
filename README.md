@@ -70,19 +70,26 @@
 
 ### 2. premake5
 
-1. 安装`premake5`放置到`/usr/bin`或`/usr/local/bin`, 然后就进入到`ccsocket`目录.
+1. 安装`premake5`后进入到`ccsocket`目录.
 
-2. 根据你的平台使用命令`premake5 gmake/windows/linux`等命令配置好项目.
+2. 生成 Makefile：
 
-3. 使用`make`或者`make config=Release`生成出指定配置的库.
+   ```sh
+   premake5 gmake                   # 默认 (含 ICMP 模块)
+   premake5 --WITH_ICMP=off gmake   # 不含 ICMP
+   premake5 --WITH_OSSL gmake       # 含 OpenSSL TLS
+   premake5 --ccache gmake          # 启用 ccache 缓存
+   ```
+
+3. 构建：
+
+   ```sh
+   make config=release_x64 -j4
+   ```
+
+   产物在 `build/` 目录下。
 
 更多使用方法, 请自行参考[premake5](https://premake.github.io/docs/)
-
-### 3. xmake
-
-  1. 安装`xmake`后进入到`ccsocket`目录.
-
-  2. 执行`xmake`或`xmake build`即可完成构建.
 
 ## 使用指南
 
