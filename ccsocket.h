@@ -57,11 +57,11 @@ extern "C" {
 
 typedef enum {
 #define CC_NOFLAG   CC_NOFLAG
-  CC_NOFLAG   = 0, // normal flags
+  CC_NOFLAG   = 0,
 #define CC_CLOEXEC  CC_CLOEXEC
-  CC_CLOEXEC  = 1, // with cloexec
+  CC_CLOEXEC  = 1,
 #define CC_NONBLOCK CC_NONBLOCK
-  CC_NONBLOCK = 2, // with non-block
+  CC_NONBLOCK = 2,
 } ccsocket_flags_t;
 
 /* Used for `ccsocket_recv`/`ccsocket_send` and `cctls_recv`/`cctls_send`. */
@@ -83,11 +83,11 @@ typedef enum {
 #define CC_FAMILY_INVALID   CC_FAMILY_INVALID 
   CC_FAMILY_INVALID = -1,
 #define CC_UNIX  CC_UNIX
-  CC_UNIX  = 0, // AF_UNIX  -> LOCAL
+  CC_UNIX  = 0,
 #define CC_INET4 CC_INET4
-  CC_INET4 = 1, // AF_INET  -> IPv4
+  CC_INET4 = 1,
 #define CC_INET6 CC_INET6
-  CC_INET6 = 2, // AF_INET6 -> IPv6
+  CC_INET6 = 2,
 } ccsocket_family_t;
 
 /* Used for ccsocket* */
@@ -95,31 +95,31 @@ typedef enum {
 #define CC_PROTOCOL_INVALID  CC_PROTOCOL_INVALID
   CC_PROTOCOL_INVALID = -1,
 #define CC_TCP  CC_TCP
-  CC_TCP   = 1,  // use `so_stream`
+  CC_TCP   = 1,
 #define CC_UDP  CC_UDP
-  CC_UDP   = 2,  // use `so_datagram`
+  CC_UDP   = 2,
 #define CC_ICMP CC_ICMP
-  CC_ICMP  = 3,  // use `so_raw -> icmp`
+  CC_ICMP  = 3,
 } ccsocket_protocol_t;
 
 /* Used for ccsocket_connect* */
 typedef enum {
 #define CC_CONNERROR  CC_CONNERROR
-  CC_CONNERROR  = -1, // socket connect failed.
+  CC_CONNERROR  = -1,
 #define CC_CONNECTED  CC_CONNECTED
-  CC_CONNECTED  =  0, // socket connected and succeed.
+  CC_CONNECTED  =  0,
 #define CC_CONNECTING CC_CONNECTING
-  CC_CONNECTING =  1, // socket connecting(try later).
+  CC_CONNECTING =  1,
 } ccsocket_conn_state_t;
 
 /* Used for ccsocket_sendfile* */
 typedef enum {
 #define CC_SENDERROR CC_SENDERROR
-  CC_SENDERROR  = -1,  // sending error(Unrecoverable).
+  CC_SENDERROR  = -1,
 #define CC_SENDALL   CC_SENDALL
-  CC_SENDALL    =  0,  // send completed.
+  CC_SENDALL    =  0,
 #define CC_SENDWAIT  CC_SENDWAIT
-  CC_SENDWAIT   =  1,  // send buffer was fully.(wait a seconds)
+  CC_SENDWAIT   =  1,
 #define CC_SENF_WANT_REVENT CC_SENF_WANT_REVENT
   CC_SENF_WANT_REVENT   =  CC_OPCODE_WANT_REVENT,
 #define CC_SENF_WANT_WEVENT CC_SENF_WANT_WEVENT
@@ -155,7 +155,7 @@ CCSOCKET_EXPORT ccsocket_t ccsocket_accept2(ccsocket_t s, OPTIONAL char *addr, O
 /* listen a `ccsocket` (Only a listener) */
 CCSOCKET_EXPORT bool ccsocket_listen(ccsocket_t s, const char *addr, uint16_t port);
 
-/** listen a `ccsocket` with load balance in supported kernal. 
+/* listen a `ccsocket` with load balance in supported kernal.
  *  the following platforms support multi-process load balancing using `ccsocket`:
  *  DragonFly | FreeBSD , but listener must less than `255`.
  *  * Linux 3.9 : SO_REUSEPORT
@@ -176,7 +176,7 @@ CCSOCKET_EXPORT ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s);
 CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_recv(ccsocket_t s, char *buf, size_t bsize, OPTIONAL int *rsize);
 /* Read  iovec data sent by the peer from the `ccsocket`. */
 CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_recv1(ccsocket_t s, ccsocket_iovec_t *iov, int iovcnt, OPTIONAL int *rsize);
-/* Sneaking a view of the data sent by the other end through a ccsocket. (platform must be supported) */
+/* peek data from `ccsocket` without removing it from buffer. (platform must be supported) */
 CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_peek(ccsocket_t s, char* buf, size_t bsize, OPTIONAL int *rsize);
 
 #define ccsocket_send(s, buf, bsize, wsizep) ccsocket_send1((s), (buf), (bsize), (wsizep), 0)
@@ -186,12 +186,6 @@ CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_send1(ccsocket_t s, const void *buf, 
 #define ccsocket_sendv(s, iov, iovcnt, wsizep) ccsocket_sendv1((s), (iov), (iovcnt), (wsizep), 0)
 /* send iovec buffer to peer `ccsocket` */
 CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_sendv1(ccsocket_t s, ccsocket_iovec_t *iov, int iovcnt, OPTIONAL int *wsize, int flags);
-
-// /* Read data sent by the peer from the `ccsocket`. */
-// CCSOCKET_EXPORT int ccsocket_recvfrom(ccsocket_t s, void *buf, size_t bsize, char *addr, uint16_t *port);
-
-// /* send buffer to peer `ccsocket` */
-// CCSOCKET_EXPORT int ccsocket_sendto(ccsocket_t s, const void *buf, size_t bsize, char *addr, uint16_t port);
 
 /* call sendfile using `ccsocket` with `zero-copy`(part). */
 CCSOCKET_EXPORT ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd);
@@ -214,8 +208,7 @@ CCSOCKET_EXPORT ccsocket_family_t ccsocket_get_family(ccsocket_t s);
  */
 CCSOCKET_EXPORT ccsocket_family_t ccsocket_get_version(const char *addr);
 
-/**
- * enable accept defer in listen tcp socket, becare unless you know it's behavior.
+/* enable accept defer in listen tcp socket, becare unless you know it's behavior.
  * Support Platform: `Linux` / `FreeBSD` / `Windows`(TODO).
  */
 CCSOCKET_EXPORT bool ccsocket_enable_accept_defer(ccsocket_t s);

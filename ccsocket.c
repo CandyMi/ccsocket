@@ -46,31 +46,31 @@
     #define UNIX_PATH_MAX 108
     typedef struct sockaddr_un
     {
-        short sun_family;              /* AF_UNIX */
-        char  sun_path[UNIX_PATH_MAX]; /* pathname */
+      short sun_family;              /* AF_UNIX */
+      char  sun_path[UNIX_PATH_MAX]; /* pathname */
     } SOCKADDR_UN, * PSOCKADDR_UN;
   #endif
   #pragma comment(lib, "Ws2_32.lib")
   BOOL WINAPI DllMain(
-      _In_ HINSTANCE hinstDLL,
-      _In_ DWORD     fdwReason,
-      _In_ LPVOID    lpvReserved
+    _In_ HINSTANCE hinstDLL,
+    _In_ DWORD     fdwReason,
+    _In_ LPVOID    lpvReserved
   ) {
-      if (fdwReason == DLL_PROCESS_ATTACH) {
-          //printf("init.\n");
-          WSADATA wsaData; // for init winsock
-          if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-              WSACleanup();
-              exit(1);
-          }
-#ifndef NDEBUG
-          ccsocket_dump("WSAStartup init -> {\n\tVer: %g,\n\tmaxVer: %g,\n\tmaxOpenFiles: %d,\n\tudpMaxPacketSize: %d,\n\tsystem: '%s',\n\tdescrition: '%s'\n}",
-              HIBYTE(wsaData.wVersion) + LOBYTE(wsaData.wVersion) * 0.1, HIBYTE(wsaData.wHighVersion) + LOBYTE(wsaData.wHighVersion) * 0.1,
-              wsaData.iMaxSockets, wsaData.iMaxUdpDg, wsaData.szSystemStatus, wsaData.szDescription
-          );
-#endif
+    if (fdwReason == DLL_PROCESS_ATTACH) {
+      //printf("init.\n");
+      WSADATA wsaData; // for init winsock
+      if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        WSACleanup();
+        exit(1);
       }
-      return true;
+  #ifndef NDEBUG
+      ccsocket_dump("WSAStartup init -> {\n\tVer: %g,\n\tmaxVer: %g,\n\tmaxOpenFiles: %d,\n\tudpMaxPacketSize: %d,\n\tsystem: '%s',\n\tdescrition: '%s'\n}",
+        HIBYTE(wsaData.wVersion) + LOBYTE(wsaData.wVersion) * 0.1, HIBYTE(wsaData.wHighVersion) + LOBYTE(wsaData.wHighVersion) * 0.1,
+        wsaData.iMaxSockets, wsaData.iMaxUdpDg, wsaData.szSystemStatus, wsaData.szDescription
+      );
+  #endif
+    }
+    return true;
   }
   #define ccsocket_init_errno() do {errno = 0; WSASetLastError(0);}while(0)
   #define ccsocket_is_errno(err) (WSA##err == WSAGetLastError())
@@ -557,36 +557,6 @@ ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s)
 #endif
   return state;
 }
-
-// int ccsocket_sendto(ccsocket_t s, const void *buf, size_t bsize, char *addr, uint16_t port)
-// {
-//   int flags = 0;
-// #if defined(MSG_NOSIGNAL)
-//   flags |= MSG_NOSIGNAL;
-// #endif
-//   socklen_t slen = 0;
-//   struct sockaddr_storage sa, *sap = NULL; 
-//   if (addr) {
-//     if (ccsocket_wrap_ip_and_port(s, &sa, addr, port))
-//       return SOCKET_ERROR;
-//     sap = &sa; slen = ccsizeof(sap);
-//   }
-//   return (int)sendto((SOCKET)s, (const char *)buf, (int)bsize, flags, (const struct sockaddr *)sap, slen);
-// }
-
-// int ccsocket_recvfrom(ccsocket_t s, void *buf, size_t bsize, char *addr, uint16_t *port)
-// {
-//   struct sockaddr_storage sa;
-//   int af = _ccsocket_get_family(s, &sa);
-//   if (af == SOCKET_ERROR)
-//     return SOCKET_ERROR;
-//   socklen_t len = ccsizeof(&sa);
-//   int r = (int)recvfrom((SOCKET)s, (char *)buf, (int)bsize, 0, (struct sockaddr *)&sa, &len);
-//   if (r >= 0 && addr && port) {
-//     ccsocket2addr(&sa, addr, port);
-//   }
-//   return r;
-// }
 
 ccsocket_stcode_t ccsocket_send1(ccsocket_t s, const void *buf, size_t bsize, OPTIONAL int *wsize, int flags)
 {
