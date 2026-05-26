@@ -296,7 +296,7 @@ ccsocket_sendf_state_t cctls_sendfile(tls_t *tls, int fd)
       return CC_SENDERROR;
     ssize_t wsize = SSL_sendfile(tls, fd, cur, max - cur, 0);
     if (wsize < 0)
-      return (ccsocket_sendf_state_t)_cctls_get_events(tls, (int)wsize);
+      return cctls_to_sendf_state(_cctls_get_events(tls, (int)wsize));
     lseek(fd, cur + wsize, SEEK_SET);
     if (cur + wsize == max)
       return CC_SENDALL;
@@ -318,11 +318,22 @@ ccsocket_sendf_state_t cctls_sendfile(tls_t *tls, int fd)
     int ret = SSL_write_ex(tls, buf, (size_t)rsize, &wsize);
     if (!ret) {
       lseek(fd, cur, SEEK_SET);
-      return (ccsocket_sendf_state_t)_cctls_get_events(tls, ret);
+      return cctls_to_sendf_state(_cctls_get_events(tls, ret));
     }
     cur += wsize;
   }
   #undef CC_SENDFILE_PER_LEN
+}
+
+/* Safe mapping: ccsocket_stcode_t → ccsocket_sendf_state_t */
+CC_INLINE
+ccsocket_sendf_state_t cctls_to_sendf_state(ccsocket_stcode_t code)
+{
+  switch (code) {
+    case CC_OPCODE_OK:   return CC_SENDALL;
+    case CC_OPCODE_WAIT: return CC_SENDWAIT;
+    default:             return CC_SENDERROR;
+  }
 }
 
 void cctls_set_aio(tls_t *tls)
