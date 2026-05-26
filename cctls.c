@@ -177,7 +177,7 @@ tls_t* cctls_dup(tls_t* tls)
   return s;
 }
 
-bool cctls_set_certificate_and_key(tls_t *tls, const char *chainfile, const char *keyfile)
+bool cctls_init_certificate_and_key(tls_t *tls, const char *chainfile, const char *keyfile)
 {
   if (SSL_CTX_use_certificate_chain_file(SSL_get_SSL_CTX(tls), chainfile) <= 0) {
     ERR_print_errors_fp(stderr);
@@ -202,7 +202,7 @@ ccsocket_t cctls_get_fd(tls_t *tls)
 
 void cctls_set_secure_level(tls_t *tls, int level)
 {
-  SSL_set_security_level(tls, level);
+  SSL_CTX_set_security_level(SSL_get_SSL_CTX(tls), level);
 }
 
 CC_INLINE
@@ -315,9 +315,10 @@ ccsocket_sendf_state_t cctls_sendfile(tls_t *tls, int fd)
     if (rsize == 0)
       return CC_SENDALL;
     wsize = 0;
-    if (!SSL_write_ex(tls, buf, (size_t)rsize, &wsize)) {
+    int ret = SSL_write_ex(tls, buf, (size_t)rsize, &wsize);
+    if (!ret) {
       lseek(fd, cur, SEEK_SET);
-      return (ccsocket_sendf_state_t)_cctls_get_events(tls, -1);
+      return (ccsocket_sendf_state_t)_cctls_get_events(tls, ret);
     }
     cur += wsize;
   }
@@ -352,7 +353,8 @@ void cctls_set_alpn(tls_t *tls, const char *protocols[])
 #define TLS_ALPN_MAX_SIZE 128 /* That's really enough. */
   if (!protocols)
     return;
-  char buffer[TLS_ALPN_MAX_SIZE]; uint8_t *protocol = (uint8_t*)buffer;
+  char buffer[TLS_ALPN_MAX_SIZE]; memset(buffer, 0, TLS_ALPN_MAX_SIZE);
+  uint8_t *protocol = (uint8_t*)buffer;
   int i = 0; uint32_t bsize = 0;
   while (protocols[i]) {
     size_t len = strlen(protocols[i]);
@@ -363,7 +365,6 @@ void cctls_set_alpn(tls_t *tls, const char *protocols[])
   /* nothing todo. */
   if (protocol == (uint8_t*)buffer)
     return;
-  buffer[bsize] = 0;
   SSL_set_alpn_protos(tls, (const uint8_t *)buffer, bsize);
 #undef TLS_ALPN_MAX_SIZE
 }
