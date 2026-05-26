@@ -1,0 +1,276 @@
+#ifndef _GNU_SOURCE
+  #define _GNU_SOURCE
+#endif
+
+#include "ccicmp.h"
+
+#include <assert.h>
+#include <string.h>
+#include <errno.h>
+
+#if _WIN32
+  #include <winsock2.h>
+  #include <malloc.h>
+  #include <sys/timeb.h>
+  #define cc_alloca _alloca
+#else
+  #include <alloca.h>
+  #include <sys/time.h>
+  #include <netinet/in.h>
+  #include <netinet/ip_icmp.h>
+  #include <netinet/icmp6.h>
+  #define cc_alloca alloca
+  #if defined(__FreeBSD__) || defined(__APPLE__)
+    #include <netinet/icmp_var.h>
+  #endif
+#endif
+
+/* for C89/C90 */
+#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199409L)
+  #define CC_INLINE static inline
+#else
+  #define CC_INLINE static
+#endif
+
+/* ICMP type fallback defines */
+#ifndef ICMP_ECHO
+  #define ICMP_ECHO 8
+#endif
+#ifndef ICMP_ECHOREPLY
+  #define ICMP_ECHOREPLY 0
+#endif
+#ifndef ICMP6_ECHO_REQUEST
+  #define ICMP6_ECHO_REQUEST 128
+#endif
+#ifndef ICMP6_ECHO_REPLY
+  #define ICMP6_ECHO_REPLY 129
+#endif
+#ifndef IPPROTO_ICMPV6
+  #define IPPROTO_ICMPV6 58
+#endif
+
+#define CCICMP_HEADER_LEN 8  /* ICMP echo header is always 8 bytes */
+#define CCICMP_TS_LEN     8  /* timestamp payload: 8 bytes */
+
+#ifndef CCICMP_MAX_PAYLOAD
+  #define CCICMP_MAX_PAYLOAD 65500  /* safe upper bound; fits within IP_MAXPACKET */
+  #pragma message("CCICMP_MAX_PAYLOAD defaulting to 65500")
+#endif
+
+#ifndef CCICMP_RECV_BUFSZ
+  #define CCICMP_RECV_BUFSZ 65535  /* max IP packet size */
+  #pragma message("CCICMP_RECV_BUFSZ defaulting to 65535")
+#endif
+
+CC_INLINE
+void ccicmp_fill_timestamp(uint8_t *timestamp)
+{
+#if _WIN32
+  struct _timeb tv;
+  _ftime(&tv);
+  timestamp[0] = tv.time & 0xff;
+  timestamp[1] = (tv.time >> 8) & 0xff;
+  timestamp[2] = (tv.time >> 16) & 0xff;
+  timestamp[3] = (tv.time >> 24) & 0xff;
+  timestamp[4] = tv.millitm & 0xff;
+  timestamp[5] = (tv.millitm >> 8) & 0xff;
+#else
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  timestamp[0] = tv.tv_sec & 0xff;
+  timestamp[1] = (tv.tv_sec >> 8) & 0xff;
+  timestamp[2] = (tv.tv_sec >> 16) & 0xff;
+  timestamp[3] = (tv.tv_sec >> 24) & 0xff;
+  timestamp[4] = tv.tv_usec & 0xff;
+  timestamp[5] = (tv.tv_usec >> 8) & 0xff;
+  timestamp[6] = (tv.tv_usec >> 16) & 0xff;
+  timestamp[7] = (tv.tv_usec >> 24) & 0xff;
+#endif
+}
+
+/**
+ * @brief `RFC793`:
+ *
+ * The checksum field is the 16 bit one's complement of the one's
+ * complement sum of all 16 bit words in the header and text.
+ */
+CC_INLINE
+uint16_t icmp_checksum_calc(const uint8_t *buffer, int length)
+{
+  uint32_t checksum = 0;
+  const uint8_t *end = buffer + length;
+  if ((length & 0x01) == 0x01) {
+    end = buffer + length - 1;
+    checksum += (*end) << 8;
+  }
+  while (buffer < end) {
+    checksum += buffer[0] << 8;
+    checksum += buffer[1];
+    buffer += 2;
+  }
+  uint32_t carray = checksum >> 16;
+  while (carray) {
+    checksum = (checksum & 0xffff) + carray;
+    carray = checksum >> 16;
+  }
+  return (~checksum) & 0xffff;
+}
+
+bool ccicmp_init(struct ccicmp_t *ctx, ccsocket_family_t domain)
+{
+  if (!ctx)
+    return false;
+  ctx->id = ((intptr_t)ctx) & 0xffff;
+  ctx->no = 0;
+  ctx->fd = ccsocket1(domain, CC_ICMP, CC_NONBLOCK | CC_CLOEXEC);
+  return ctx->fd != INVALID_SOCKET;
+}
+
+void ccicmp_close(struct ccicmp_t *ctx)
+{
+  assert(ctx);
+  if (ctx->fd != INVALID_SOCKET)
+    ccsocket_close(ctx->fd);
+  ctx->fd = INVALID_SOCKET;
+  ctx->id = 0; ctx->no = 0;
+}
+
+bool ccicmp_echo(struct ccicmp_t *ctx, const char *addr, const char *data, size_t len)
+{
+  if (!ctx || ctx->fd <= 0 || !addr)
+    return false;
+
+  if (len > CCICMP_MAX_PAYLOAD)
+    len = CCICMP_MAX_PAYLOAD;
+
+  int af = ccsocket_get_family(ctx->fd);
+  if (af != CC_INET4 && af != CC_INET6)
+    return false;
+
+  /* connect raw socket to target (enables send/recv instead of sendto/recvfrom) */
+  if (!ccsocket_connect(ctx->fd, addr, 0))
+    return false;
+
+  /* build ICMP echo packet */
+  size_t pktlen = CCICMP_HEADER_LEN + CCICMP_TS_LEN + len;
+  uint8_t *packet = (uint8_t *)cc_alloca(pktlen);
+  memset(packet, 0, pktlen);
+
+  packet[0] = (af == CC_INET4) ? ICMP_ECHO : ICMP6_ECHO_REQUEST;
+  packet[1] = 0;
+  *(uint16_t *)(packet + 4) = htons(ctx->id);
+  *(uint16_t *)(packet + 6) = htons(ctx->no++);
+
+  ccicmp_fill_timestamp(packet + CCICMP_HEADER_LEN);
+  if (data && len > 0)
+    memcpy(packet + CCICMP_HEADER_LEN + CCICMP_TS_LEN, data, len);
+
+  if (af == CC_INET4) {
+    uint16_t cksum = icmp_checksum_calc(packet, pktlen);
+    packet[2] = (cksum >> 8) & 0xff;
+    packet[3] = cksum & 0xff;
+  } else {
+    /* IPv6 pseudo-header: src(16) + dst(16) + len(4) + zeros(3) + next_hdr(1)
+     * getsockname() may return :: on macOS, so use getpeername() for both
+     * src and dst — for loopback (::1) they are identical. */
+    struct sockaddr_in6 dst;
+    socklen_t dlen = sizeof(dst);
+    if (getpeername(ctx->fd, (struct sockaddr *)&dst, &dlen))
+      return false;
+
+    uint32_t netlen = htonl((uint32_t)pktlen);
+    uint8_t phdr[40];
+    memset(phdr, 0, 40);
+    memcpy(phdr,      &dst.sin6_addr, 16);
+    memcpy(phdr + 16, &dst.sin6_addr, 16);
+    memcpy(phdr + 32, &netlen, 4);
+    phdr[39] = IPPROTO_ICMPV6;
+
+    uint8_t *cbuf = (uint8_t *)cc_alloca(40 + pktlen);
+    memcpy(cbuf, phdr, 40);
+    memcpy(cbuf + 40, packet, pktlen);
+    uint16_t cksum = icmp_checksum_calc(cbuf, (int)(40 + pktlen));
+    packet[2] = (cksum >> 8) & 0xff;
+    packet[3] = cksum & 0xff;
+  }
+
+  /* send via ccsocket macro */
+  int wsize = 0;
+  ccsocket_stcode_t state = ccsocket_send(ctx->fd, packet, pktlen, &wsize);
+  return state == CC_OPCODE_OK && (size_t)wsize == pktlen;
+}
+
+/**
+ * Parse received raw packet, skip IP header if present.
+ * Returns byte offset to the ICMP header, or 0 on failure.
+ */
+/**
+ * Parse received raw packet, skip IP header if present.
+ * Returns byte offset to the ICMP header, or `(size_t)-1` on failure.
+ */
+CC_INLINE
+size_t ccicmp_skip_ip_header(const uint8_t *buf, size_t len, int af)
+{
+  if (af == CC_INET4) {
+    if (len < 20 || (buf[0] & 0xF0) != 0x40)
+      return (size_t)-1;
+    size_t ihl = (buf[0] & 0x0F) * 4;
+    return (ihl >= 20 && ihl <= len) ? ihl : (size_t)-1;
+  }
+  if (af == CC_INET6) {
+    /* Has IPv6 header? (version nibble = 6, header = 40 bytes) */
+    if (len >= 40 && (buf[0] & 0xF0) == 0x60)
+      return 40;
+    /* BSD/macOS strip the IPv6 header; buffer starts at ICMPv6 header. */
+    if (len >= CCICMP_HEADER_LEN)
+      return 0;
+    return (size_t)-1;
+  }
+  return (size_t)-1;
+}
+
+bool ccicmp_reply(struct ccicmp_t *ctx, char *data, size_t *len)
+{
+  if (!ctx || ctx->fd <= 0)
+    return false;
+
+  int af = ccsocket_get_family(ctx->fd);
+  if (af != CC_INET4 && af != CC_INET6)
+    return false;
+
+  /* receive via ccsocket wrapper (no recvfrom needed) */
+  uint8_t *buf = (uint8_t *)cc_alloca(CCICMP_RECV_BUFSZ);
+  int rsize = 0;
+  ccsocket_stcode_t state = ccsocket_recv(ctx->fd, (char *)buf, CCICMP_RECV_BUFSZ, &rsize);
+  if (state != CC_OPCODE_OK || rsize <= 0)
+    return false;
+
+  /* skip IP header to get ICMP header */
+  size_t off = ccicmp_skip_ip_header(buf, (size_t)rsize, af);
+  if (off == (size_t)-1 || off + CCICMP_HEADER_LEN > (size_t)rsize)
+    return false;
+
+  /* parse ICMP header */
+  uint8_t  type = buf[off];
+  uint8_t  code = buf[off + 1];
+  uint16_t id   = ntohs(*(uint16_t *)(buf + off + 4));
+
+  bool match = (af == CC_INET4)
+    ? (type == ICMP_ECHOREPLY && id == ctx->id && code == 0)
+    : (type == ICMP6_ECHO_REPLY && id == ctx->id && code == 0);
+  if (!match)
+    return false;
+
+  size_t datastart = off + CCICMP_HEADER_LEN + CCICMP_TS_LEN;
+  size_t datalen  = (size_t)rsize - datastart;
+
+  if (data && len && datalen > 0) {
+    size_t copylen = (datalen < *len) ? datalen : *len;
+    memcpy(data, buf + datastart, copylen);
+    *len = copylen;
+  } else if (len) {
+    *len = datalen;
+  }
+
+  return true;
+}

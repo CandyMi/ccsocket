@@ -81,6 +81,7 @@
   #include <sys/un.h>
   #include <sys/uio.h>
   #include <netdb.h>
+  #include <sys/stat.h>
   #include <arpa/inet.h>
   #include <netinet/in.h>
   #include <netinet/tcp.h>
@@ -210,11 +211,10 @@ int _ccsocket_get_family(ccsocket_t s, struct sockaddr_storage* sa)
 }
 
 CC_INLINE
-int ccsocket_wrap_ip_and_port(ccsocket_t s, struct sockaddr_storage* sa, const char *addr, uint16_t port)
+bool ccsocket_wrap_ip_and_port(ccsocket_t s, struct sockaddr_storage* sa, const char *addr, uint16_t port)
 {
-  int r = _ccsocket_get_family(s, sa);
-  if (r)
-    return r;
+  if (_ccsocket_get_family(s, sa))
+    return false;
 
   switch ((int)sa->ss_family)
   {
@@ -231,10 +231,10 @@ int ccsocket_wrap_ip_and_port(ccsocket_t s, struct sockaddr_storage* sa, const c
     {
 #if _WIN32 // for mingw and msvc
       int len = ccsizeof(sa);
-      if (WSAStringToAddress((char*)addr, sa->ss_family, NULL, (struct sockaddr*)sa, &len)) return -1;
+      if (WSAStringToAddress((char*)addr, sa->ss_family, NULL, (struct sockaddr*)sa, &len)) return false;
 #else
-      if (sa->ss_family == AF_INET && 1 != inet_pton(AF_INET, addr, &(((struct sockaddr_in*)sa)->sin_addr))) return -1;
-      else if (sa->ss_family == AF_INET6 && 1 != inet_pton(AF_INET6, addr, &(((struct sockaddr_in6*)sa)->sin6_addr))) return -1;
+      if (sa->ss_family == AF_INET && 1 != inet_pton(AF_INET, addr, &(((struct sockaddr_in*)sa)->sin_addr))) return false;
+      else if (sa->ss_family == AF_INET6 && 1 != inet_pton(AF_INET6, addr, &(((struct sockaddr_in6*)sa)->sin6_addr))) return false;
 #endif
       if (sa->ss_family == AF_INET) ((struct sockaddr_in*)sa)->sin_port = htons(port);
       else if (sa->ss_family == AF_INET6) ((struct sockaddr_in6*)sa)->sin6_port = htons(port);
@@ -243,9 +243,9 @@ int ccsocket_wrap_ip_and_port(ccsocket_t s, struct sockaddr_storage* sa, const c
     }
     default:
       ccsocket_set_errno(EINVAL);
-      return -1;
+      return false;
   }
-  return 0;
+  return true;
 }
 
 int ccsocket_close(ccsocket_t s)
@@ -290,6 +290,13 @@ ccsocket_t ccsocket2(ccsocket_family_t domain, ccsocket_protocol_t proto, ccsock
     case CC_ICMP:
       proto_r = SOCK_RAW;
       flag_r = IPPROTO_ICMP;
+      /* IPv6 ICMP uses IPPROTO_ICMPV6 (58) not IPPROTO_ICMP (1) */
+      if (domain == CC_INET6) {
+#ifndef IPPROTO_ICMPV6
+        #define IPPROTO_ICMPV6 -1
+#endif
+        flag_r = IPPROTO_ICMPV6;
+      }
       break;
     case CC_PROTOCOL_INVALID:
     default:
@@ -379,8 +386,7 @@ bool ccsocket_listen_internal(ccsocket_t s, const char *ip, uint16_t port)
 {
   ccsocket_init_errno(); int r = 0;
   struct sockaddr_storage sa; memset(&sa, 0x0, sizeof(sa));
-  r = ccsocket_wrap_ip_and_port(s, &sa, ip, port);
-  if (r)
+  if (!ccsocket_wrap_ip_and_port(s, &sa, ip, port))
     return false;
 
   r = bind(s, (const struct sockaddr*)&sa, ccsizeof(&sa));
@@ -501,9 +507,8 @@ bool ccsocket_connect(ccsocket_t s, const char *addr, uint16_t port)
 {
   struct sockaddr_storage sa;
   struct sockaddr_storage *sap = NULL; socklen_t salen = 0;
-  if (addr)
-  {
-    if (ccsocket_wrap_ip_and_port(s, &sa, addr, port))
+  if (addr) {
+    if (!ccsocket_wrap_ip_and_port(s, &sa, addr, port))
       return false;
     sap = &sa; salen = ccsizeof(sap);
   }
@@ -801,6 +806,12 @@ ccsocket_family_t ccsocket_get_version(const char *addr)
   if (inet_pton(AF_INET6, addr, &sa6.sin6_addr) == 1)
 #endif
     return CC_INET6;
+  /* 增加对unix domain socket的判断支持. */
+#if !defined(_WIN32)
+  struct stat st;
+  if (!stat(addr, &st) && S_ISSOCK(st.st_mode))
+    return CC_UNIX;
+#endif
   ccsocket_set_errno(EINVAL);
   return CC_FAMILY_INVALID;
 }

@@ -204,7 +204,7 @@ CCSOCKET_EXPORT bool ccsocket_get_sockname(ccsocket_t s, char *addr, uint16_t *p
 CCSOCKET_EXPORT ccsocket_family_t ccsocket_get_family(ccsocket_t s);
 
 /* Check the ip protocol version from `addr` string.
- * return once of `CC_INET4`, `CC_INET6`, `CC_FAMILY_INVALID`.
+ * return once of `CC_INET4`, `CC_INET6`, `CC_UNIX`, `CC_FAMILY_INVALID`.
  */
 CCSOCKET_EXPORT ccsocket_family_t ccsocket_get_version(const char *addr);
 

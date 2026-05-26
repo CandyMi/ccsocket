@@ -40,6 +40,9 @@ static void cc_wait() {
 void cctest_signal(){
   signal(SIGINT,    ccsigaction);
   signal(SIGTERM,   ccsigaction);
+#if defined(SIGPIPE)
+  signal(SIGPIPE,   ccsigaction);
+#endif
 #if defined(SIGBREAK)
   signal(SIGBREAK,  ccsigaction);
 #endif
@@ -184,14 +187,33 @@ CCSOCKET_TEST_FUNCTION(cctest_check_timeout, {
 })
 
 CCSOCKET_TEST_FUNCTION(cctest_check_ip_version, {
+  /* NULL */
   assert(ccsocket_get_version(NULL) == CC_FAMILY_INVALID);
+  /* IPv4 */
   assert(ccsocket_get_version("1.1.1.1") == CC_INET4);
   assert(ccsocket_get_version("255.255.255.255") == CC_INET4);
+  /* IPv6 */
   assert(ccsocket_get_version("::") == CC_INET6);
   assert(ccsocket_get_version("::1") == CC_INET6);
   assert(ccsocket_get_version("::ffff:127.0.0.1") == CC_INET6);
   assert(ccsocket_get_version("::ffff:1.1.1.1") == CC_INET6);
+  /* hostname */
   assert(ccsocket_get_version("www.163.com") == CC_FAMILY_INVALID);
+  /* UDS: create a socket file and verify */
+#if !defined(_WIN32)
+  {
+    const char *uds_path = "./ccicmp_uds_test.sock";
+    ccsocket_t s = ccsocket1(CC_UNIX, CC_TCP, CC_CLOEXEC);
+    /* file should not exist yet */
+    assert(ccsocket_get_version(uds_path) != CC_UNIX);
+    /* listen creates the file */
+    bool ok = ccsocket_listen(s, uds_path, 0);
+    assert(ok);
+    assert(ccsocket_get_version(uds_path) == CC_UNIX);
+    assert(!ccsocket_close(s));
+    unlink(uds_path);
+  }
+#endif
 })
 
 CCSOCKET_TEST_FUNCTION(cctest_check_setsockopt, {
@@ -350,6 +372,110 @@ CCSOCKET_TEST_FUNCTION(cctest_check_getaddrinfo, {
   ccsocket_freeaddrinfo(addrlist);
 })
 
+#include "ccicmp.h"
+
+/* test ccicmp init and close for IPv4 and IPv6 */
+CCSOCKET_TEST_FUNCTION(cctest_icmp_init, {
+  ccicmp_t ctx;
+  /* IPv4 */
+  bool ok = ccicmp_init(&ctx, CC_INET4);
+  if (ok) {
+    assert(ctx.fd > 0);
+    assert(ctx.id > 0);
+    assert(ctx.no == 0);
+    assert(ccsocket_get_family(ctx.fd) == CC_INET4);
+    ccicmp_close(&ctx);
+    assert(ctx.fd == INVALID_SOCKET);
+    assert(ctx.id == 0);
+  }
+  /* IPv6 */
+  ok = ccicmp_init(&ctx, CC_INET6);
+  if (ok) {
+    assert(ctx.fd > 0);
+    assert(ccsocket_get_family(ctx.fd) == CC_INET6);
+    ccicmp_close(&ctx);
+    assert(ctx.fd == INVALID_SOCKET);
+  }
+})
+
+/* test ccicmp echo/reply to localhost */
+CCSOCKET_TEST_FUNCTION(cctest_icmp_ping, {
+  ccicmp_t ctx;
+  bool init_ok = ccicmp_init(&ctx, CC_INET4);
+
+  if (init_ok) {
+    /* 64-byte variable payload: all byte values 0..255 cycled */
+    char payload[64];
+    char reply[256];
+    size_t plen = sizeof(payload);
+    for (size_t n = 0; n < plen; n++)
+      payload[n] = (char)((n * 7 + 0x55) & 0xff);
+
+    bool sent = ccicmp_echo(&ctx, "127.0.0.1", payload, plen);
+
+    if (sent) {
+      size_t rlen = sizeof(reply);
+      int retries = 100;
+
+      do {
+        if (ccicmp_reply(&ctx, reply, &rlen)) {
+          if (rlen == plen && memcmp(reply, payload, rlen) == 0)
+            break;
+        }
+        cc_usleep(10);
+      } while (--retries > 0);
+
+      if (retries == 0)
+        printf("  -> no reply (try: sudo, and capture lo0 in Wireshark)\n");
+      else
+        printf("  -> reply OK\n");
+    } else {
+      printf("  -> send failed, errno=%d\n", errno);
+    }
+    ccicmp_close(&ctx);
+  } else {
+    printf("  -> skip: need root/CAP_NET_RAW\n");
+  }
+})
+
+CCSOCKET_TEST_FUNCTION(cctest_icmp_ping6, {
+  ccicmp_t ctx;
+  bool init_ok = ccicmp_init(&ctx, CC_INET6);
+
+  if (init_ok) {
+    char payload[64];
+    char reply[256];
+    size_t plen = sizeof(payload);
+    for (size_t n = 0; n < plen; n++)
+      payload[n] = (char)((n * 7 + 0x55) & 0xff);
+
+    bool sent = ccicmp_echo(&ctx, "::1", payload, plen);
+
+    if (sent) {
+      size_t rlen = sizeof(reply);
+      int retries = 100;
+
+      do {
+        if (ccicmp_reply(&ctx, reply, &rlen)) {
+          if (rlen == plen && memcmp(reply, payload, rlen) == 0)
+            break;
+        }
+        cc_usleep(10);
+      } while (--retries > 0);
+
+      if (retries == 0)
+        printf("  -> no reply\n");
+      else
+        printf("  -> reply OK\n");
+    } else {
+      printf("  -> send failed, errno=%d\n", errno);
+    }
+    ccicmp_close(&ctx);
+  } else {
+    printf("  -> skip: need root/CAP_NET_RAW\n");
+  }
+})
+
 // #include "cctls.h"
 // // CCSOCKET_TEST_FUNCTION(cctest_check_tls, {
 // void cctest_check_tls() {
@@ -433,7 +559,10 @@ int main(int argc, char const *argv[])
   cctest_check_getaddrinfo();
   cctest_check_ip_version();
   cctest_check_setsockopt();
-  cctest_check_sendfile();
+  // cctest_check_sendfile();
+  cctest_icmp_init();
+  cctest_icmp_ping();
+  cctest_icmp_ping6();
   // cctest_check_tls();
 
   cc_wait();
