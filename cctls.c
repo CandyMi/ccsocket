@@ -292,15 +292,14 @@ ccsocket_sendf_state_t cctls_sendfile(tls_t *tls, int fd)
     off_t max = lseek(fd, 0, SEEK_END);
     if (-1 == max)
       return CC_SENDERROR;
-    if (-1 == lseek(fd, cur, SEEK_SET))
-      return CC_SENDERROR;
-    ssize_t wsize = SSL_sendfile(tls, fd, cur, max - cur, 0);
-    if (wsize < 0)
-      return cctls_to_sendf_state(_cctls_get_events(tls, (int)wsize));
-    lseek(fd, cur + wsize, SEEK_SET);
-    if (cur + wsize == max)
-      return CC_SENDALL;
-    return cctls_sendfile(tls, fd);
+    while (cur < max) {
+      ssize_t wsize = SSL_sendfile(tls, fd, cur, max - cur, 0);
+      if (wsize < 0)
+        return cctls_to_sendf_state(_cctls_get_events(tls, (int)wsize));
+      cur += wsize;
+    }
+    lseek(fd, max, SEEK_SET);
+    return CC_SENDALL;
   }
 #endif
   #define CC_SENDFILE_PER_LEN 4096
