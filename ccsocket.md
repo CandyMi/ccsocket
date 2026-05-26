@@ -95,7 +95,7 @@ typedef enum {
     CC_PROTOCOL_INVALID = -1,  // 无效协议
     CC_TCP   = 1,              // SOCK_STREAM  + IPPROTO_TCP
     CC_UDP   = 2,              // SOCK_DGRAM   + IPPROTO_UDP
-    CC_ICMP  = 3,              // SOCK_RAW     + IPPROTO_ICMP
+    CC_ICMP  = 3,              // SOCK_RAW     + IPPROTO_ICMP (IPv6 → IPPROTO_ICMPV6)
 } ccsocket_protocol_t;
 ```
 
@@ -184,6 +184,7 @@ ccsocket_t ccsocket2(ccsocket_family_t domain, ccsocket_protocol_t proto, ccsock
   - `domain`：`CC_UNIX` / `CC_INET4` / `CC_INET6`
   - `proto`：`CC_TCP` / `CC_UDP` / `CC_ICMP`
   - `flags`：`CC_NOFLAG` / `CC_CLOEXEC` / `CC_NONBLOCK`
+- **IPv6 ICMP**：`domain=CC_INET6` + `proto=CC_ICMP` 时使用 `IPPROTO_ICMPV6`（58）替代 `IPPROTO_ICMP`（1），系统未定义该常量时降级为 `-1`。
 - **返回值**：有效套接字句柄，失败返回 `INVALID_SOCKET`。
 
 #### `ccsocketpair1`
@@ -347,8 +348,12 @@ ccsocket_family_t ccsocket_get_family(ccsocket_t s);
 ```c
 ccsocket_family_t ccsocket_get_version(const char *addr);
 ```
-- **说明**：解析 IP 字符串判断其地址族（IPv4 / IPv6）。
-- **参数**：`addr` 为 `NULL` 时返回 `CC_FAMILY_INVALID` 并设 `errno = EINVAL`。
+- **说明**：解析字符串判断地址族。
+- **返回值**：
+  - `CC_INET4` — IPv4 地址（如 `"1.1.1.1"`）。
+  - `CC_INET6` — IPv6 地址（如 `"::1"`）。
+  - `CC_UNIX` — Unix 域套接字路径（仅在非 Windows 下，通过 `stat+` `S_ISSOCK` 检测）。
+  - `CC_FAMILY_INVALID` — `NULL`、非 IP 非套接字路径，设 `errno = EINVAL`。
 
 #### `ccsocket_get_error`
 ```c
@@ -409,7 +414,7 @@ void ccsocket_freeaddrinfo(ccaddrinfo_t *addrlist);
 |---|---|---|
 | `ccsizeof` | `int ccsizeof(const struct sockaddr_storage*)` | 根据 `ss_family` 返回 sockaddr 实际大小 |
 | `ccsocket2addr` | `bool ccsocket2addr(const struct sockaddr_storage*, char*, uint16_t*)` | 从 sockaddr 提取 IP 和端口 |
-| `ccsocket_wrap_ip_and_port` | `int ccsocket_wrap_ip_and_port(...)` | 将 IP 字符串 + 端口填充到 sockaddr |
+| `ccsocket_wrap_ip_and_port` | `bool ccsocket_wrap_ip_and_port(...)` | 将 IP 字符串 + 端口填充到 sockaddr |
 | `_ccsocket_set_flags` | `int _ccsocket_set_flags(ccsocket_t, ccsocket_flags_t, bool)` | 设置/清除套接字标志 |
 | `_ccsocket_get_family` | `int _ccsocket_get_family(ccsocket_t, struct sockaddr_storage*)` | 获取套接字地址族 |
 | `ccsocket_listen_internal` | `bool ccsocket_listen_internal(ccsocket_t, const char*, uint16_t)` | 内部 bind + listen |
