@@ -39,65 +39,86 @@ newoption {
   description = "Build with ICMP echo/reply module",
 }
 
--- ── Helpers ──────────────────────────────────────────────
-
-local function cc_build(name, kind_, src, linklibs, targetname_, depends)
-  project(name)
-    kind(kind_)
-    language("C")
-    files(src)
-
-    if targetname_ then
-      targetname(targetname_)
-    end
-
-    if linklibs then
-      links(linklibs)
-    end
-
-    if depends then
-      dependson(depends)
-    end
-
-    filter "system:linux or bsd or macosx"
-      pic "On"
-
-    filter "system:solaris"
-      pic "On"
-      links { "socket", "sendfile" }
-
-    filter {}
-end
-
 -- ── Source sets ──────────────────────────────────────────
 
-local headers = { "ccsocket.h" }
-local sources = { "ccsocket.c" }
-local liblinks = {}
+local lib_sources = { "ccsocket.c", "ccsocket.h" }
+local lib_links   = {}
 
--- OpenSSL (optional)
 if _OPTIONS["WITH_OSSL"] then
-  table.insert(sources, "cctls.c")
-  table.insert(headers, "cctls.h")
-  table.insert(liblinks, "ssl")
-  table.insert(liblinks, "crypto")
+  table.insert(lib_sources, "cctls.c")
+  table.insert(lib_sources, "cctls.h")
+  table.insert(lib_links,   "ssl")
+  table.insert(lib_links,   "crypto")
 end
 
--- ICMP module (default on)
 if _OPTIONS["WITH_ICMP"] ~= "off" then
-  table.insert(sources, "ccicmp.c")
-  table.insert(headers, "ccicmp.h")
+  table.insert(lib_sources, "ccicmp.c")
+  table.insert(lib_sources, "ccicmp.h")
+end
+
+-- c-source files only (strip .h for object-only builds)
+local lib_csrc = {}
+for _, f in ipairs(lib_sources) do
+  if f:match("%.c$") then
+    table.insert(lib_csrc, f)
+  end
+end
+
+-- testmain sources: main.c + all library .c files (linked as objects)
+local test_sources = { "main.c" }
+for _, f in ipairs(lib_csrc) do
+  table.insert(test_sources, f)
 end
 
 -- ── Targets ─────────────────────────────────────────────
 
-cc_build("ccsocket-static", "StaticLib",
-  sources, liblinks, "ccsocket")
+-- static library (no PIC)
+project "ccsocket-static"
+  kind "StaticLib"
+  language "C"
+  files(lib_sources)
+  targetdir "build"
+  objdir "build/obj/static"
+  targetname "ccsocket"
+  links(lib_links)
 
-cc_build("ccsocket-dynamic", "SharedLib",
-  sources, liblinks, "ccsocket",
-  { "ccsocket-static" })
+  filter "system:linux or bsd or macosx"
+    pic "Off"
 
-cc_build("testmain", "ConsoleApp",
-  { "main.c" }, { "ccsocket" }, "main",
-  { "ccsocket-static", "ccsocket-dynamic" })
+  filter "system:solaris"
+    links { "socket", "sendfile" }
+
+  filter {}
+
+-- shared library (PIC)
+project "ccsocket-dynamic"
+  kind "SharedLib"
+  language "C"
+  files(lib_sources)
+  targetdir "build"
+  objdir "build/obj/dynamic"
+  targetname "ccsocket"
+  links(lib_links)
+
+  filter "system:linux or bsd or macosx"
+    pic "On"
+
+  filter "system:solaris"
+    pic "On"
+    links { "socket", "sendfile" }
+
+  filter {}
+
+-- test executable (links library .o files directly, no .a or .so dependency)
+project "testmain"
+  kind "ConsoleApp"
+  language "C"
+  files(test_sources)
+  targetdir "build"
+  objdir "build/obj/testmain"
+  targetname "main"
+
+  filter "system:solaris"
+    links { "socket", "sendfile" }
+
+  filter {}

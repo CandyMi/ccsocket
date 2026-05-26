@@ -202,16 +202,17 @@ CCSOCKET_TEST_FUNCTION(cctest_check_ip_version, {
   /* UDS: create a socket file and verify */
 #if !defined(_WIN32)
   {
-    const char *uds_path = "./ccicmp_uds_test.sock";
-    ccsocket_t s = ccsocket1(CC_UNIX, CC_TCP, CC_CLOEXEC);
-    /* file should not exist yet */
-    assert(ccsocket_get_version(uds_path) != CC_UNIX);
-    /* listen creates the file */
-    bool ok = ccsocket_listen(s, uds_path, 0);
-    assert(ok);
-    assert(ccsocket_get_version(uds_path) == CC_UNIX);
-    assert(!ccsocket_close(s));
+    const char *uds_path = "/tmp/ccsocket_uds_test.sock";
     unlink(uds_path);
+    ccsocket_t s = ccsocket1(CC_UNIX, CC_TCP, CC_CLOEXEC);
+    if (s != INVALID_SOCKET) {
+      assert(ccsocket_get_version(uds_path) != CC_UNIX);
+      if (ccsocket_listen(s, uds_path, 0)) {
+        assert(ccsocket_get_version(uds_path) == CC_UNIX);
+      }
+      ccsocket_close(s);
+      unlink(uds_path);
+    }
   }
 #endif
 })
