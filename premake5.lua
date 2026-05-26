@@ -8,6 +8,10 @@ workspace "ccsocket"
 
   startproject "testmain"
 
+  filter "system:windows"
+    targetprefix ""
+    buildoptions { "/source-charset:utf-8" }
+
   filter "configurations:Debug"
     defines { "DEBUG" }
     symbols "On"
@@ -17,79 +21,83 @@ workspace "ccsocket"
     defines { "NDEBUG" }
     optimize "On"
 
-  filter { "system:windows" }
-    targetprefix ""
+  filter "toolset:msc*"
     buildoptions { "/source-charset:utf-8" }
+
+  filter { "toolset:not msc*" }
+    buildoptions { "-std=c99" }
+
+-- ── Options ──────────────────────────────────────────────
 
 newoption {
   trigger = "WITH_OSSL",
-  value = "VALUE",
-  description = "ccsocket with tls",
+  description = "Build with OpenSSL (TLS support)",
 }
 
-local function ccbuild (
-  project_name, project_type,
-  project_language, project_files,
-  project_links, project_filename,
-  preject_output, project_depend
-)
-  project(project_name)
-    kind(project_type)
-    language(project_language)
-    files(project_files)
+newoption {
+  trigger = "WITH_ICMP",
+  description = "Build with ICMP echo/reply module",
+}
 
-    targetdir "build"
-    if preject_output then
-      location(preject_output)
-      targetdir(preject_output)
+-- ── Helpers ──────────────────────────────────────────────
+
+local function cc_build(name, kind_, src, linklibs, targetname_, depends)
+  project(name)
+    kind(kind_)
+    language("C")
+    files(src)
+
+    if targetname_ then
+      targetname(targetname_)
     end
 
-    if project_links then
-      links(project_links)
-      libdirs({ path.getabsolute(preject_output), '/usr/local/lib' })
+    if linklibs then
+      links(linklibs)
     end
 
-    if project_filename then
-      targetname(project_filename)
+    if depends then
+      dependson(depends)
     end
 
-    if project_depend then
-      dependson(project_depend)
-    end
-
-    filter "not system:windows"
+    filter "system:linux or bsd or macosx"
       pic "On"
-      -- 设置 rpath 标志
-      linkoptions {
-        "-Wl,-rpath,./",
-        "-Wl,-rpath,./build",
-      }
+
+    filter "system:solaris"
+      pic "On"
+      links { "socket", "sendfile" }
+
+    filter {}
 end
 
-local libsrc = {'ccsocket.c', 'ccsocket.h'}
-local ossl
+-- ── Source sets ──────────────────────────────────────────
+
+local headers = { "ccsocket.h" }
+local sources = { "ccsocket.c" }
+local liblinks = {}
+
+-- OpenSSL (optional)
 if _OPTIONS["WITH_OSSL"] then
-  libsrc[#libsrc+1] = "cctls.c"
-  libsrc[#libsrc+1] = "cctls.h"
-  ossl = {}
-  ossl[#ossl+1] = "ssl"
-  ossl[#ossl+1] = "crypto"
+  table.insert(sources, "cctls.c")
+  table.insert(headers, "cctls.h")
+  table.insert(liblinks, "ssl")
+  table.insert(liblinks, "crypto")
 end
 
-ccbuild(
-  'ccsocket-static', 'StaticLib', 'C',
-  libsrc, ossl, 'ccsocket', 'build'
-)
+-- ICMP module (default on)
+if _OPTIONS["WITH_ICMP"] ~= "off" then
+  table.insert(sources, "ccicmp.c")
+  table.insert(headers, "ccicmp.h")
+end
 
-ccbuild(
-  'ccsocket-dynamic', 'SharedLib', 'C',
-  libsrc, ossl, 'ccsocket', 'build',
-  {'ccsocket-static'}
-)
+-- ── Targets ─────────────────────────────────────────────
 
-ccbuild(
-  'testmain', 'ConsoleApp', 'C',
-  {'main.c', 'ccsocket.h'},
-  {'ccsocket'}, 'main', 'build',
-  {'ccsocket-static', 'ccsocket-dynamic'}
-)
+cc_build("ccsocket-static", "StaticLib",
+  sources, liblinks, "ccsocket")
+
+cc_build("ccsocket-dynamic", "SharedLib",
+  sources, liblinks, "ccsocket",
+  { "ccsocket-static" })
+
+cc_build("testmain", "ConsoleApp",
+  { "main.c" }, { "ccsocket" }, "main",
+  { "ccsocket-static", "ccsocket-dynamic" })
