@@ -129,6 +129,12 @@ typedef enum {
 /* close ccsocket */
 CCSOCKET_EXPORT int ccsocket_close(ccsocket_t s);
 
+#if _WIN32
+/* pipe from ccsocketpair */
+#define pipe(fds) ccsocket_pipe(fds)
+CCSOCKET_EXPORT int ccsocket_pipe(ccsocket_t sv[2]);
+#endif
+
 /* create socketpair base `SOCK_STREAM` */
 #define ccsocketpair(fds, flags) ccsocketpair1((fds), (ccsocket_flags_t)(flags))
 /* `ccsocketpair` ABI (Try to avoid using it directly.) */

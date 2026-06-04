@@ -447,6 +447,17 @@ bool ccsocket_listen1(ccsocket_t s, const char *ip, uint16_t port)
   return ccsocket_listen_internal(s, ip, port);
 }
 
+#if _WIN32
+int ccsocket_pipe(ccsocket_t sv[2])
+{
+  bool ok = ccsocketpair1(sv);
+  if (!ok) return SOCKET_ERROR;
+  shutdown(sv[0], SD_SEND);
+  shutdown(sv[1], SD_RECEIVE);
+  return 0;
+}
+#endif
+
 /* like socketpair */
 bool ccsocketpair1(ccsocket_t sv[2], ccsocket_flags_t flags)
 {
