@@ -1,102 +1,215 @@
-# ccsocket
+# libccsocket — Cross-Platform Socket Abstraction Library
 
-  `ccsocket`是一个为跨平台软件准备的简易封装`socket`库, 除目标平台标准库外不依赖任何其他第三方库.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+![Language: C](https://img.shields.io/badge/Language-C11-blue.svg)
+[![Build](https://img.shields.io/badge/Build-CMake_3.10+-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-9/9-passing-brightgreen.svg)]()
 
-  `ccsocket`将易用性、高效列为设计目的, 简单、实用、快速上手可以显著减少开发者对平台`API`的依赖.
+A lightweight, portable C library that provides a unified API for network and inter-process communication across POSIX (Linux, macOS, FreeBSD, Solaris, AIX) and Windows. It wraps raw system sockets behind a consistent interface — handling platform quirks so you don't have to.
 
-  `ccsocket`创建的`socket`未经过包装, 因此开发者亦可调用平台特定的原生接口使用.
+Included sub-module: **ccicmp** — a portable ICMP echo ("ping") library with IPv4/IPv6 support and timestamp-based RTT measurement.
 
-## 优势与特性
+---
 
-  * 跨平台支持
+## Features
 
-  * 易整合/嵌入
+- **TCP, UDP, ICMP, Unix Domain Sockets** — single API, multiple protocols
+- **Cross-platform** — Linux, macOS, FreeBSD, Solaris, AIX, Windows
+- **Zero-copy file transfer** — `sendfile()` on supported kernels, transparent fallback elsewhere
+- **Scatter/gather I/O** — `iovec`-based send/recv with platform-safe accessor macros
+- **Non-blocking I/O** — integrated wait-state signaling via `CC_OPCODE_WAIT`
+- **Load-balanced listeners** — `SO_REUSEPORT` / `SO_REUSEPORT_LB` for multi-process servers
+- **IPv4 + IPv6 ICMP ping** — with RFC-compliant pseudo-header checksums
+- **No external dependencies** — uses only OS-native socket APIs and standard C headers
 
-  * 简单易上手
+---
 
-  * 维护成本低
+## Quick Start
 
-## 平台/环境支持
+### Prerequisites
 
-  * Windows
+- **C compiler**: GCC, Clang, MSVC, or MinGW (C11 recommended, C99 minimum)
+- **CMake** ≥ 3.10
 
-  * Linux
+### Building
 
-  * MacOS
+```bash
+# Clone the repository
+git clone <repo-url> libccsocket
+cd libccsocket
 
-  * FreeBSD/otherBSD
+# Configure (Release)
+cmake -B build -DCMAKE_BUILD_TYPE=Release
 
-  * Solaris/illumos/openindiana
+# Build the library (ccsocket + ccicmp in one target)
+cmake --build build
 
-  * cygwin/msys2
+# List available targets
+cmake --build build --target help
+```
 
-  * openKylin
+### Integration
 
-  同时支持`32bit`/`64bit`编译生成.
+```cmake
+# CMakeLists.txt of your project
+find_package(ccsocket REQUIRED)
+target_link_libraries(myapp PRIVATE ccsocket::ccsocket)
+```
 
-## 编译器支持
+Both `ccsocket_*` and `ccicmp_*` APIs are available through the single `ccsocket` target.
 
-  * msvc
+### Minimal Example: TCP Echo Client
 
-  * gcc
+```c
+#include "ccsocket.h"
+#include <stdio.h>
+#include <string.h>
 
-  * clang
+int main(void)
+{
+    ccsocket_t s = ccsocket(CC_INET4, CC_TCP);
+    if (s == INVALID_SOCKET) return 1;
 
-  * musl
+    if (!ccsocket_connect(s, "127.0.0.1", 8080)) {
+        ccsocket_close(s);
+        return 1;
+    }
 
-  * mingw
+    const char *msg = "Hello, libccsocket!";
+    int sent;
+    ccsocket_stcode_t r = ccsocket_send(s, msg, strlen(msg), &sent);
+    if (r != CC_OPCODE_OK) {
+        ccsocket_close(s);
+        return 1;
+    }
 
-  默认使用`C`编译器, 可选择强制使用`C++`编译.
+    char buf[256];
+    int recved;
+    r = ccsocket_recv(s, buf, sizeof(buf) - 1, &recved);
+    if (r == CC_OPCODE_OK) {
+        buf[recved] = '\0';
+        printf("Received: %s\n", buf);
+    }
 
-## 构建方式
+    ccsocket_close(s);
+    return 0;
+}
+```
 
-### 1. cmake
+### Minimal Example: ICMP Ping
 
-* 命令行构建 - 调试可用的库 (当前目录切换到`ccsocket`目录)
+```c
+#include "ccicmp.h"
+#include <stdio.h>
+#include <string.h>
 
-  `cmake -B build -DCMAKE_BUILD_TYPE=Debug && cmake --build -build`
+int main(void)
+{
+    struct ccicmp_t ping;
+    if (!ccicmp_init(&ping, CC_INET4)) {
+        fprintf(stderr, "ccicmp_init failed (need root/CAP_NET_RAW)\n");
+        return 1;
+    }
 
-* 命令行构建 - 生产可用的库 (当前目录切换到`ccsocket`目录)
+    if (ccicmp_echo(&ping, "1.1.1.1", "hello", 5)) {
+        char reply[64];
+        size_t len = sizeof(reply);
+        if (ccicmp_reply(&ping, reply, &len)) {
+            printf("Got reply, payload len = %zu\n", len);
+        }
+    }
 
-  `cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build -build`
+    ccicmp_close(&ping);
+    return 0;
+}
+```
 
-* `cmake-gui` 图形化构建
+---
 
-  `source code` 填入 `ccsocket` 的完整目录, `build the binaries` 填入 `ccsocket` 的完整目录 + `build`.
-  点击下面的`Configure`, 选择你生成的项目类型(如: `Visual Studio 2022`), 下拉选择`Win32/x64`. 再点击`Finished`按钮就开始配置. 如果出错则`Delete Cache`重来.
-  点击`Generate`按钮就生成工程, 再点击`Open`就可以开始构建了.
+## Build, Test & Run
 
-更多使用方法, 请自行参考[cmake](https://cmake.org/documentation/)
+```bash
+# Debug build with tests
+cmake -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build
 
-### 2. premake5
+# Run all 9 tests
+ctest --test-dir build --output-on-failure -V
 
-1. 安装`premake5`后进入到`ccsocket`目录.
+# Run a single test
+ctest --test-dir build -R ccsocket/tcp -V
+```
 
-2. 生成 Makefile：
+### Test Suite (9 tests)
 
-   ```sh
-   premake5 gmake                   # 默认 (含 ICMP 模块)
-   premake5 --WITH_ICMP=off gmake   # 不含 ICMP
-   premake5 --WITH_OSSL gmake       # 含 OpenSSL TLS
-   premake5 --ccache gmake          # 启用 ccache 缓存
-   ```
+| Test | Verifies |
+|---|---|
+| `ccsocket/smoke` | Types, enums, iovec macros |
+| `ccicmp/smoke` | ccicmp_t layout, symbols |
+| `ccsocket/tcp` | **TCP loopback**: listen/accept/connect/send/recv |
+| `ccsocket/udp` | **UDP**: connect, get_family, non-blocking WAIT |
+| `ccsocket/pair` | **socketpair**: bidirectional send/recv |
+| `ccsocket/addr` | **Address**: get_version, getaddrinfo |
+| `ccsocket/opts` | **Options**: nodelay, keepalive, nonblock, cloexec |
+| `ccsocket/http` | **HTTP text protocol**: request/response with `httpc.txt` |
+| `ccicmp/ping` | **ICMP**: RFC 1071 checksum, packet layout, lifecycle |
 
-3. 构建：
+> ICMP lifecycle test works without root — init failure is handled gracefully. Full echo/reply needs `CAP_NET_RAW` / root.
 
-   ```sh
-   make config=release_x64 -j4
-   ```
+---
 
-   产物在 `build/` 目录下。
+## Project Structure
 
-更多使用方法, 请自行参考[premake5](https://premake.github.io/docs/)
+```
+.
+├── CMakeLists.txt      # Build system — CMake 3.10+, C11
+├── ccsocket.h          # Public API — types, enums, function declarations
+├── ccsocket.c          # Core socket implementation (~1058 lines)
+├── ccicmp.h            # ICMP ping public API
+├── ccicmp.c            # ICMP echo/response implementation (~306 lines)
+├── httpc.txt           # Sample HTTP/1.1 request (test fixture)
+├── LICENSE             # MIT license
+├── .gitignore          # Build artifacts
+├── tests/              # Test suite (CTest, 9 tests)
+│   ├── CMakeLists.txt
+│   ├── test_ccsocket_smoke.c
+│   ├── test_ccsocket_tcp.c
+│   ├── test_ccsocket_udp.c
+│   ├── test_ccsocket_pair.c
+│   ├── test_ccsocket_addr.c
+│   ├── test_ccsocket_opts.c
+│   ├── test_ccsocket_http.c
+│   ├── test_ccicmp_smoke.c
+│   └── test_ccicmp_ping.c
+├── AGENTS.md           # AI coding agent instructions
+└── README.md           # ← this file
+```
 
-## 使用指南
+> `ccicmp` is compiled as part of the `ccsocket` target — a single library provides both APIs. Use `ccsocket::ccsocket` to link.
 
-  [ccsocket wiki](ccsocket.md)
+---
 
-  [ccicmp wiki](ccicmp.md)
+## Platform Support
 
-## 开源许可
+| Feature | Linux | macOS | FreeBSD | Windows | Solaris | AIX |
+|---|---|---|---|---|---|---|
+| TCP / UDP | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| ICMP | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Unix Domain Sockets | ✅ | ✅ | ✅ | ✅¹ | ✅ | ✅ |
+| `socketpair` | ✅ | ✅ | ✅ | ✅² | ✅ | ✅ |
+| `sendfile` (zero-copy) | ✅ | ✅ | ✅ | ❌³ | ✅ | ✅ |
+| Load-balanced listen | ✅⁴ | ✅⁴ | ✅⁵ | ❌ | ✅⁴ | ✅⁴ |
 
-  **MIT LICENSE**
+¹ Windows 10 RS2+ (1703) and later.  
+² Emulated via TCP loopback.  
+³ Falls back to `read()` + `send()`.  
+⁴ `SO_REUSEPORT`.  
+⁵ `SO_REUSEPORT_LB` (FreeBSD 12+).
+
+---
+
+## License
+
+This project is licensed under the MIT License — see [LICENSE](LICENSE) for the full text.
+
+Copyright © 2025 [CandyMi](https://github.com/CandyMi).

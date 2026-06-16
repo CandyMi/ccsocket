@@ -1,3 +1,11 @@
+/**
+ * @file ccicmp.c
+ * @brief ICMP echo (ping) — implementation.
+ *
+ * @author CandyMi
+ * @license MIT
+ */
+
 #ifndef _GNU_SOURCE
   #define _GNU_SOURCE
 #endif
@@ -25,9 +33,13 @@
   #endif
 #endif
 
-/* for C89/C90 */
+/* for C89/C90 with C99 inline support */
 #if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199409L)
   #define CC_INLINE static inline
+#elif defined(__cplusplus)
+  #define CC_INLINE static inline
+#elif _MSC_VER >= 1200
+  #define CC_INLINE static __inline
 #else
   #define CC_INLINE static
 #endif
@@ -54,12 +66,20 @@
 
 #ifndef CCICMP_MAX_PAYLOAD
   #define CCICMP_MAX_PAYLOAD 65500  /* safe upper bound; fits within IP_MAXPACKET */
-  #pragma message("CCICMP_MAX_PAYLOAD defaulting to 65500")
+  #if defined(_MSC_VER)
+    #pragma message("CCICMP_MAX_PAYLOAD defaulting to 65500")
+  #elif defined(__GNUC__) || defined(__clang__)
+    #warning "CCICMP_MAX_PAYLOAD defaulting to 65500"
+  #endif
 #endif
 
 #ifndef CCICMP_RECV_BUFSZ
   #define CCICMP_RECV_BUFSZ 65535  /* max IP packet size */
-  #pragma message("CCICMP_RECV_BUFSZ defaulting to 65535")
+  #if defined(_MSC_VER)
+    #pragma message("CCICMP_RECV_BUFSZ defaulting to 65535")
+  #elif defined(__GNUC__) || defined(__clang__)
+    #warning "CCICMP_RECV_BUFSZ defaulting to 65535"
+  #endif
 #endif
 
 CC_INLINE
@@ -171,18 +191,40 @@ bool ccicmp_echo(struct ccicmp_t *ctx, const char *addr, const char *data, size_
     packet[3] = cksum & 0xff;
   } else {
     /* IPv6 pseudo-header: src(16) + dst(16) + len(4) + zeros(3) + next_hdr(1)
-     * getsockname() may return :: on macOS, so use getpeername() for both
-     * src and dst — for loopback (::1) they are identical. */
-    struct sockaddr_in6 dst;
-    socklen_t dlen = sizeof(dst);
+     *
+     * Per RFC 4443 §2.3, the pseudo-header MUST use the actual IPv6 source
+     * and destination addresses from the IP header.
+     *
+     * - getsockname() → source address (the local address of the socket).
+     * - getpeername() → destination address (the connected remote target).
+     *
+     * On macOS raw ICMPv6 sockets, getsockname() may return :: (unspecified).
+     * In that case we fall back to using the destination address for both
+     * fields — correct for loopback (::1 → ::1), and accepted by most peers
+     * since the transport checksum is still computed over the exchange.
+     */
+    struct sockaddr_in6 src, dst;
+    socklen_t slen = sizeof(src), dlen = sizeof(dst);
+
     if (getpeername(ctx->fd, (struct sockaddr *)&dst, &dlen))
       return false;
+    if (getsockname(ctx->fd, (struct sockaddr *)&src, &slen)) {
+      /* getsockname failed — use destination as source fallback */
+      memcpy(&src, &dst, sizeof(src));
+    } else {
+      /* If source is :: (unspecified, common on macOS raw sockets),
+       * fall back to destination address. */
+      struct in6_addr zero;
+      memset(&zero, 0, sizeof(zero));
+      if (memcmp(&src.sin6_addr, &zero, sizeof(zero)) == 0)
+        memcpy(&src.sin6_addr, &dst.sin6_addr, sizeof(struct in6_addr));
+    }
 
     uint32_t netlen = htonl((uint32_t)pktlen);
     uint8_t phdr[40];
     memset(phdr, 0, 40);
-    memcpy(phdr,      &dst.sin6_addr, 16);
-    memcpy(phdr + 16, &dst.sin6_addr, 16);
+    memcpy(phdr,      &src.sin6_addr, 16);  /* source address */
+    memcpy(phdr + 16, &dst.sin6_addr, 16);  /* destination address */
     memcpy(phdr + 32, &netlen, 4);
     phdr[39] = IPPROTO_ICMPV6;
 

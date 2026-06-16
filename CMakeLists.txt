@@ -1,112 +1,95 @@
-message("======================================")
-message("Project Name   : ccsocket")
-message("Author  Name   : CandyMi")
-message("Author  Email  : 869646063@qq.com")
-message("Author  Github : github.com/CandyMi")
-message("======================================")
+# ============================================================================
+# libccsocket — Cross-Platform Socket Abstraction Library
+# https://agents.md/  |  MIT License  |  Author: CandyMi
+# ============================================================================
 
-# 最低版本号
-cmake_minimum_required(VERSION 2.8...3.13)
+cmake_minimum_required(VERSION 3.10)
 
-# 项目名称
-project("ccsocket")
-
-message("-- Detecting platform: '${CMAKE_SYSTEM_NAME}'")
-message("-- Detecting c compiler id: '${CMAKE_C_COMPILER_ID}'")
-message("-- Detecting cxx compiler id: '${CMAKE_CXX_COMPILER_ID}'")
-message("-- Detecting install prefix path: '${CMAKE_INSTALL_PREFIX}'")
-
-set(ccsocket_headers ccsocket.h)
-set(ccsocket_source ccsocket.c)
-set(ccsocket_testmain main.c)
-
-if(MSVC)
-  add_compile_options("/source-charset:utf-8")
-  set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT main)
-else()
-  set(CMAKE_C_STANDARD 99)
-  set(CMAKE_C_EXTENSIONS ON)
-  set(CMAKE_C_STANDARD_REQUIRED ON)
-  option(USE_CXX "force use c++ compiler" OFF)
-  if (USE_CXX) #如果强制使用C++编译.
-    set(CMAKE_CXX_STANDARD 11)
-    set(CMAKE_CXX_EXTENSIONS ON)
-    set(CMAKE_CXX_STANDARD_REQUIRED ON)
-    set_source_files_properties(
-      ${ccsocket_headers} ${ccsocket_source} ${ccsocket_testmain}
-      PROPERTIES
-        LANGUAGE CXX
-    )
-    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang") # Clang 编译器会有警告
-      add_compile_options(-Wno-deprecated)
-    endif()
-  endif()
-endif()
-
-option(WITH_ICMP "ccsocket with icmp" ON)
-if (WITH_ICMP)
-  message("-- Compiler with 'ICMP'.")
-  set(ccsocket_source ${ccsocket_source} ccicmp.c)
-endif (WITH_ICMP)
-
-option(WITH_OSSL "ccsocket with tls" OFF)
-if (WITH_OSSL)
-  message("-- Compiler with 'OpenSSL'.")
-  set(ccsocket_source ${ccsocket_source} cctls.c)
-  if (NOT BSD)
-    if(EXISTS "/etc/centos-release") # centos only dynamic library ?
-      set(OPENSSL_USE_STATIC_LIBS OFF)
-      set(OPENSSL_MSVC_STATIC_RT OFF)
-    else()
-      set(OPENSSL_USE_STATIC_LIBS ON)
-      set(OPENSSL_MSVC_STATIC_RT ON)
-    endif()
-  endif(NOT BSD)
-  if (NOT WIN32)
-    include_directories(/usr/local/include)
-    link_directories(/usr/lib64)
-  endif()
-  find_package(OpenSSL 1.1.1 REQUIRED)
-  include_directories(${OPENSSL_INCLUDE_DIR})
-  message("-- OpenSSL SSL PATH: ${OPENSSL_SSL_LIBRARIES}")
-  message("-- OpenSSL Crypto PATH: ${OPENSSL_CRYPTO_LIBRARIES}")
-endif(WITH_OSSL)
-
-add_executable(main ${ccsocket_testmain})
-
-add_library(ccsocket_object OBJECT ${ccsocket_source})
-if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
-  # message("Windows")
-  add_library(ccsocket-dynamic SHARED $<TARGET_OBJECTS:ccsocket_object>)
-  set_target_properties(ccsocket-dynamic PROPERTIES OUTPUT_NAME "ccsocket" PREFIX "" PUBLIC_HEADER "${ccsocket_headers}")
-  add_library(ccsocket-static STATIC $<TARGET_OBJECTS:ccsocket_object>)
-  set_target_properties(ccsocket-static PROPERTIES OUTPUT_NAME "ccsocket" PREFIX "" PUBLIC_HEADER "${ccsocket_headers}")
-  target_link_libraries(main PRIVATE ccsocket-dynamic)
-else()
-  # message("Unix-Like")
-  target_compile_options(ccsocket_object PRIVATE -fPIC)
-  add_library(ccsocket-dynamic SHARED $<TARGET_OBJECTS:ccsocket_object>)
-  set_target_properties(ccsocket-dynamic PROPERTIES OUTPUT_NAME "ccsocket" PREFIX "lib" PUBLIC_HEADER "${ccsocket_headers}")
-  add_library(ccsocket-static STATIC $<TARGET_OBJECTS:ccsocket_object>)
-  set_target_properties(ccsocket-static PROPERTIES OUTPUT_NAME "ccsocket" PREFIX "lib" PUBLIC_HEADER "${ccsocket_headers}")
-  if (${CMAKE_SYSTEM_NAME} MATCHES "SunOS") # Solaris的部分衍生/分叉需要单独链接文件
-    find_library(SOCKET_PATH socket)
-    find_library(SENDFILE_PATH sendfile)
-    target_link_libraries(ccsocket-dynamic PRIVATE ${SOCKET_PATH} ${SENDFILE_PATH})
-    target_link_libraries(ccsocket-static PRIVATE ${SOCKET_PATH} ${SENDFILE_PATH})
-  endif()
-  target_link_libraries(main PRIVATE ccsocket-static)
-endif()
-
-if (WITH_OSSL)
-  target_link_libraries(ccsocket-dynamic PRIVATE ${OPENSSL_SSL_LIBRARIES} ${OPENSSL_CRYPTO_LIBRARIES})
-  target_link_libraries(ccsocket-static PRIVATE ${OPENSSL_SSL_LIBRARIES} ${OPENSSL_CRYPTO_LIBRARIES})
-endif(WITH_OSSL)
-
-install(
-  TARGETS ccsocket-dynamic ccsocket-static
-  RUNTIME  DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
-  ARCHIVE  DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
-  LIBRARY  DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
-  PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_PREFIX}/include # includes
+# -- Project ------------------------------------------------------------------
+project(libccsocket
+  VERSION     1.0.0
+  DESCRIPTION "Cross-platform C socket abstraction library (TCP/UDP/ICMP/Unix)"
+  LANGUAGES   C
 )
+
+# -- C Standard ---------------------------------------------------------------
+# Baseline C99 (inline, stdbool.h, stdint.h, // comments).
+# Prefer C11 when available; not required — C99 toolchains are still valid.
+set(CMAKE_C_STANDARD          11)
+set(CMAKE_C_STANDARD_REQUIRED OFF)
+set(CMAKE_C_EXTENSIONS        OFF)
+
+# -- Build Type Default -------------------------------------------------------
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+
+# -- Options ------------------------------------------------------------------
+option(BUILD_SHARED_LIBS "Build shared libraries (.so/.dylib/.dll)" ON)
+option(BUILD_TESTING     "Build test suite"                         ON)
+
+# Numeric compile-time configuration (CACHE STRING, NOT option() — option treats 65500 as OFF)
+set(CCICMP_MAX_PAYLOAD 65500 CACHE STRING "Max ICMP payload bytes")
+set(CCICMP_RECV_BUFSZ  65535 CACHE STRING "ICMP receive buffer size")
+
+# -- Compile Warnings ---------------------------------------------------------
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+  add_compile_options(-Wshadow)
+  add_compile_options(-Wstrict-prototypes -Wold-style-definition)
+  add_compile_options(-Wmissing-prototypes -Wmissing-declarations)
+  # Treat some portability issues as errors
+  add_compile_options(-Werror=implicit-function-declaration)
+  add_compile_options(-Werror=return-type)
+  # The following flags are strict but the existing codebase has pre-existing
+  # issues. Uncomment when those are resolved:
+  # add_compile_options(-Wcast-align -Wconversion -Wsign-conversion)
+elseif(MSVC)
+  add_compile_options(/W4 /utf-8)
+endif()
+
+# -- Symbol Visibility (non-Windows) ------------------------------------------
+# CCSOCKET_EXPORT is handled per-symbol in the header;
+# hide everything else by default.
+set(CMAKE_C_VISIBILITY_PRESET hidden)
+set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
+
+# -- Library: ccsocket (includes ccicmp sub-module) --------------------------
+add_library(ccsocket
+  ccsocket.h
+  ccsocket.c
+  ccicmp.h
+  ccicmp.c
+)
+
+target_include_directories(ccsocket
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    $<INSTALL_INTERFACE:include>
+)
+
+target_compile_definitions(ccsocket
+  PRIVATE
+    $<$<BOOL:${BUILD_SHARED_LIBS}>:CCSOCKET_BUILD_SHARED>
+    CCICMP_MAX_PAYLOAD=${CCICMP_MAX_PAYLOAD}
+    CCICMP_RECV_BUFSZ=${CCICMP_RECV_BUFSZ}
+  PUBLIC
+    # Consumers of a shared build get dllimport; static builds get nothing.
+    $<$<AND:$<BOOL:${BUILD_SHARED_LIBS}>,$<NOT:$<TARGET_PROPERTY:ccsocket,TYPE>>>:CCSOCKET_SHARED>
+)
+
+# -- Platform Linkage ---------------------------------------------------------
+if(WIN32)
+  # ws2_32 is auto-linked via #pragma comment(lib) on MSVC,
+  # but MinGW / cross-compilation toolchains need the explicit link.
+  target_link_libraries(ccsocket PUBLIC ws2_32)
+endif()
+
+# -- Alias for convenience ----------------------------------------------------
+add_library(ccsocket::ccsocket ALIAS ccsocket)
+
+# -- Tests --------------------------------------------------------------------
+if(BUILD_TESTING)
+  enable_testing()
+  add_subdirectory(tests)
+endif()

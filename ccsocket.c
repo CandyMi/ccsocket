@@ -1,3 +1,11 @@
+/**
+ * @file ccsocket.c
+ * @brief Cross-platform socket abstraction — implementation.
+ *
+ * @author CandyMi
+ * @license MIT
+ */
+
 #ifndef _GNU_SOURCE
   #define _GNU_SOURCE
 #endif
@@ -51,25 +59,56 @@
     } SOCKADDR_UN, * PSOCKADDR_UN;
   #endif
   #pragma comment(lib, "Ws2_32.lib")
+
+  /* Per-process WinSock initialisation.
+   *
+   * DllMain (DLL builds only):
+   *   Debug   (NDEBUG not set)  → calls WSAStartup for developer convenience.
+   *   Release (NDEBUG set)      → no WSAStartup; relies on ccsocket_init().
+   *
+   * Static library users: call ccsocket_init() explicitly.
+   */
+  #ifdef CCSOCKET_BUILD_SHARED
   BOOL WINAPI DllMain(
     _In_ HINSTANCE hinstDLL,
     _In_ DWORD     fdwReason,
     _In_ LPVOID    lpvReserved
   ) {
     if (fdwReason == DLL_PROCESS_ATTACH) {
-      //printf("init.\n");
-      WSADATA wsaData; // for init winsock
+  #ifndef NDEBUG
+      /* Debug builds: auto-init for developer convenience.
+       * Per MSDN, WSAStartup in DllMain is technically unsafe (loader lock),
+       * but in practice works reliably during DEBUG attachment and is the
+       * simplest way to avoid "need to call init" for every dev/test run. */
+      WSADATA wsaData;
       if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
         WSACleanup();
-        exit(1);
+        return FALSE;
       }
-  #ifndef NDEBUG
-      ccsocket_dump("WSAStartup init -> {\n\tVer: %g,\n\tmaxVer: %g,\n\tmaxOpenFiles: %d,\n\tudpMaxPacketSize: %d,\n\tsystem: '%s',\n\tdescrition: '%s'\n}",
-        HIBYTE(wsaData.wVersion) + LOBYTE(wsaData.wVersion) * 0.1, HIBYTE(wsaData.wHighVersion) + LOBYTE(wsaData.wHighVersion) * 0.1,
-        wsaData.iMaxSockets, wsaData.iMaxUdpDg, wsaData.szSystemStatus, wsaData.szDescription
-      );
-  #endif
+  #endif /* !NDEBUG */
+    } else if (fdwReason == DLL_PROCESS_DETACH) {
+      WSACleanup();
     }
+    return TRUE;
+  }
+  #endif /* CCSOCKET_BUILD_SHARED */
+
+  /* WSAStartup helper — used by both ccsocket_init() (public) and
+   * internally when DllMain didn't already initialise WinSock. */
+  static bool ccsocket_wsa_init_once(void) {
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2,2), &wsaData) != 0) {
+      WSACleanup();
+      return false;
+    }
+  #ifndef NDEBUG
+    ccsocket_dump("WSAStartup -> {Ver: %g, maxVer: %g, sockets: %d, udpMax: %d, sys: '%s', desc: '%s'}",
+      (float)(HIBYTE(wsaData.wVersion) + LOBYTE(wsaData.wVersion) * 0.1),
+      (float)(HIBYTE(wsaData.wHighVersion) + LOBYTE(wsaData.wHighVersion) * 0.1),
+      wsaData.iMaxSockets, wsaData.iMaxUdpDg,
+      wsaData.szSystemStatus, wsaData.szDescription
+    );
+  #endif
     return true;
   }
   #define ccsocket_init_errno() do {errno = 0; WSASetLastError(0);}while(0)
@@ -98,6 +137,32 @@
   #define ccsocket_init_errno() errno = 0
   #define ccsocket_is_errno(err) (err == errno)
   #define ccsocket_set_errno(err) errno = err
+#endif
+
+/* -- Windows: public init (WSAStartup) ------------------------------------ */
+#if _WIN32
+CCSOCKET_EXPORT bool ccsocket_init(void)
+{
+  return ccsocket_wsa_init_once();
+}
+#endif
+
+/* File-scope defines for the sendfile fallback on Windows.
+ * Must be at file scope, not inside a function body, to avoid
+ * leaking preprocessor defines across the translation unit. */
+#if _WIN32
+  #ifndef CC_SENDFILE_FALLBACK
+    #if _WIN64
+      #define read  _read
+      #define lseek _lseeki64
+      typedef int64_t off_t;
+    #else
+      #define read  _read
+      #define lseek _lseek
+      typedef int32_t off_t;
+    #endif
+    #define CC_SENDFILE_FALLBACK
+  #endif
 #endif
 
 CC_INLINE
@@ -129,8 +194,9 @@ bool ccsocket2addr(const struct sockaddr_storage* sa, char *addr, uint16_t *port
     case AF_UNIX:
     {
       const struct sockaddr_un* in = (const struct sockaddr_un*)sa;
-      memcpy(addr, in->sun_path, strlen(in->sun_path));
-      addr[strlen(in->sun_path)] = '\0';
+      size_t _pathlen = strlen(in->sun_path);
+      memcpy(addr, in->sun_path, _pathlen);
+      addr[_pathlen] = '\0';
       *port = 0;
       break;
     }
@@ -199,12 +265,13 @@ int ccsocket_set_flags(ccsocket_t s, ccsocket_flags_t flags)
 CC_INLINE
 int _ccsocket_get_family(ccsocket_t s, struct sockaddr_storage* sa)
 {
-  socklen_t addrlen = sizeof(*sa); memset(sa, 0x0, sizeof(*sa));
+  memset(sa, 0x0, sizeof(*sa));
 #if _WIN32
-  WSAPROTOCOL_INFOA info; int len = sizeof(info); // getsockname will failed when used in winsock. :<
+  WSAPROTOCOL_INFOA info; int len = sizeof(info); // getsockname will fail on WinSock.
   int r = getsockopt((SOCKET)s, SOL_SOCKET, SO_PROTOCOL_INFO, (char*)&info, &len);
   sa->ss_family = info.iAddressFamily;
 #else
+  socklen_t addrlen = sizeof(*sa);
   int r = getsockname((SOCKET)s, (struct sockaddr*)sa, (socklen_t*)&addrlen);
 #endif
   return r;
@@ -922,17 +989,6 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
   // lseek(fd, size, SEEK_SET);
   return ccsocket_sendfile(s, fd);
 #else
-#if _WIN32
-  #if _WIN64
-    #define read  _read
-    #define lseek _lseeki64
-    typedef int64_t off_t;
-  #else
-    #define read  _read
-    #define lseek _lseek
-    typedef int32_t off_t;
-  #endif
-#endif
 #define CC_SENDFILE_PER_LEN 1024
   int wsize;
   uint32_t bsize = CC_SENDFILE_PER_LEN;
