@@ -140,12 +140,14 @@
 #endif
 
 /* -- Windows: public init (WSAStartup) ------------------------------------ */
-#if _WIN32
 CCSOCKET_EXPORT bool ccsocket_init(void)
 {
+#if _WIN32
   return ccsocket_wsa_init_once();
-}
+#else
+  return true;
 #endif
+}
 
 /* File-scope defines for the sendfile fallback on Windows.
  * Must be at file scope, not inside a function body, to avoid
@@ -514,16 +516,19 @@ bool ccsocket_listen1(ccsocket_t s, const char *ip, uint16_t port)
   return ccsocket_listen_internal(s, ip, port);
 }
 
-#if _WIN32
 int ccsocket_pipe(ccsocket_t sv[2])
 {
-  bool ok = ccsocketpair1(sv);
+  bool ok = ccsocketpair(sv, CC_NOFLAG);
   if (!ok) return SOCKET_ERROR;
+#if _WIN32
   shutdown(sv[0], SD_SEND);
   shutdown(sv[1], SD_RECEIVE);
+#else
+  shutdown(sv[0], SHUT_WR);
+  shutdown(sv[1], SHUT_RD);
+#endif
   return 0;
 }
-#endif
 
 /* like socketpair */
 bool ccsocketpair1(ccsocket_t sv[2], ccsocket_flags_t flags)

@@ -85,6 +85,15 @@ if(WIN32)
   target_link_libraries(ccsocket PUBLIC ws2_32)
 endif()
 
+# Solaris / illumos: socket functions live in libsocket, gethostbyname
+# and related resolver functions live in libnsl.  Without these the
+# linker will emit undefined references for socket(), sendfile(), etc.
+if(CMAKE_SYSTEM_NAME STREQUAL "SunOS")
+  # Socket functions → libsocket, resolver → libnsl, sendfile → libsendfile.
+  # On Solaris 11.4+ sendfile may also reside in libc; linking extra is harmless.
+  target_link_libraries(ccsocket PUBLIC socket nsl sendfile)
+endif()
+
 # -- Alias for convenience ----------------------------------------------------
 add_library(ccsocket::ccsocket ALIAS ccsocket)
 

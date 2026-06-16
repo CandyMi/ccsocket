@@ -35,7 +35,9 @@
   typedef intptr_t ccsocket_t;
 #else
   #define CCSOCKET_EXPORT __attribute__((visibility("default")))
-  #define INVALID_SOCKET (~0)
+  #ifndef INVALID_SOCKET
+    #define INVALID_SOCKET (~0)
+  #endif
   typedef void*   cciovec_buf_t;
   typedef size_t  cciovec_len_t;
   typedef int ccsocket_t;
@@ -156,7 +158,6 @@ typedef enum {
  */
 CCSOCKET_EXPORT int ccsocket_close(ccsocket_t s);
 
-#if _WIN32
 /**
  * @brief Initialise the WinSock library (WSAStartup).
  *
@@ -169,14 +170,19 @@ CCSOCKET_EXPORT int ccsocket_close(ccsocket_t s);
 CCSOCKET_EXPORT bool ccsocket_init(void);
 
 /**
- * @brief Create a pair of connected pipes (Windows only).
+ * @brief Create a pair of connected pipes backed by socket handles.
  *
- * Emulates POSIX pipe() using a TCP loopback socketpair with
- * one endpoint shutdown(SD_SEND) and the other shutdown(SD_RECEIVE).
+ * Emulates POSIX pipe() using a socketpair.  The returned handles
+ * are ccsocket_t values fully compatible with ccsocket_send/recv/close.
  *
- * @param sv  Output array of two socket handles.
+ * Native OS pipe() returns raw file descriptors that CANNOT be used
+ * with the ccsocket API — pipe() is therefore redirected to this
+ * function so that cross-platform code always gets socket handles.
+ *
+ * @param sv  Output array of two connected socket handles.
  * @return 0 on success, SOCKET_ERROR on failure.
  */
+#undef pipe
 #define pipe(fds) ccsocket_pipe(fds)
 CCSOCKET_EXPORT int ccsocket_pipe(ccsocket_t sv[2]);
 
