@@ -179,7 +179,6 @@ CCSOCKET_EXPORT bool ccsocket_init(void);
  */
 #define pipe(fds) ccsocket_pipe(fds)
 CCSOCKET_EXPORT int ccsocket_pipe(ccsocket_t sv[2]);
-#endif
 
 /* create socketpair base `SOCK_STREAM` */
 #define ccsocketpair(fds, flags) ccsocketpair1((fds), (ccsocket_flags_t)(flags))
