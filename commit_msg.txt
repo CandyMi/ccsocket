@@ -1,0 +1,7 @@
+test(ccdns): add compression name test and remove socket dependency
+
+- ccdns_t is now pure algorithm (no ccsocket_t fd), no field renamed to no
+  with guarantee never 0
+- ccdns_init() no longer takes domain parameter
+- Add test_compression_name covering RFC 1035 §4.1.4 pointer chaining
+  (CNAME RDATA + A NAME both use compression to question section)

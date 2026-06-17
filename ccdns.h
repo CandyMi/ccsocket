@@ -64,13 +64,13 @@ typedef struct ccdns_ans {
 /**
  * @brief DNS client context.
  *
- * Manages a UDP socket and an auto-incrementing query identifier.
- * Must be initialised via ccdns_init() before use and closed via
- * ccdns_close() when done.
+ * Pure algorithm state — no socket, no I/O.
+ * Must be initialised via ccdns_init() before use and released
+ * via ccdns_close() when done.  The no field holds the next
+ * query identifier and is never 0 while the context is active.
  */
 typedef struct ccdns_t {
-    ccsocket_t fd;      /**< UDP socket for DNS queries. */
-    uint16_t   reqno;   /**< Auto-incrementing request identifier. */
+    uint16_t no;  /**< Auto-incrementing query identifier (never 0). */
 } ccdns_t;
 
 /* ---- Callback ------------------------------------------------------------ */
@@ -88,20 +88,20 @@ typedef void (*ccdns_callback_t)(void *udata, const ccdns_ans_t *ans);
 /**
  * @brief Initialise a DNS client context.
  *
- * Creates a UDP socket (IPv4) and resets the request counter.
+ * Sets the query identifier counter to 1.  No socket or I/O is created.
  *
  * @param ctx  Uninitialised ccdns_t context pointer (must not be NULL).
- * @return true on success, false on failure.
+ * @return true on success (always).
  */
 CCSOCKET_EXPORT bool ccdns_init(struct ccdns_t *ctx);
 
 /**
- * @brief Destroy a DNS client context and close the underlying socket.
+ * @brief Release a DNS client context.
  *
+ * Resets the identifier counter to 0, marking the context as inactive.
  * After this call, ctx must be re-initialised via ccdns_init() before reuse.
- * Sets ctx->fd to INVALID_SOCKET.
  *
- * @param ctx  ccdns_t context to close (must not be NULL).
+ * @param ctx  ccdns_t context to release (must not be NULL).
  */
 CCSOCKET_EXPORT void ccdns_close(struct ccdns_t *ctx);
 
@@ -109,14 +109,14 @@ CCSOCKET_EXPORT void ccdns_close(struct ccdns_t *ctx);
  * @brief Encode a DNS question into wire-format bytes.
  *
  * Builds a 12-byte DNS header followed by the question section.
- * Uses ctx->reqno as the query ID and increments it.
- * The encoded message can be sent via ccsocket_send().
+ * Uses ctx->no as the query ID and increments it, ensuring no
+ * never wraps to 0.
  *
  * @param ctx     Initialised ccdns_t context.
  * @param buf     Output buffer for the wire-format message.
  * @param buflen  Capacity of buf (recommend CCDNS_MAX_MSG).
  * @param domain  Query domain name (e.g. "example.com").
- * @param qtype   Query record type (CCDNS_A or CCDNS_AAAA).
+ * @param qtype   Query record type (CCDNS_A / CCDNS_AAAA / etc.).
  * @return The encoded message length on success, 0 on failure.
  */
 CCSOCKET_EXPORT uint16_t ccdns_encode(struct ccdns_t *ctx,
@@ -126,12 +126,12 @@ CCSOCKET_EXPORT uint16_t ccdns_encode(struct ccdns_t *ctx,
 /**
  * @brief Decode a DNS response, invoking cb for each answer record.
  *
- * Parses the DNS header, verifies the ID matches the next expected ID
- * (ctx->reqno), checks flags/RCODE, skips the question section, and
- * iterates answer RRs.  For each A/AAAA/NS/CNAME record found, cb is
- * called with a populated ccdns_ans_t.
+ * Parses the DNS header, verifies the ID matches ctx->no, checks
+ * flags/RCODE, skips the question section, and iterates answer RRs.
+ * For each A / AAAA / NS / CNAME record found, cb is called with a
+ * populated ccdns_ans_t.
  *
- * @param ctx    DNS context (for expected ID via ctx->reqno).
+ * @param ctx    DNS context (for expected ID via ctx->no).
  * @param buf    Wire-format DNS response message.
  * @param len    Length of the response message.
  * @param udata  User pointer forwarded to cb (may be NULL).

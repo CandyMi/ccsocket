@@ -122,11 +122,7 @@ bool ccdns_init(struct ccdns_t *ctx)
     if (!ctx)
         return false;
 
-    ctx->reqno = 0;
-    ctx->fd = ccsocket(CC_INET4, CC_UDP);
-    if (ctx->fd == INVALID_SOCKET)
-        return false;
-
+    ctx->no = 1;
     return true;
 }
 
@@ -134,10 +130,7 @@ void ccdns_close(struct ccdns_t *ctx)
 {
     if (!ctx)
         return;
-    if (ctx->fd != INVALID_SOCKET)
-        ccsocket_close(ctx->fd);
-    ctx->fd = INVALID_SOCKET;
-    ctx->reqno = 0;
+    ctx->no = 0;
 }
 
 uint16_t ccdns_encode(struct ccdns_t *ctx,
@@ -147,7 +140,11 @@ uint16_t ccdns_encode(struct ccdns_t *ctx,
     if (!ctx || !buf || !domain || buflen < DNS_HDR_SZ + 5)
         return 0;
 
-    uint16_t id = ctx->reqno++;
+    uint16_t id = ctx->no++;
+
+    /* Ensure no never wraps to 0 */
+    if (ctx->no == 0)
+        ctx->no = 1;
 
     /* ---- Header ---- */
     memset(buf, 0, DNS_HDR_SZ);
@@ -189,7 +186,7 @@ int ccdns_decode(struct ccdns_t *ctx,
     uint16_t qdcnt  = ((uint16_t)buf[DNS_HDR_QDCNT] << 8) | buf[DNS_HDR_QDCNT + 1];
     uint16_t ancnt  = ((uint16_t)buf[DNS_HDR_ANCNT] << 8) | buf[DNS_HDR_ANCNT + 1];
 
-    uint16_t expected_id = ctx->reqno;
+    uint16_t expected_id = ctx->no;
     if (id != expected_id)
         return -2;
 

@@ -36,7 +36,7 @@
 ├── ccicmp.h            # Public API header — ICMP context struct, function declarations
 ├── ccicmp.c            # Implementation — ~374 lines, ICMP echo/response logic
 ├── ccdns.h             # Public API header — DNS client context, function declarations
-├── ccdns.c             # Implementation — DNS wire-format encode/decode (RFC 1035)
+├── ccdns.c             # Implementation — ~287 lines, DNS wire-format encode/decode (RFC 1035)
 ├── httpc.txt           # Sample HTTP/1.1 request payload (test fixture)
 ├── LICENSE             # MIT license text
 ├── .gitignore          # Build artifacts, IDE configs, object files
@@ -260,7 +260,7 @@ Test infrastructure is live via CTest. Test sources live in [`tests/`](tests/).
 | `ccsocket/opts` | Functional | nodelay/reuseaddr/keepalive/nonblock/cloexec (valid + invalid handle) |
 | `ccsocket/http` | **Combined protocol** | HTTP request/response round-trip using `httpc.txt` as template |
 | `ccicmp/ping` | **Combined (ICMP)** | IPv4/IPv6 checksum (RFC 1071 / RFC 4443), packet layout, init/close lifecycle |
-| `ccdns/test` | **DNS client** | DNS query encode, response decode (A record), ID mismatch check, lifecycle |
+| `ccdns/test` | **DNS client** | DNS query encode, response decode (A/AAAA/CNAME), compression ptr (RFC 1035 §4.1.4), lifecycle |
 
 ### 5.2 Test Conventions
 
