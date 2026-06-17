@@ -73,9 +73,13 @@ static uint16_t dns_name_encode(uint8_t *dst, uint16_t dstlen, const char *src)
 /**
  * @brief Decode a DNS name from wire format, handling compression pointers
  *        (RFC 1035 §4.1.4).
+ *
+ * Compression pointer offsets are relative to the start of the DNS
+ * message (base_off bytes into buf).  In TCP mode, base_off is 2;
+ * in UDP mode it is 0.
  */
 static int dns_name_decode(const uint8_t *msg, uint16_t *pos, uint16_t len,
-                            char *dst, uint16_t dstlen)
+                            uint16_t base_off, char *dst, uint16_t dstlen)
 {
     uint16_t di = 0;
     uint16_t p  = *pos;
@@ -91,11 +95,12 @@ static int dns_name_decode(const uint8_t *msg, uint16_t *pos, uint16_t len,
         if ((b & 0xC0) == 0xC0) {
             if (p + 2 > len) return -1;
             uint16_t off = ((uint16_t)(b & 0x3F) << 8) | msg[p + 1];
+            uint16_t jumped_to = (uint16_t)(off + base_off);
             if (!jumped) {
                 *pos = p + 2;
                 jumped = 1;
             }
-            p = off;
+            p = jumped_to;
             if (++cnt > 16) return -1;
             continue;
         }
@@ -128,6 +133,7 @@ bool ccdns_init(struct ccdns_t *ctx)
     ctx->last = 0;
     ctx->edns_payload = 0;
     ctx->edns_flags = 0;
+    ctx->tcp = false;
     return true;
 }
 
@@ -139,6 +145,7 @@ void ccdns_close(struct ccdns_t *ctx)
     ctx->last = 0;
     ctx->edns_payload = 0;
     ctx->edns_flags = 0;
+    ctx->tcp = false;
 }
 
 void ccdns_set_edns(struct ccdns_t *ctx, uint16_t payload, uint8_t flags)
@@ -148,11 +155,22 @@ void ccdns_set_edns(struct ccdns_t *ctx, uint16_t payload, uint8_t flags)
     ctx->edns_flags = flags;
 }
 
+void ccdns_set_tcp(struct ccdns_t *ctx, bool enable)
+{
+    if (!ctx) return;
+    ctx->tcp = enable;
+}
+
 uint16_t ccdns_encode(struct ccdns_t *ctx,
                        uint8_t *buf, uint16_t buflen,
                        const char *domain, ccdns_type_t qtype)
 {
-    if (!ctx || !buf || !domain || buflen < DNS_HDR_SZ + 5)
+    if (!ctx || !buf || !domain)
+        return 0;
+
+    uint16_t off = ctx->tcp ? 2 : 0;
+
+    if (buflen < off + DNS_HDR_SZ + 5)
         return 0;
 
     uint16_t id = ctx->no++;
@@ -163,15 +181,15 @@ uint16_t ccdns_encode(struct ccdns_t *ctx,
         ctx->no = 1;
 
     /* ---- Header ---- */
-    memset(buf, 0, DNS_HDR_SZ);
-    buf[DNS_HDR_ID]     = (uint8_t)(id >> 8);
-    buf[DNS_HDR_ID + 1] = (uint8_t)(id & 0xFF);
-    buf[DNS_HDR_FLAGS]     = (uint8_t)(DNS_FLAG_QR_QUERY >> 8);
-    buf[DNS_HDR_FLAGS + 1] = (uint8_t)(DNS_FLAG_QR_QUERY & 0xFF);
-    buf[DNS_HDR_QDCNT + 1] = 1;  /* QDCOUNT = 1 */
+    memset(buf + off, 0, DNS_HDR_SZ);
+    buf[off + DNS_HDR_ID]     = (uint8_t)(id >> 8);
+    buf[off + DNS_HDR_ID + 1] = (uint8_t)(id & 0xFF);
+    buf[off + DNS_HDR_FLAGS]     = (uint8_t)(DNS_FLAG_QR_QUERY >> 8);
+    buf[off + DNS_HDR_FLAGS + 1] = (uint8_t)(DNS_FLAG_QR_QUERY & 0xFF);
+    buf[off + DNS_HDR_QDCNT + 1] = 1;  /* QDCOUNT = 1 */
 
     /* ---- Question: QNAME ---- */
-    uint16_t pos = DNS_HDR_SZ;
+    uint16_t pos = off + DNS_HDR_SZ;
     uint16_t nlen = dns_name_encode(buf + pos, buflen - pos, domain);
     if (nlen == 0)
         return 0;
@@ -188,7 +206,7 @@ uint16_t ccdns_encode(struct ccdns_t *ctx,
 
     /* ---- OPT Pseudo-Record (EDNS, RFC 6891) ---- */
     if (ctx->edns_payload > 0) {
-        buf[DNS_HDR_ADCNT + 1] = 1; // EDNS add count must > 0;        
+        buf[off + DNS_HDR_ADCNT + 1] = 1; // EDNS add count must > 0;        
         if (pos + 11 > buflen) return 0;
         buf[pos]     = 0x00;                       /* NAME = root */
         buf[pos + 1] = 0x00; buf[pos + 2] = 0x29;  /* TYPE = OPT(41) */
@@ -202,6 +220,13 @@ uint16_t ccdns_encode(struct ccdns_t *ctx,
         pos += 11;
     }
 
+    /* ---- TCP length prefix (RFC 1035 §4.2.2) ---- */
+    if (ctx->tcp) {
+        uint16_t bodylen = pos - off;
+        buf[0] = (uint8_t)(bodylen >> 8);
+        buf[1] = (uint8_t)(bodylen & 0xFF);
+    }
+
     return pos;
 }
 
@@ -209,14 +234,19 @@ int ccdns_decode(struct ccdns_t *ctx,
                   const uint8_t *buf, uint16_t len,
                   void *udata, ccdns_callback_t cb)
 {
-    if (!ctx || !buf || len < DNS_HDR_SZ)
+    if (!ctx || !buf)
+        return -3;
+
+    uint16_t off = ctx->tcp ? 2 : 0;
+
+    if (len < off + DNS_HDR_SZ)
         return -3;
 
     /* ---- Parse Header ---- */
-    uint16_t id     = ((uint16_t)buf[DNS_HDR_ID] << 8) | buf[DNS_HDR_ID + 1];
-    uint16_t flags  = ((uint16_t)buf[DNS_HDR_FLAGS] << 8) | buf[DNS_HDR_FLAGS + 1];
-    uint16_t qdcnt  = ((uint16_t)buf[DNS_HDR_QDCNT] << 8) | buf[DNS_HDR_QDCNT + 1];
-    uint16_t ancnt  = ((uint16_t)buf[DNS_HDR_ANCNT] << 8) | buf[DNS_HDR_ANCNT + 1];
+    uint16_t id     = ((uint16_t)buf[off + DNS_HDR_ID] << 8) | buf[off + DNS_HDR_ID + 1];
+    uint16_t flags  = ((uint16_t)buf[off + DNS_HDR_FLAGS] << 8) | buf[off + DNS_HDR_FLAGS + 1];
+    uint16_t qdcnt  = ((uint16_t)buf[off + DNS_HDR_QDCNT] << 8) | buf[off + DNS_HDR_QDCNT + 1];
+    uint16_t ancnt  = ((uint16_t)buf[off + DNS_HDR_ANCNT] << 8) | buf[off + DNS_HDR_ANCNT + 1];
 
     uint16_t expected_id = ctx->last ? ctx->last : ctx->no;
     if (id != expected_id)
@@ -227,7 +257,7 @@ int ccdns_decode(struct ccdns_t *ctx,
         return -1;
 
     /* ---- Skip Question Section ---- */
-    uint16_t pos = DNS_HDR_SZ;
+    uint16_t pos = off + DNS_HDR_SZ;
     for (uint16_t i = 0; i < qdcnt; i++) {
         while (pos < len) {
             uint8_t b = buf[pos];
@@ -248,7 +278,7 @@ int ccdns_decode(struct ccdns_t *ctx,
         ans.cls = 0;
 
         /* NAME */
-        if (dns_name_decode(buf, &pos, len, ans.domain, sizeof(ans.domain)) != 0)
+        if (dns_name_decode(buf, &pos, len, off, ans.domain, sizeof(ans.domain)) != 0)
             return -1;
 
         if (pos + 10 > len) return -1;
@@ -296,9 +326,40 @@ int ccdns_decode(struct ccdns_t *ctx,
             /* Parse the target domain from RDATA (may use compression) */
             uint16_t save = pos;
             char target[CCDNS_MAX_NAME];
-            if (dns_name_decode(buf, &save, len, target, sizeof(target)) == 0) {
+            if (dns_name_decode(buf, &save, len, off, target, sizeof(target)) == 0) {
                 memcpy(ans.domain, target, sizeof(ans.domain));
             }
+            break;
+        }
+        case CCDNS_MX: {
+            /* Preference (2 bytes) + exchange domain (wire format) */
+            if (rdlength >= 3) {
+                ans.pref = ((uint16_t)buf[pos] << 8) | buf[pos + 1];
+                uint16_t save = pos + 2;
+                char target[CCDNS_MAX_NAME];
+                if (dns_name_decode(buf, &save, len, off, target, sizeof(target)) == 0) {
+                    memcpy(ans.domain, target, sizeof(ans.domain));
+                }
+            }
+            break;
+        }
+        case CCDNS_TXT: {
+            uint16_t end = pos + rdlength;
+            uint16_t di = 0;
+            uint16_t rp = pos;
+            while (rp < end && di < sizeof(ans.txt) - 1) {
+                uint8_t slen = buf[rp++];
+                if (rp + slen > end) break;
+                uint16_t copy = slen;
+                if (copy > sizeof(ans.txt) - 1 - di)
+                    copy = (uint16_t)(sizeof(ans.txt) - 1 - di);
+                memcpy(ans.txt + di, buf + rp, copy);
+                di += copy;
+                rp += slen;
+                if (rp < end && di < sizeof(ans.txt) - 1)
+                    ans.txt[di++] = '\n';
+            }
+            ans.txt[di] = '\0';
             break;
         }
         default:

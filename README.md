@@ -2,8 +2,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![Language: C](https://img.shields.io/badge/Language-C99-blue.svg)
-[![Build](https://img.shields.io/badge/Build-CMake_3.10+-brightgreen.svg)]()
-[![Tests](https://img.shields.io/badge/Tests-9/9-passing-brightgreen.svg)]()
+[![Build](https://img.shields.io/badge/Build-CMake_3.0+-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-10/10-passing-brightgreen.svg)]()
 
 A lightweight, portable C library that provides a unified API for network and inter-process communication across POSIX (Linux, macOS, FreeBSD, Solaris, AIX) and Windows. It wraps raw system sockets behind a consistent interface — handling platform quirks so you don't have to.
 
@@ -143,7 +143,7 @@ ctest --test-dir build --output-on-failure -V
 ctest --test-dir build -R ccsocket/tcp -V
 ```
 
-### Test Suite (9 tests)
+### Test Suite (10 tests)
 
 | Test | Verifies |
 |---|---|
@@ -156,6 +156,7 @@ ctest --test-dir build -R ccsocket/tcp -V
 | `ccsocket/opts` | **Options**: nodelay, keepalive, nonblock, cloexec |
 | `ccsocket/http` | **HTTP text protocol**: request/response with `httpc.txt` |
 | `ccicmp/ping` | **ICMP (IPv4 + IPv6)**: RFC 1071 / RFC 4443 checksum, packet layout, lifecycle |
+| `ccdns/test` | **DNS**: query encode, response decode (A/AAAA/CNAME/TXT/MX), compression ptr, TCP mode |
 
 > ICMP lifecycle test works without root — init failure is handled gracefully. Full echo/reply needs `CAP_NET_RAW` / root.
 
@@ -165,15 +166,17 @@ ctest --test-dir build -R ccsocket/tcp -V
 
 ```
 .
-├── CMakeLists.txt      # Build system — CMake 3.10+, C11
+├── CMakeLists.txt      # Build system — CMake 3.0+, C99
 ├── ccsocket.h          # Public API — types, enums, function declarations
 ├── ccsocket.c          # Core socket implementation (~1058 lines)
 ├── ccicmp.h            # ICMP ping public API
 ├── ccicmp.c            # ICMP echo/response implementation (~374 lines)
+├── ccdns.h             # DNS client public API
+├── ccdns.c             # DNS client encode/decode (~366 lines)
 ├── httpc.txt           # Sample HTTP/1.1 request (test fixture)
 ├── LICENSE             # MIT license
 ├── .gitignore          # Build artifacts
-├── tests/              # Test suite (CTest, 9 tests)
+├── tests/              # Test suite (CTest, 10 tests)
 │   ├── CMakeLists.txt
 │   ├── test_ccsocket_smoke.c
 │   ├── test_ccsocket_tcp.c
@@ -183,12 +186,13 @@ ctest --test-dir build -R ccsocket/tcp -V
 │   ├── test_ccsocket_opts.c
 │   ├── test_ccsocket_http.c
 │   ├── test_ccicmp_smoke.c
-│   └── test_ccicmp_ping.c
+│   ├── test_ccicmp_ping.c
+│   └── test_ccdns.c
 ├── AGENTS.md           # AI coding agent instructions
 └── README.md           # ← this file
 ```
 
-> `ccicmp` is compiled as part of the `ccsocket` target — a single library provides both APIs. Use `ccsocket::ccsocket` to link.
+> `ccicmp` and `ccdns` are compiled as part of the `ccsocket` target — a single library provides both APIs. Use `ccsocket::ccsocket` to link.
 
 ---
 

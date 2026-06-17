@@ -36,7 +36,7 @@
 ├── ccicmp.h            # Public API header — ICMP context struct, function declarations
 ├── ccicmp.c            # Implementation — ~374 lines, ICMP echo/response logic
 ├── ccdns.h             # Public API header — DNS client context, function declarations
-├── ccdns.c             # Implementation — ~287 lines, DNS wire-format encode/decode (RFC 1035)
+├── ccdns.c             # Implementation — ~366 lines, DNS wire-format encode/decode (RFC 1035), TCP mode (RFC 1035 §4.2.2), TXT (RFC 1035 §3.3), MX (RFC 1035 §3.3.9)
 ├── httpc.txt           # Sample HTTP/1.1 request payload (test fixture)
 ├── LICENSE             # MIT license text
 ├── .gitignore          # Build artifacts, IDE configs, object files
@@ -52,7 +52,8 @@
 │   ├── test_ccsocket_opts.c
 │   ├── test_ccsocket_http.c
 │   ├── test_ccicmp_smoke.c
-│   └── test_ccicmp_ping.c
+│   ├── test_ccicmp_ping.c
+│   └── test_ccdns.c
 ├── AGENTS.md           # ← this file
 └── README.md           # Project introduction (English)
 ```
@@ -351,7 +352,20 @@ Per [RFC 4443 §2.3](https://datatracker.ietf.org/doc/html/rfc4443#section-2.3),
 - **Windows ICMP**: Raw socket ICMP is restricted; `ccicmp_init()` will fail. Callers must handle this case.
 - **sendfile**: macOS/FreeBSD/Linux/Solaris use kernel `sendfile()` (zero-copy). Windows and other platforms fall back to `read()` + `send()`.
 
-### 7.4 ICMP DGRAM vs RAW Semantics
+### 7.4 DNS over TCP (RFC 1035 §4.2.2)
+
+DNS over TCP uses a **2-byte length prefix** before the standard DNS wire-format message.  The prefix is the message body length in network byte order, not including the 2 bytes themselves.
+
+The TCP mode is controlled via the `tcp` field in `ccdns_t` (set via `ccdns_set_tcp()`):
+
+- **`ccdns_encode()`**: when `tcp == true`, writes the DNS message body at `buf[2..]` and fills `buf[0..1]` with the body length.  The return value is the total bytes written (body + 2).
+- **`ccdns_decode()`**: when `tcp == true`, skips `buf[0..1]` before parsing the DNS header and records.
+
+**Compression pointer handling**: DNS name compression (RFC 1035 §4.1.4) uses offsets relative to the start of the DNS message, not the TCP transport buffer.  The internal `dns_name_decode()` accepts a `base_off` parameter to compensate — `base_off` is 0 for UDP mode and 2 for TCP mode.
+
+**EDNS interaction**: EDNS OPT records are technically unnecessary over TCP (no 512-byte limit), but remain supported.  The EDNS and TCP flags are independent — callers may enable both.
+
+### 7.5 ICMP DGRAM vs RAW Semantics
 
 `ccicmp_init()` automatically selects the best available socket type:
 

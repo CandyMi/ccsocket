@@ -1,7 +1,0 @@
-feat(ccdns): add EDNS (RFC 6891) support via ccdns_set_edns()
-
-- ccdns_t: add edns_payload / edns_flags fields
-- ccdns_set_edns(): enable EDNS with configurable payload size and flags
-- ccdns_encode(): append OPT pseudo-record when EDNS is enabled
-- CCDNS_MAX_MSG: 512 → 4096 (EDNS-aware buffer size)
-- ccsocket_getaddrinfo(): enable EDNS with 4096 payload
