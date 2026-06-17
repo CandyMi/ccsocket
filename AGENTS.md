@@ -14,7 +14,7 @@
 | **Project** | `libccsocket` — Cross-platform Socket Abstraction Library |
 | **Author** | [CandyMi](https://github.com/CandyMi) |
 | **License** | MIT — see [LICENSE](LICENSE) |
-| **Language** | C (C11 build standard, C99 minimum) |
+| **Language** | C (C99 build standard) |
 | **Status** | Active development |
 | **Repository** | *(private / self-hosted)* |
 
@@ -30,7 +30,7 @@
 
 ```
 .
-├── CMakeLists.txt      # Root build system — CMake 3.10+, C11 standard
+├── CMakeLists.txt      # Root build system — CMake 3.0+, C99 standard
 ├── ccsocket.h          # Public API header — types, enums, macros, exported function declarations
 ├── ccsocket.c          # Implementation — ~1058 lines, all platform backends in one translation unit
 ├── ccicmp.h            # Public API header — ICMP context struct, function declarations
@@ -89,7 +89,7 @@ POSIX Sockets            WinSock2 (Windows)
 
 ### 3.1 Language Dialect
 
-- **Build standard**: C11 (`CMAKE_C_STANDARD 11`); C99 minimum (`CMAKE_C_STANDARD_REQUIRED OFF`)
+- **Build standard**: C99 (`CMAKE_C_STANDARD 99`)
 - **Extensions**: C99 `inline` functions and `//` line comments are used freely. C89/C90 compatibility is preserved where practical but not enforced.
 - **C++ Interop**: All public headers are wrapped in `extern "C"` for C++ consumers
 
@@ -186,12 +186,12 @@ Multiple commits addressing the same feature should be squashed before pushing.
 
 ## 4. Build System
 
-Build defined in [`CMakeLists.txt`](CMakeLists.txt) — CMake ≥ 3.10, C11 (C99 fallback).
+Build defined in [`CMakeLists.txt`](CMakeLists.txt) — CMake ≥ 3.0, C99.
 
 ### 4.1 Toolchain Requirements
 
 - **C compiler**: GCC, Clang, MSVC, or MinGW — C99 mode or later
-- **CMake**: ≥ 3.10
+- **CMake**: ≥ 3.0
 - **No external dependencies**: The library uses only OS-native socket APIs and standard C headers
 
 ### 4.2 Build Commands

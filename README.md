@@ -1,7 +1,7 @@
 # libccsocket — Cross-Platform Socket Abstraction Library
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Language: C](https://img.shields.io/badge/Language-C11-blue.svg)
+![Language: C](https://img.shields.io/badge/Language-C99-blue.svg)
 [![Build](https://img.shields.io/badge/Build-CMake_3.10+-brightgreen.svg)]()
 [![Tests](https://img.shields.io/badge/Tests-9/9-passing-brightgreen.svg)]()
 
@@ -28,8 +28,8 @@ Included sub-module: **ccicmp** — a portable ICMP echo ("ping") library with I
 
 ### Prerequisites
 
-- **C compiler**: GCC, Clang, MSVC, or MinGW (C11 recommended, C99 minimum)
-- **CMake** ≥ 3.10
+- **C compiler**: GCC, Clang, MSVC, or MinGW (C99)
+- **CMake** ≥ 3.0
 
 ### Building
 

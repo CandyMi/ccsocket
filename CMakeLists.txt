@@ -3,7 +3,7 @@
 # https://agents.md/  |  MIT License  |  Author: CandyMi
 # ============================================================================
 
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.0)
 
 # -- Project ------------------------------------------------------------------
 project(libccsocket
@@ -13,7 +13,7 @@ project(libccsocket
 )
 
 # -- C Standard ---------------------------------------------------------------
-set(CMAKE_C_STANDARD          11)
+set(CMAKE_C_STANDARD          99)
 set(CMAKE_C_STANDARD_REQUIRED OFF)
 set(CMAKE_C_EXTENSIONS        OFF)
 
@@ -114,9 +114,11 @@ endif()
 
 # -- Consumer alias (shared or static depending on BUILD_SHARED_LIBS) ---------
 add_library(ccsocket INTERFACE)
-target_link_libraries(ccsocket INTERFACE
-  $<IF:$<BOOL:${BUILD_SHARED_LIBS}>,ccsocket_shared,ccsocket_static>
-)
+if(BUILD_SHARED_LIBS)
+  target_link_libraries(ccsocket INTERFACE ccsocket_shared)
+else()
+  target_link_libraries(ccsocket INTERFACE ccsocket_static)
+endif()
 add_library(ccsocket::ccsocket ALIAS ccsocket)
 
 # -- Tests --------------------------------------------------------------------
