@@ -36,7 +36,7 @@
 ├── ccicmp.h            # Public API header — ICMP context struct, function declarations
 ├── ccicmp.c            # Implementation — ~374 lines, ICMP echo/response logic
 ├── ccdns.h             # Public API header — DNS client context, function declarations
-├── ccdns.c             # Implementation — ~366 lines, DNS wire-format encode/decode (RFC 1035), TCP mode (RFC 1035 §4.2.2), TXT (RFC 1035 §3.3), MX (RFC 1035 §3.3.9)
+├── ccdns.c             # Implementation — ~374 lines, DNS wire-format encode/decode (RFC 1035), TCP mode (RFC 1035 §4.2.2), TXT (RFC 1035 §3.3), MX (RFC 1035 §3.3.9)
 ├── httpc.txt           # Sample HTTP/1.1 request payload (test fixture)
 ├── LICENSE             # MIT license text
 ├── .gitignore          # Build artifacts, IDE configs, object files
@@ -309,7 +309,7 @@ ctest --test-dir build --output-on-failure -V
 
 ### 6.3 Documentation Coherence
 
-- **Every public API change** (add, remove, or modify a `CCSOCKET_EXPORT` function or a public type/enum/macro) **must** be documented via Doxygen in the source header (`.h`).
+- **Every public API change** (add, remove, or modify a `CC*_EXPORT` function or a public type/enum/macro) **must** be documented via Doxygen in the source header (`.h`).
 - Changes that affect platform behavior (e.g., a new `#ifdef` branch for a new OS) must be described in the Doxygen comment of the affected function(s).
 - Internal (non-exported) changes do not require header documentation changes, but should be described in the commit message.
 
@@ -385,6 +385,7 @@ The runtime helper `ccsocket_get_protocol()` returns the OS socket type (`SOCK_D
 | Goal | Steps |
 |---|---|
 | Add a new socket option | (1) Add enum/constant to `ccsocket.h` (Doxygen), (2) implement in `ccsocket.c` with `#if` guards, (3) export via `CCSOCKET_EXPORT` |
+| Add a new DNS feature | (1) Add to `ccdns.h` (Doxygen), (2) implement in `ccdns.c`, (3) export via `CCDNS_EXPORT`, (4) update `AGENTS.md` §2 and §5 |
 | Port to a new OS | (1) Add `#if`/`#elif`/`#else` blocks in `ccsocket.c`, (2) update CC_INLINE / socket types if needed, (3) test via compile, (4) update platform matrix in Doxygen comments and §7.4 here |
 | Add a new ICMP feature | (1) Add to `ccicmp.h` (Doxygen), (2) implement in `ccicmp.c`, (3) add compile-time macro to §4.3 if configurable, (4) rebuild — ccicmp is compiled as part of ccsocket |
 

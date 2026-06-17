@@ -13,7 +13,21 @@
 #ifndef CCDNS_H
 #define CCDNS_H
 
-#include "ccsocket.h"
+#include <stdbool.h>
+#include <stdint.h>
+
+/* ---- Export decoration ---- */
+#if defined(_WIN32)
+  #if defined(CCDNS_BUILD_SHARED)
+    #define CCDNS_EXPORT __declspec(dllexport)
+  #elif defined(CCDNS_SHARED)
+    #define CCDNS_EXPORT __declspec(dllimport)
+  #else
+    #define CCDNS_EXPORT
+  #endif
+#else
+  #define CCDNS_EXPORT __attribute__((visibility("default")))
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -110,7 +124,7 @@ typedef void (*ccdns_callback_t)(void *udata, const ccdns_ans_t *ans);
  * @param ctx  Uninitialised ccdns_t context pointer (must not be NULL).
  * @return true on success (always).
  */
-CCSOCKET_EXPORT bool ccdns_init(struct ccdns_t *ctx);
+CCDNS_EXPORT bool ccdns_init(struct ccdns_t *ctx);
 
 /**
  * @brief Release a DNS client context.
@@ -120,7 +134,7 @@ CCSOCKET_EXPORT bool ccdns_init(struct ccdns_t *ctx);
  *
  * @param ctx  ccdns_t context to release (must not be NULL).
  */
-CCSOCKET_EXPORT void ccdns_close(struct ccdns_t *ctx);
+CCDNS_EXPORT void ccdns_close(struct ccdns_t *ctx);
 
 /**
  * @brief Enable EDNS (RFC 6891) on subsequent queries.
@@ -136,7 +150,7 @@ CCSOCKET_EXPORT void ccdns_close(struct ccdns_t *ctx);
  *                (recommend 4096, 0 to disable).
  * @param flags   EDNS flags (e.g. 0x80 for DNSSEC OK).
  */
-CCSOCKET_EXPORT void ccdns_set_edns(struct ccdns_t *ctx,
+CCDNS_EXPORT void ccdns_set_edns(struct ccdns_t *ctx,
                                      uint16_t payload, uint8_t flags);
 
 /**
@@ -151,7 +165,7 @@ CCSOCKET_EXPORT void ccdns_set_edns(struct ccdns_t *ctx,
  * @param ctx     Initialised ccdns_t context.
  * @param enable  true to enable TCP mode, false to disable (UDP mode).
  */
-CCSOCKET_EXPORT void ccdns_set_tcp(struct ccdns_t *ctx, bool enable);
+CCDNS_EXPORT void ccdns_set_tcp(struct ccdns_t *ctx, bool enable);
 
 /**
  * @brief Encode a DNS question into wire-format bytes.
@@ -168,7 +182,7 @@ CCSOCKET_EXPORT void ccdns_set_tcp(struct ccdns_t *ctx, bool enable);
  * @param qtype   Query record type (CCDNS_A / CCDNS_AAAA / etc.).
  * @return The encoded message length on success, 0 on failure.
  */
-CCSOCKET_EXPORT uint16_t ccdns_encode(struct ccdns_t *ctx,
+CCDNS_EXPORT uint16_t ccdns_encode(struct ccdns_t *ctx,
                                        uint8_t *buf, uint16_t buflen,
                                        const char *domain, ccdns_type_t qtype);
 
@@ -188,7 +202,7 @@ CCSOCKET_EXPORT uint16_t ccdns_encode(struct ccdns_t *ctx,
  * @return Number of answer records delivered to cb on success,
  *         -1 on parse error, -2 on ID mismatch, -3 on truncation.
  */
-CCSOCKET_EXPORT int ccdns_decode(struct ccdns_t *ctx,
+CCDNS_EXPORT int ccdns_decode(struct ccdns_t *ctx,
                                   const uint8_t *buf, uint16_t len,
                                   void *udata, ccdns_callback_t cb);
 

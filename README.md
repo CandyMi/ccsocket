@@ -172,7 +172,7 @@ ctest --test-dir build -R ccsocket/tcp -V
 ├── ccicmp.h            # ICMP ping public API
 ├── ccicmp.c            # ICMP echo/response implementation (~374 lines)
 ├── ccdns.h             # DNS client public API
-├── ccdns.c             # DNS client encode/decode (~366 lines)
+├── ccdns.c             # DNS client encode/decode (~374 lines)
 ├── httpc.txt           # Sample HTTP/1.1 request (test fixture)
 ├── LICENSE             # MIT license
 ├── .gitignore          # Build artifacts

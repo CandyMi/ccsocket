@@ -12,10 +12,7 @@
 #include "ccdns.h"
 
 #include <string.h>
-#include <stdlib.h>
-#include <stdint.h>
 #include <stdio.h>
-#include <errno.h>
 
 #if defined(_MSC_VER) && _MSC_VER < 1900
   #define ccdns_snprintf _snprintf
