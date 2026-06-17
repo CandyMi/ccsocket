@@ -57,6 +57,7 @@ int main(void)
     {
         char buf[16];
         int n = 0;
+        (void)buf; (void)n;
         assert(ccsocket_recv(cli, buf, sizeof(buf), &n) == CC_OPCODE_WAIT);
     }
 

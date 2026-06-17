@@ -35,6 +35,7 @@ int main(void)
     char buf[512];
     int n;
     (void)addr; (void)port;
+    (void)HTTP_REQ; (void)HTTP_RES;
 
     /* --- Server: create, bind, listen --- */
     srv = ccsocket(CC_INET4, CC_TCP);
@@ -55,9 +56,8 @@ int main(void)
 
     /* --- Client: send HTTP request --- */
     {
-        size_t reqlen = strlen(HTTP_REQ);
-        assert(ccsocket_send(cli, HTTP_REQ, reqlen, &n) == CC_OPCODE_OK);
-        assert(n == (int)reqlen);
+        assert(ccsocket_send(cli, HTTP_REQ, strlen(HTTP_REQ), &n) == CC_OPCODE_OK);
+        assert(n == (int)strlen(HTTP_REQ));
     }
 
     /* --- Server: receive and verify HTTP request --- */
@@ -75,9 +75,8 @@ int main(void)
 
     /* --- Server: send HTTP response --- */
     {
-        size_t reslen = strlen(HTTP_RES);
-        assert(ccsocket_send(acc, HTTP_RES, reslen, &n) == CC_OPCODE_OK);
-        assert(n == (int)reslen);
+        assert(ccsocket_send(acc, HTTP_RES, strlen(HTTP_RES), &n) == CC_OPCODE_OK);
+        assert(n == (int)strlen(HTTP_RES));
     }
 
     /* --- Client: receive and verify HTTP response --- */

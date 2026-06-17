@@ -23,25 +23,25 @@ int main(void)
 
     /* --- Send sv[0] → sv[1] --- */
     const char *msg_a = "Hello from A";
-    size_t len_a = strlen(msg_a);
-    assert(ccsocket_send(sv[0], msg_a, len_a, &n) == CC_OPCODE_OK);
-    assert(n == (int)len_a);
+    (void)msg_a;
+    assert(ccsocket_send(sv[0], msg_a, strlen(msg_a), &n) == CC_OPCODE_OK);
+    assert(n == (int)strlen(msg_a));
 
     n = 0;
     assert(ccsocket_recv(sv[1], buf, sizeof(buf), &n) == CC_OPCODE_OK);
-    assert(n == (int)len_a);
+    assert(n == (int)strlen(msg_a));
     buf[n] = '\0';
     assert(strcmp(buf, msg_a) == 0);
 
     /* --- Send sv[1] → sv[0] --- */
     const char *msg_b = "Hello from B";
-    size_t len_b = strlen(msg_b);
-    assert(ccsocket_send(sv[1], msg_b, len_b, &n) == CC_OPCODE_OK);
-    assert(n == (int)len_b);
+    (void)msg_b;
+    assert(ccsocket_send(sv[1], msg_b, strlen(msg_b), &n) == CC_OPCODE_OK);
+    assert(n == (int)strlen(msg_b));
 
     n = 0;
     assert(ccsocket_recv(sv[0], buf, sizeof(buf), &n) == CC_OPCODE_OK);
-    assert(n == (int)len_b);
+    assert(n == (int)strlen(msg_b));
     buf[n] = '\0';
     assert(strcmp(buf, msg_b) == 0);
 

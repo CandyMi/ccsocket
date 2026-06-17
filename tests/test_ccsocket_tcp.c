@@ -49,16 +49,17 @@ int main(void)
 
     /* --- Send data: client → server --- */
     const char *tx = "Hello TCP!";
-    size_t txlen = strlen(tx);
+    (void)tx;
     int wsent = 0;
-    assert(ccsocket_send(cli, tx, txlen, &wsent) == CC_OPCODE_OK);
+    assert(ccsocket_send(cli, tx, strlen(tx), &wsent) == CC_OPCODE_OK);
+    (void)wsent;
     assert(wsent > 0);
 
     /* --- Receive data: server side --- */
     char rx[64];
     int rrecv = 0;
     assert(ccsocket_recv(acc, rx, sizeof(rx), &rrecv) == CC_OPCODE_OK);
-    assert(rrecv == (int)txlen);
+    assert(rrecv == (int)strlen(tx));
     rx[rrecv] = '\0';
     assert(strcmp(rx, tx) == 0);
 
