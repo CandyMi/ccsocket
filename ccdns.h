@@ -19,21 +19,47 @@
 extern "C" {
 #endif
 
-/* ---- DNS Constants ------------------------------------------------------ */
+/* ---- Constants ----------------------------------------------------------- */
 
-/** @brief DNS query type: IPv4 address record. */
-#define CCDNS_A     1
-/** @brief DNS query type: IPv6 address record. */
-#define CCDNS_AAAA  28
-/** @brief DNS class: Internet (IN). */
-#define CCDNS_CLASS_IN 1
-
-/** @brief Maximum DNS message size (UDP, RFC 1035 §4.2.1). */
-#define CCDNS_MAX_MSG   512
+/** @brief Maximum address string length (IPv6 colon-hex). */
+#define CCDNS_MAX_ADDR  65
 /** @brief Maximum domain name length (RFC 1035 §2.3.4). */
 #define CCDNS_MAX_NAME  255
+/** @brief Maximum DNS message size (UDP, RFC 1035 §4.2.1). */
+#define CCDNS_MAX_MSG   512
 
-/* ---- DNS Context -------------------------------------------------------- */
+/* ---- Enums --------------------------------------------------------------- */
+
+/** @brief DNS class codes (RFC 1035 §3.2.4). */
+typedef enum ccdns_class {
+    CCDNS_CLASS_IN = 1   /**< Internet (IN). */
+} ccdns_class_t;
+
+/** @brief DNS record types (RFC 1035 §3.2.2). */
+typedef enum ccdns_type {
+    CCDNS_A     = 1,     /**< IPv4 address record. */
+    CCDNS_NS    = 2,     /**< Name server record. */
+    CCDNS_CNAME = 5,     /**< Canonical name (alias) record. */
+    CCDNS_AAAA  = 28     /**< IPv6 address record. */
+} ccdns_type_t;
+
+/* ---- DNS Answer Record --------------------------------------------------- */
+
+/**
+ * @brief A parsed DNS resource record from the answer section.
+ *
+ * Populated by ccdns_decode() and delivered via callback.
+ * Unused fields are zeroed (e.g. ip for CNAME, domain for A).
+ */
+typedef struct ccdns_ans {
+    char          ip[CCDNS_MAX_ADDR];    /**< Address string (A/AAAA) or empty. */
+    char          domain[CCDNS_MAX_NAME];/**< Owner name or CNAME target. */
+    uint32_t      ttl;                   /**< Time-to-live in seconds. */
+    ccdns_type_t  type;                  /**< Record type (A / NS / CNAME / AAAA). */
+    ccdns_class_t cls;                   /**< Record class. */
+} ccdns_ans_t;
+
+/* ---- DNS Context --------------------------------------------------------- */
 
 /**
  * @brief DNS client context.
@@ -47,12 +73,22 @@ typedef struct ccdns_t {
     uint16_t   reqno;   /**< Auto-incrementing request identifier. */
 } ccdns_t;
 
+/* ---- Callback ------------------------------------------------------------ */
+
+/**
+ * @brief Callback invoked by ccdns_decode() for each answer record.
+ *
+ * @param udata  User-supplied context pointer (passed through from decode).
+ * @param ans    Parsed answer record (valid only during the callback).
+ */
+typedef void (*ccdns_callback_t)(void *udata, const ccdns_ans_t *ans);
+
 /* ---- Public API ---------------------------------------------------------- */
 
 /**
  * @brief Initialise a DNS client context.
  *
- * Creates a UDP socket (IPv4) and initialises the request counter.
+ * Creates a UDP socket (IPv4) and resets the request counter.
  *
  * @param ctx  Uninitialised ccdns_t context pointer (must not be NULL).
  * @return true on success, false on failure.
@@ -73,42 +109,39 @@ CCSOCKET_EXPORT void ccdns_close(struct ccdns_t *ctx);
  * @brief Encode a DNS question into wire-format bytes.
  *
  * Builds a 12-byte DNS header followed by the question section.
- * Uses ctx->reqno as the query ID and increments it atomically.
+ * Uses ctx->reqno as the query ID and increments it.
  * The encoded message can be sent via ccsocket_send().
  *
  * @param ctx     Initialised ccdns_t context.
  * @param buf     Output buffer for the wire-format message.
  * @param buflen  Capacity of buf (recommend CCDNS_MAX_MSG).
  * @param domain  Query domain name (e.g. "example.com").
- * @param qtype   Query type: CCDNS_A or CCDNS_AAAA.
+ * @param qtype   Query record type (CCDNS_A or CCDNS_AAAA).
  * @return The encoded message length on success, 0 on failure.
  */
 CCSOCKET_EXPORT uint16_t ccdns_encode(struct ccdns_t *ctx,
                                        uint8_t *buf, uint16_t buflen,
-                                       const char *domain, uint16_t qtype);
+                                       const char *domain, ccdns_type_t qtype);
 
 /**
- * @brief Decode a DNS response and extract the first address record.
+ * @brief Decode a DNS response, invoking cb for each answer record.
  *
- * Parses the DNS header, verifies the ID matches expected_id, checks the
- * QR/TC/RCODE flags, skips the question section, and searches answer RRs
- * for the first A (IPv4) or AAAA (IPv6) record.
+ * Parses the DNS header, verifies the ID matches the next expected ID
+ * (ctx->reqno), checks flags/RCODE, skips the question section, and
+ * iterates answer RRs.  For each A/AAAA/NS/CNAME record found, cb is
+ * called with a populated ccdns_ans_t.
  *
- * On success, addr receives a NUL-terminated string:
- *   - IPv4: dotted decimal ("1.2.3.4")
- *   - IPv6: colon-hex ("2001:db8::1")
- *
- * @param buf          Wire-format DNS response message.
- * @param len          Length of the response message.
- * @param expected_id  Expected query ID (from ccdns_encode).
- * @param addr         Output buffer for the address string (>= 64 bytes).
- * @param addrlen      In: capacity of addr. Out: written bytes (excluding NUL).
- * @return 0 on success, -1 on decode error, -2 on ID mismatch,
- *         -3 on truncation, -4 on no address record found.
+ * @param ctx    DNS context (for expected ID via ctx->reqno).
+ * @param buf    Wire-format DNS response message.
+ * @param len    Length of the response message.
+ * @param udata  User pointer forwarded to cb (may be NULL).
+ * @param cb     Callback invoked per answer record (may be NULL to skip).
+ * @return Number of answer records delivered to cb on success,
+ *         -1 on parse error, -2 on ID mismatch, -3 on truncation.
  */
-CCSOCKET_EXPORT int ccdns_decode(const uint8_t *buf, uint16_t len,
-                                  uint16_t expected_id,
-                                  char *addr, uint16_t *addrlen);
+CCSOCKET_EXPORT int ccdns_decode(struct ccdns_t *ctx,
+                                  const uint8_t *buf, uint16_t len,
+                                  void *udata, ccdns_callback_t cb);
 
 #ifdef __cplusplus
 }

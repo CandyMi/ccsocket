@@ -29,13 +29,9 @@
 #define DNS_HDR_FLAGS   2   /* uint16_t */
 #define DNS_HDR_QDCNT   4   /* uint16_t */
 #define DNS_HDR_ANCNT   6   /* uint16_t */
-#define DNS_HDR_NSCNT   8   /* uint16_t */
-#define DNS_HDR_ARCNT   10  /* uint16_t */
 
-/* Standard DNS flags for a query (RD=1) */
-#define DNS_FLAG_QR_QUERY   0x0100  /* RD = 1 */
-/* Standard DNS flags for a response (QR=1, RA=1) */
-#define DNS_FLAG_QR_RESP    0x8180  /* QR=1, RD=1, RA=1 */
+/* Standard DNS flags */
+#define DNS_FLAG_QR_QUERY   0x0100  /* RD = 1 (recursion desired) */
 
 /* ---- Internal Helpers ---------------------------------------------------- */
 
@@ -45,26 +41,19 @@
  * "www.example.com" → 3www7example3com0
  * Each label: <length-byte> <label-chars>
  * Terminated by a zero-length label (root).
- *
- * @param dst     Output buffer.
- * @param dstlen  Capacity of dst.
- * @param src     NUL-terminated domain name string.
- * @return Number of bytes written, or 0 on error (buffer too small).
  */
 static uint16_t dns_name_encode(uint8_t *dst, uint16_t dstlen, const char *src)
 {
     uint16_t pos = 0;
-    const char *dot;
-    size_t labellen;
 
     while (src && *src) {
-        dot = strchr(src, '.');
-        labellen = dot ? (size_t)(dot - src) : strlen(src);
+        const char *dot = strchr(src, '.');
+        size_t labellen = dot ? (size_t)(dot - src) : strlen(src);
 
         if (labellen == 0 || labellen > 63)
-            return 0;          /* empty or overlong label */
+            return 0;
         if (pos + 1 + labellen + 1 > dstlen)
-            return 0;          /* buffer overflow */
+            return 0;
 
         dst[pos++] = (uint8_t)labellen;
         memcpy(dst + pos, src, labellen);
@@ -73,7 +62,6 @@ static uint16_t dns_name_encode(uint8_t *dst, uint16_t dstlen, const char *src)
         src = dot ? dot + 1 : NULL;
     }
 
-    /* Root label (zero-length terminator) */
     if (pos + 1 > dstlen)
         return 0;
     dst[pos++] = 0;
@@ -83,13 +71,6 @@ static uint16_t dns_name_encode(uint8_t *dst, uint16_t dstlen, const char *src)
 /**
  * @brief Decode a DNS name from wire format, handling compression pointers
  *        (RFC 1035 §4.1.4).
- *
- * @param msg   Start of the DNS message (for pointer resolution).
- * @param pos   Pointer to current position in msg (in/out).
- * @param len   Total length of msg.
- * @param dst   Output buffer for the decoded NUL-terminated name.
- * @param dstlen Capacity of dst.
- * @return 0 on success, -1 on error.
  */
 static int dns_name_decode(const uint8_t *msg, uint16_t *pos, uint16_t len,
                             char *dst, uint16_t dstlen)
@@ -97,28 +78,25 @@ static int dns_name_decode(const uint8_t *msg, uint16_t *pos, uint16_t len,
     uint16_t di = 0;
     uint16_t p  = *pos;
     int      jumped = 0;
-    int      cnt = 0;   /* prevent infinite loops via pointer chains */
+    int      cnt = 0;
 
     while (p < len) {
         uint8_t b = msg[p];
         if (b == 0) {
-            /* Root label terminator */
             p++;
             break;
         }
         if ((b & 0xC0) == 0xC0) {
-            /* Compression pointer (upper 2 bits = 11) */
             if (p + 2 > len) return -1;
             uint16_t off = ((uint16_t)(b & 0x3F) << 8) | msg[p + 1];
             if (!jumped) {
-                *pos = p + 2;  /* advance caller past pointer */
+                *pos = p + 2;
                 jumped = 1;
             }
             p = off;
-            if (++cnt > 16) return -1;  /* safety limit */
+            if (++cnt > 16) return -1;
             continue;
         }
-        /* Normal label: length byte followed by label data */
         uint8_t labellen = b;
         if (p + 1 + labellen > len) return -1;
         p++;
@@ -164,7 +142,7 @@ void ccdns_close(struct ccdns_t *ctx)
 
 uint16_t ccdns_encode(struct ccdns_t *ctx,
                        uint8_t *buf, uint16_t buflen,
-                       const char *domain, uint16_t qtype)
+                       const char *domain, ccdns_type_t qtype)
 {
     if (!ctx || !buf || !domain || buflen < DNS_HDR_SZ + 5)
         return 0;
@@ -189,8 +167,8 @@ uint16_t ccdns_encode(struct ccdns_t *ctx,
     /* ---- Question: QTYPE + QCLASS ---- */
     if (pos + 4 > buflen)
         return 0;
-    buf[pos]     = (uint8_t)(qtype >> 8);
-    buf[pos + 1] = (uint8_t)(qtype & 0xFF);
+    buf[pos]     = (uint8_t)((uint16_t)qtype >> 8);
+    buf[pos + 1] = (uint8_t)((uint16_t)qtype & 0xFF);
     buf[pos + 2] = 0;
     buf[pos + 3] = CCDNS_CLASS_IN;
     pos += 4;
@@ -198,15 +176,12 @@ uint16_t ccdns_encode(struct ccdns_t *ctx,
     return pos;
 }
 
-int ccdns_decode(const uint8_t *buf, uint16_t len,
-                  uint16_t expected_id,
-                  char *addr, uint16_t *addrlen)
+int ccdns_decode(struct ccdns_t *ctx,
+                  const uint8_t *buf, uint16_t len,
+                  void *udata, ccdns_callback_t cb)
 {
-    if (!buf || !addr || !addrlen || len < DNS_HDR_SZ)
-        return -1;
-
-    uint16_t minaddr = *addrlen;
-    if (minaddr < 4) return -3;
+    if (!ctx || !buf || len < DNS_HDR_SZ)
+        return -3;
 
     /* ---- Parse Header ---- */
     uint16_t id     = ((uint16_t)buf[DNS_HDR_ID] << 8) | buf[DNS_HDR_ID + 1];
@@ -214,6 +189,7 @@ int ccdns_decode(const uint8_t *buf, uint16_t len,
     uint16_t qdcnt  = ((uint16_t)buf[DNS_HDR_QDCNT] << 8) | buf[DNS_HDR_QDCNT + 1];
     uint16_t ancnt  = ((uint16_t)buf[DNS_HDR_ANCNT] << 8) | buf[DNS_HDR_ANCNT + 1];
 
+    uint16_t expected_id = ctx->reqno;
     if (id != expected_id)
         return -2;
 
@@ -221,66 +197,91 @@ int ccdns_decode(const uint8_t *buf, uint16_t len,
     if (!(flags & 0x8000) || (flags & 0x0F) != 0)
         return -1;
 
-    if (ancnt == 0)
-        return -4;
-
     /* ---- Skip Question Section ---- */
     uint16_t pos = DNS_HDR_SZ;
     for (uint16_t i = 0; i < qdcnt; i++) {
-        /* Skip QNAME */
         while (pos < len) {
             uint8_t b = buf[pos];
-            if (b == 0) {
-                pos++;
-                break;
-            }
-            if ((b & 0xC0) == 0xC0) {
-                pos += 2;
-                break;
-            }
+            if (b == 0) { pos++; break; }
+            if ((b & 0xC0) == 0xC0) { pos += 2; break; }
             pos += 1 + b;
         }
         if (pos + 4 > len) return -1;
-        pos += 4;  /* skip QTYPE + QCLASS */
+        pos += 4;
     }
 
-    /* ---- Parse Answer Section (first matching A/AAAA) ---- */
-    char namebuf[CCDNS_MAX_NAME];
+    /* ---- Parse Answer Records ---- */
+    int delivered = 0;
+
     for (uint16_t i = 0; i < ancnt; i++) {
+        ccdns_ans_t ans;
+        memset(&ans, 0, sizeof(ans));
+        ans.cls = 0;
+
         /* NAME */
-        if (dns_name_decode(buf, &pos, len, namebuf, sizeof(namebuf)) != 0)
+        if (dns_name_decode(buf, &pos, len, ans.domain, sizeof(ans.domain)) != 0)
             return -1;
 
-        if (pos + 10 > len) return -1;  /* TYPE + CLASS + TTL + RDLENGTH */
+        if (pos + 10 > len) return -1;
         uint16_t rrtype  = ((uint16_t)buf[pos] << 8) | buf[pos + 1];
+        uint16_t rrclass = ((uint16_t)buf[pos + 2] << 8) | buf[pos + 3];
+        uint32_t ttl     = ((uint32_t)buf[pos + 4] << 24)
+                         | ((uint32_t)buf[pos + 5] << 16)
+                         | ((uint32_t)buf[pos + 6] << 8)
+                         |  buf[pos + 7];
         uint16_t rdlength = ((uint16_t)buf[pos + 8] << 8) | buf[pos + 9];
         pos += 10;
 
         if (pos + rdlength > len) return -1;
 
-        if ((rrtype == CCDNS_A || rrtype == CCDNS_AAAA) && rdlength > 0) {
-            if (rrtype == CCDNS_A && rdlength == 4 && minaddr >= 16) {
-                /* IPv4 */
-                int n = ccdns_snprintf(addr, minaddr, "%u.%u.%u.%u",
-                                 buf[pos], buf[pos+1], buf[pos+2], buf[pos+3]);
-                if (n > 0) *addrlen = (uint16_t)n;
-                return 0;
+        ans.type = (ccdns_type_t)rrtype;
+        ans.cls  = (ccdns_class_t)rrclass;
+        ans.ttl  = ttl;
+
+        switch (rrtype) {
+        case CCDNS_A:
+            if (rdlength == 4) {
+                ccdns_snprintf(ans.ip, sizeof(ans.ip),
+                              "%u.%u.%u.%u",
+                              buf[pos], buf[pos+1],
+                              buf[pos+2], buf[pos+3]);
             }
-            if (rrtype == CCDNS_AAAA && rdlength == 16 && minaddr >= 40) {
-                /* IPv6 */
-                int n = ccdns_snprintf(addr, minaddr,
-                                 "%02x%02x:%02x%02x:%02x%02x:%02x%02x:"
-                                 "%02x%02x:%02x%02x:%02x%02x:%02x%02x",
-                                 buf[pos], buf[pos+1], buf[pos+2], buf[pos+3],
-                                 buf[pos+4], buf[pos+5], buf[pos+6], buf[pos+7],
-                                 buf[pos+8], buf[pos+9], buf[pos+10], buf[pos+11],
-                                 buf[pos+12], buf[pos+13], buf[pos+14], buf[pos+15]);
-                if (n > 0) *addrlen = (uint16_t)n;
-                return 0;
+            break;
+        case CCDNS_AAAA:
+            if (rdlength == 16) {
+                ccdns_snprintf(ans.ip, sizeof(ans.ip),
+                              "%02x%02x:%02x%02x:%02x%02x:%02x%02x:"
+                              "%02x%02x:%02x%02x:%02x%02x:%02x%02x",
+                              buf[pos], buf[pos+1],
+                              buf[pos+2], buf[pos+3],
+                              buf[pos+4], buf[pos+5],
+                              buf[pos+6], buf[pos+7],
+                              buf[pos+8], buf[pos+9],
+                              buf[pos+10], buf[pos+11],
+                              buf[pos+12], buf[pos+13],
+                              buf[pos+14], buf[pos+15]);
             }
+            break;
+        case CCDNS_CNAME:
+        case CCDNS_NS: {
+            /* Parse the target domain from RDATA (may use compression) */
+            uint16_t save = pos;
+            char target[CCDNS_MAX_NAME];
+            if (dns_name_decode(buf, &save, len, target, sizeof(target)) == 0) {
+                memcpy(ans.domain, target, sizeof(ans.domain));
+            }
+            break;
         }
+        default:
+            break;
+        }
+
+        if (cb)
+            cb(udata, &ans);
+
+        delivered++;
         pos += rdlength;
     }
 
-    return -4;  /* No matching address record */
+    return delivered;
 }
