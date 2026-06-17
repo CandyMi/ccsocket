@@ -1,7 +1,7 @@
-test(ccdns): add compression name test and remove socket dependency
+fix(ccsocket): collect all DNS answer IPs + TTL, fix segfault
 
-- ccdns_t is now pure algorithm (no ccsocket_t fd), no field renamed to no
-  with guarantee never 0
-- ccdns_init() no longer takes domain parameter
-- Add test_compression_name covering RFC 1035 §4.1.4 pointer chaining
-  (CNAME RDATA + A NAME both use compression to question section)
+- ccaddrinfo_t now includes uint32_t ttl field
+- on_dns_answer copies ttl and properly appends all A/AAAA records
+- Fix tail pointer NULL dereference in on_dns_answer (segfault)
+- IP detection uses ccsocket_get_version() instead of raw inet_pton
+- CMake: add CMP0063 policy to suppress visibility warnings

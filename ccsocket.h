@@ -515,6 +515,7 @@ CCSOCKET_EXPORT bool ccsocket_set_cloexec(ccsocket_t s, bool on);
 typedef struct ccaddrinfo
 {
   char address[65];
+  uint32_t ttl;
   ccsocket_family_t af;
   struct ccaddrinfo *next;
 } ccaddrinfo_t;

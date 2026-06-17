@@ -29,6 +29,7 @@
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 
 #include "ccsocket.h"
+#include "ccdns.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -1036,91 +1037,221 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
 #endif
 }
 
-CC_INLINE
-bool ccsocket_addrinfo_already_in(ccaddrinfo_t *addr, ccaddrinfo_t *cur)
+/* ---- DNS resolver via ccdns + ccsocket (replaces getaddrinfo) ---------- */
+
+#if !defined(_WIN32)
+/** @brief Read the first nameserver from /etc/resolv.conf. */
+static bool read_dns_server(char *buf, size_t buflen)
 {
-  for (; addr && addr != cur; addr = addr->next) {
-    // ccsocket_dump("'%s' == '%s' ? %d", addr->address, cur->address, !strcmp(addr->address, cur->address));
-    if (!strcmp(addr->address, cur->address))
-      return true;
+  FILE *f = fopen("/etc/resolv.conf", "r");
+  if (!f) return false;
+  char line[256];
+  while (fgets(line, sizeof(line), f)) {
+    if (strncmp(line, "nameserver", 10) == 0) {
+      const char *ns = line + 10;
+      while (*ns == ' ' || *ns == '\t') ns++;
+      const char *end = ns;
+      while (*end && *end != '\n' && *end != ' ' && *end != '\t') end++;
+      size_t len = (size_t)(end - ns);
+      if (len > 0 && len < buflen) {
+        memcpy(buf, ns, len);
+        buf[len] = '\0';
+        fclose(f);
+        return true;
+      }
+    }
   }
+  fclose(f);
   return false;
+}
+
+#else
+
+/** @brief Read the first nameserver from Windows registry. */
+static bool read_dns_server(char *buf, size_t buflen)
+{
+  HKEY hKey;
+  LONG ret = RegOpenKeyEx(HKEY_LOCAL_MACHINE,
+    "SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces",
+    0, KEY_READ, &hKey);
+  if (ret != ERROR_SUCCESS) return false;
+
+  DWORD idx = 0;
+  bool found = false;
+
+  while (!found) {
+    char guid[256];
+    DWORD guidlen = sizeof(guid);
+    ret = RegEnumKeyEx(hKey, idx++, guid, &guidlen, NULL, NULL, NULL, NULL);
+    if (ret != ERROR_SUCCESS) break;
+
+    HKEY hSub;
+    if (RegOpenKeyEx(hKey, guid, 0, KEY_READ, &hSub) != ERROR_SUCCESS)
+      continue;
+
+    DWORD type = 0;
+    char ns[512];
+    DWORD nslen = sizeof(ns);
+    ret = RegQueryValueEx(hSub, "NameServer", NULL, &type, (BYTE*)ns, &nslen);
+    if (ret == ERROR_SUCCESS && type == REG_SZ && ns[0]) {
+      char *p = ns;
+      while (*p == ' ') p++;
+      char *end = p;
+      while (*end && *end != ' ' && *end != ',') end++;
+      size_t len = (size_t)(end - p);
+      if (len > 0 && len < buflen) {
+        memcpy(buf, p, len);
+        buf[len] = '\0';
+        found = true;
+      }
+    }
+    RegCloseKey(hSub);
+  }
+
+  RegCloseKey(hKey);
+  return found;
+}
+#endif
+
+/* Context passed to the DNS decode callback via udata. */
+struct dns_collect_ctx {
+  ccaddrinfo_t **head;
+  ccaddrinfo_t  *tail;  /* last node (NULL = empty) */
+};
+
+/* ccdns_decode callback: collect A/AAAA addresses into the linked list. */
+static void on_dns_answer(void *udata, const ccdns_ans_t *ans)
+{
+  struct dns_collect_ctx *col = (struct dns_collect_ctx *)udata;
+  ccsocket_family_t af;
+  const char *addr_str = NULL;
+
+  if (ans->type == CCDNS_A && ans->ip[0]) {
+    af = CC_INET4;
+    addr_str = ans->ip;
+  } else if (ans->type == CCDNS_AAAA && ans->ip[0]) {
+    af = CC_INET6;
+    addr_str = ans->ip;
+  } else {
+    return;
+  }
+
+  /* deduplicate */
+  for (ccaddrinfo_t *p = *col->head; p; p = p->next)
+    if (!strcmp(p->address, addr_str)) return;
+
+  ccaddrinfo_t *node = (ccaddrinfo_t *)malloc(sizeof(ccaddrinfo_t));
+  if (!node) return;
+  memset(node, 0, sizeof(*node));
+  node->af = af;
+  node->ttl = ans->ttl;
+  strncpy(node->address, addr_str, sizeof(node->address) - 1);
+  node->address[sizeof(node->address) - 1] = '\0';
+
+  if (col->tail)
+    col->tail->next = node;
+  else
+    *col->head = node;
+  col->tail = node;
+}
+
+/** @brief Do a single DNS query (A or AAAA), decode, collect results. */
+static bool dns_query_one(const char *dns_server, struct ccdns_t *dns,
+                           const char *domain, ccdns_type_t qtype,
+                           struct dns_collect_ctx *col)
+{
+  uint8_t qbuf[CCDNS_MAX_MSG], rbuf[CCDNS_MAX_MSG];
+  int rsize;
+  ccsocket_stcode_t st;
+
+  ccsocket_t fd = ccsocket(CC_INET4, CC_UDP);
+  if (fd == INVALID_SOCKET) return false;
+
+  ccsocket_set_rcvtimeout(fd, 5000);
+  ccsocket_set_sndtimeout(fd, 3000);
+
+  if (!ccsocket_connect(fd, dns_server, 53)) {
+    ccsocket_close(fd);
+    return false;
+  }
+
+  uint16_t qlen = ccdns_encode(dns, qbuf, sizeof(qbuf), domain, qtype);
+  if (!qlen) { ccsocket_close(fd); return false; }
+
+  st = ccsocket_send(fd, qbuf, qlen, NULL);
+  if (st != CC_OPCODE_OK) { ccsocket_close(fd); return false; }
+
+  rsize = 0;
+  st = ccsocket_recv(fd, (char *)rbuf, sizeof(rbuf), &rsize);
+  ccsocket_close(fd);
+  if (st != CC_OPCODE_OK || rsize <= 0) return false;
+
+  return ccdns_decode(dns, rbuf, (uint16_t)rsize, col, on_dns_answer) > 0;
 }
 
 bool ccsocket_getaddrinfo(const char *domain, ccaddrinfo_t **addrlist)
 {
-  if (!domain) {
-    ccsocket_set_errno(EINVAL);
-    return false;
-  }
+  if (!domain) { ccsocket_set_errno(EINVAL); return false; }
+  if (!addrlist) { ccsocket_set_errno(EINVAL); return false; }
+  *addrlist = NULL;
   ccsocket_init_errno();
-  struct addrinfo hints;
-  memset(&hints, 0x0, sizeof(hints));
 
-  /* init fields. */
-  hints.ai_flags = AI_PASSIVE;
-
-  /* init family */
-  hints.ai_family = AF_UNSPEC;
-
-  struct addrinfo *addrs = NULL;
-  if (getaddrinfo(domain, NULL, &hints, &addrs) || !addrs) {
-    return false;
-  }
-
-  /* init results */
-  ccaddrinfo_t *cur = (ccaddrinfo_t*)malloc(sizeof(ccaddrinfo_t));
-  if (!cur) {
-    freeaddrinfo(addrs);
-    return false;
-  }
-  memset(cur, 0x0, sizeof(ccaddrinfo_t));
-
-  *addrlist = cur; // ccaddrinfo_t *after = NULL;
-  struct addrinfo *link = addrs;
-  while (link)
+  /* --- 1. Check if domain is already an IP address --- */
   {
-    if (link->ai_family == AF_INET) {
-      cur->af = CC_INET4;
-#if _WIN32
-      DWORD len = INET6_ADDRSTRLEN;
-      WSAAddressToString(link->ai_addr, ccsizeof((const struct sockaddr_storage*)link->ai_addr), NULL, cur->address, &len);
-#else
-      inet_ntop(AF_INET, &((struct sockaddr_in*)link->ai_addr)->sin_addr, cur->address, INET6_ADDRSTRLEN);
-#endif
-    } else if (link->ai_family == AF_INET6) {
-      cur->af = CC_INET6;
-#if _WIN32
-      DWORD len = INET6_ADDRSTRLEN;
-      WSAAddressToString(link->ai_addr, ccsizeof((const struct sockaddr_storage*)link->ai_addr), NULL, cur->address, &len);
-#else
-      inet_ntop(AF_INET6, &((struct sockaddr_in6*)link->ai_addr)->sin6_addr, cur->address, INET6_ADDRSTRLEN);
-#endif
-    } else {
-      cur->af = CC_FAMILY_INVALID;
-      cur->next = NULL;
-      break;
+    ccsocket_family_t af = ccsocket_get_version(domain);
+    if (af == CC_INET4 || af == CC_INET6) {
+      *addrlist = (ccaddrinfo_t*)malloc(sizeof(ccaddrinfo_t));
+      if (!*addrlist) return false;
+      memset(*addrlist, 0, sizeof(ccaddrinfo_t));
+      (*addrlist)->af = af;
+      strncpy((*addrlist)->address, domain, sizeof((*addrlist)->address) - 1);
+      (*addrlist)->address[sizeof((*addrlist)->address) - 1] = '\0';
+      (*addrlist)->ttl = 0;
+      return true;
     }
-    /* address already in link-list ? */
-    if (ccsocket_addrinfo_already_in(*addrlist, cur)) {
-      memset(cur, 0x0, sizeof(*cur));
-      cur->af = CC_FAMILY_INVALID;
-    } else {
-      cur->next = (ccaddrinfo_t*)malloc(sizeof(ccaddrinfo_t));
-      if (!cur->next) {
-        freeaddrinfo(addrs);
-        ccsocket_freeaddrinfo(*addrlist);
-        *addrlist = NULL;
-        return false;
-      }
-      cur = cur->next;
-      memset(cur, 0x0, sizeof(ccaddrinfo_t));
-      cur->af = CC_FAMILY_INVALID;
-    }
-    link = link->ai_next;
   }
-  freeaddrinfo(addrs);
-  return true;
+
+  /* --- 2. Special-case well-known local names --- */
+  if (strcmp(domain, "localhost") == 0 || strcmp(domain, "localhost.localdomain") == 0) {
+    /* Return 127.0.0.1 (and ::1 if IPv6 is available) */
+    *addrlist = (ccaddrinfo_t*)malloc(sizeof(ccaddrinfo_t));
+    if (!*addrlist) return false;
+    memset(*addrlist, 0, sizeof(ccaddrinfo_t));
+    (*addrlist)->af = CC_INET4;
+    (*addrlist)->ttl = 0;
+    memcpy((*addrlist)->address, "127.0.0.1", 10);
+    return true;
+  }
+
+  /* --- 3. Get DNS server address --- */
+  char dns_server[CCDNS_MAX_ADDR] = "8.8.8.8";
+  {
+    char buf[CCDNS_MAX_ADDR];
+    if (read_dns_server(buf, sizeof(buf)))
+      memcpy(dns_server, buf, sizeof(buf));
+  }
+
+  /* --- 4. DNS lookup via ccdns + ccsocket --- */
+  struct ccdns_t dns;
+  struct dns_collect_ctx col;
+  bool got_v4 = false, got_v6 = false;
+
+  ccdns_init(&dns);
+  col.head = addrlist;
+  col.tail = NULL;
+
+  /* Query A (IPv4) */
+  got_v4 = dns_query_one(dns_server, &dns, domain, CCDNS_A, &col);
+
+  /* Query AAAA (IPv6) */
+  got_v6 = dns_query_one(dns_server, &dns, domain, CCDNS_AAAA, &col);
+
+  ccdns_close(&dns);
+
+  if (got_v4 || got_v6) return true;
+
+  ccsocket_set_errno(EHOSTUNREACH);
+  return false;
 }
 
 void ccsocket_freeaddrinfo(ccaddrinfo_t *addrlist)

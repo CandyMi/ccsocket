@@ -102,6 +102,7 @@ static void test_decode_a(void)
     };
 
     struct ccdns_t ctx;
+    memset(&ctx, 0, sizeof(ctx));
     ctx.no = 1;
 
     memset(&g_ans, 0, sizeof(g_ans));
@@ -132,6 +133,7 @@ static void test_decode_id_mismatch(void)
     };
 
     struct ccdns_t ctx;
+    memset(&ctx, 0, sizeof(ctx));
     ctx.no = 0x5678;
 
     int r = ccdns_decode(&ctx, resp, sizeof(resp), NULL, NULL);
@@ -216,6 +218,7 @@ static void test_compression_name(void)
     };
 
     struct ccdns_t ctx;
+    memset(&ctx, 0, sizeof(ctx));
     ctx.no = 1;
 
     g_ans_cnt = 0;

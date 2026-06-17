@@ -70,7 +70,8 @@ typedef struct ccdns_ans {
  * query identifier and is never 0 while the context is active.
  */
 typedef struct ccdns_t {
-    uint16_t no;  /**< Auto-incrementing query identifier (never 0). */
+    uint16_t no;    /**< Next query identifier (never 0 while active). */
+    uint16_t last;  /**< Last query identifier used (for decode verification). */
 } ccdns_t;
 
 /* ---- Callback ------------------------------------------------------------ */

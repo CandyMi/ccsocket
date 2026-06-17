@@ -41,6 +41,12 @@ int main(void)
     ccsocket_freeaddrinfo(list);
     list = NULL;
 
+    assert(ccsocket_getaddrinfo("www.qq.com", &list));
+    assert(list != NULL); ccaddrinfo_t *addr = list;
+    while (addr) { printf("af = '%d', addr = '%s'\n", addr->af, addr->address); addr = addr->next;}
+    ccsocket_freeaddrinfo(list);
+    list = NULL;
+
     /* NULL domain should fail */
     assert(!ccsocket_getaddrinfo(NULL, &list));
 

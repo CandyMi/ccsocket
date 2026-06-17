@@ -3,7 +3,13 @@
 # https://agents.md/  |  MIT License  |  Author: CandyMi
 # ============================================================================
 
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.0...3.31)
+
+# Honor visibility properties (C_VISIBILITY_PRESET) for all target types,
+# including STATIC_LIBRARY and EXECUTABLE.  Available since CMake 3.3.
+if(POLICY CMP0063)
+  cmake_policy(SET CMP0063 NEW)
+endif()
 
 # -- Project ------------------------------------------------------------------
 project(libccsocket
@@ -16,6 +22,9 @@ project(libccsocket
 set(CMAKE_C_STANDARD          99)
 set(CMAKE_C_STANDARD_REQUIRED OFF)
 set(CMAKE_C_EXTENSIONS        OFF)
+
+# -- Build RPATH (so tests find the shared library at runtime) ----------------
+set(CMAKE_BUILD_RPATH ${CMAKE_BINARY_DIR})
 
 # -- Build Type Default -------------------------------------------------------
 if(NOT CMAKE_BUILD_TYPE)

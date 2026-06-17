@@ -123,6 +123,7 @@ bool ccdns_init(struct ccdns_t *ctx)
         return false;
 
     ctx->no = 1;
+    ctx->last = 0;
     return true;
 }
 
@@ -131,6 +132,7 @@ void ccdns_close(struct ccdns_t *ctx)
     if (!ctx)
         return;
     ctx->no = 0;
+    ctx->last = 0;
 }
 
 uint16_t ccdns_encode(struct ccdns_t *ctx,
@@ -141,6 +143,7 @@ uint16_t ccdns_encode(struct ccdns_t *ctx,
         return 0;
 
     uint16_t id = ctx->no++;
+    ctx->last = id;
 
     /* Ensure no never wraps to 0 */
     if (ctx->no == 0)
@@ -186,7 +189,7 @@ int ccdns_decode(struct ccdns_t *ctx,
     uint16_t qdcnt  = ((uint16_t)buf[DNS_HDR_QDCNT] << 8) | buf[DNS_HDR_QDCNT + 1];
     uint16_t ancnt  = ((uint16_t)buf[DNS_HDR_ANCNT] << 8) | buf[DNS_HDR_ANCNT + 1];
 
-    uint16_t expected_id = ctx->no;
+    uint16_t expected_id = ctx->last ? ctx->last : ctx->no;
     if (id != expected_id)
         return -2;
 
