@@ -140,6 +140,53 @@ POSIX Sockets            WinSock2 (Windows)
 - **IO vectors**: Different field order on Windows (`len` first) vs POSIX (`buf` first) — always use accessor macros (`ccsocket_set_iov_len`, etc.), never direct struct access.
 - **Inline**: `CC_INLINE` macro resolves to `static inline` (C99), `static __inline` (MSVC), or `static` (C89 fallback).
 
+### 3.7 Git Commit Conventions
+
+All commits **must** follow the [Conventional Commits](https://www.conventionalcommits.org/) format using **English only**:
+
+```
+type(scope): short description (≤ 72 chars)
+
+Optional body — wrap at 72 chars.
+Use bullet points for multi-line details.
+```
+
+**Allowed types:**
+
+| Type | Usage |
+|---|---|
+| `feat` | New feature or public API addition |
+| `fix` | Bug fix |
+| `refactor` | Code restructuring with no behavior change |
+| `docs` | Documentation only (AGENTS.md, README.md, Doxygen) |
+| `build` | CMake, build system, CI |
+| `test` | Test additions or fixes |
+| `perf` | Performance improvement |
+| `chore` | Maintenance, minor cleanup |
+
+**Scope** refers to the affected module: `ccsocket`, `ccicmp`, `CMakeLists.txt`, `tests`, etc.
+
+**Examples:**
+
+```
+feat(ccicmp): add CC_ICMP1 (SOCK_DGRAM+ICMP) privilege-free ping support
+
+ccicmp_init() now tries SOCK_DGRAM first, falling back to SOCK_RAW.
+
+fix(build): FreeBSD compilation (alloca.h / struct ip / SOCK_DGRAM)
+test(ccicmp): add ICMPv6 pseudo-header checksum vectors
+docs(AGENTS): add git commit conventions section
+```
+
+Multiple commits addressing the same feature should be squashed before pushing.
+
+### 3.8 Portability Patterns
+
+- **Platform detection**: `#if _WIN32` for Windows vs. `#else` for POSIX.
+- **Socket type**: `SOCKET` (Windows) vs `int` (POSIX), unified via `ccsocket_t`.
+- **IO vectors**: Different field order on Windows (`len` first) vs POSIX (`buf` first) — always use accessor macros (`ccsocket_set_iov_len`, etc.), never direct struct access.
+- **Inline**: `CC_INLINE` macro resolves to `static inline` (C99), `static __inline` (MSVC), or `static` (C89 fallback).
+
 ---
 
 ## 4. Build System
@@ -281,6 +328,7 @@ ctest --test-dir build --output-on-failure -V
 | New compile-time macro added | §4.5 Compile-Time Configuration Macros |
 | Test suite added or reorganized | §5 Testing |
 | New public module created | §2.1 Module Dependency |
+| New coding convention adopted | §3 Language & Coding Conventions |
 | License change | §1.1 Identity + LICENSE |
 
 When updating AGENTS.md, the agent should consider whether the change has **extensions** that warrant documentation beyond the immediate diff — for example, a new platform `#ifdef` may also affect error-handling patterns in §3.4, a new test file may imply test framework choices in §5.1.
