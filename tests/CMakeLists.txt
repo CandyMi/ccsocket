@@ -33,3 +33,6 @@ ccsocket_test(ccsocket/http   test_ccsocket_http.c)
 
 # -- ICMP ping functional tests (checksum, layout, lifecycle) -----------------
 ccsocket_test(ccicmp/ping     test_ccicmp_ping.c)
+
+# -- DNS client tests (encode, decode, lifecycle) ----------------------------
+ccsocket_test(ccdns/test      test_ccdns.c)

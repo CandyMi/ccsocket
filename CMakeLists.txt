@@ -54,12 +54,14 @@ endif()
 set(CMAKE_C_VISIBILITY_PRESET hidden)
 set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
 
-# -- Library: ccsocket (includes ccicmp sub-module) --------------------------
+# -- Library: ccsocket (includes ccicmp + ccdns sub-modules) -----------------
 add_library(ccsocket
   ccsocket.h
   ccsocket.c
   ccicmp.h
   ccicmp.c
+  ccdns.h
+  ccdns.c
 )
 
 target_include_directories(ccsocket
