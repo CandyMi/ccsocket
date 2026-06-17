@@ -98,6 +98,9 @@ int main(void)
 
 ### Minimal Example: ICMP Ping
 
+`ccicmp_init()` tries a privilege-free `SOCK_DGRAM` ICMP socket first
+(Linux, macOS), then falls back to `SOCK_RAW` (requires root).
+
 ```c
 #include "ccicmp.h"
 #include <stdio.h>
@@ -107,7 +110,7 @@ int main(void)
 {
     struct ccicmp_t ping;
     if (!ccicmp_init(&ping, CC_INET4)) {
-        fprintf(stderr, "ccicmp_init failed (need root/CAP_NET_RAW)\n");
+        fprintf(stderr, "ccicmp_init failed\n");
         return 1;
     }
 
@@ -133,7 +136,7 @@ int main(void)
 cmake -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build
 
-# Run all 9 tests
+# Run all tests
 ctest --test-dir build --output-on-failure -V
 
 # Run a single test
@@ -152,7 +155,7 @@ ctest --test-dir build -R ccsocket/tcp -V
 | `ccsocket/addr` | **Address**: get_version, getaddrinfo |
 | `ccsocket/opts` | **Options**: nodelay, keepalive, nonblock, cloexec |
 | `ccsocket/http` | **HTTP text protocol**: request/response with `httpc.txt` |
-| `ccicmp/ping` | **ICMP**: RFC 1071 checksum, packet layout, lifecycle |
+| `ccicmp/ping` | **ICMP (IPv4 + IPv6)**: RFC 1071 / RFC 4443 checksum, packet layout, lifecycle |
 
 > ICMP lifecycle test works without root — init failure is handled gracefully. Full echo/reply needs `CAP_NET_RAW` / root.
 
@@ -166,7 +169,7 @@ ctest --test-dir build -R ccsocket/tcp -V
 ├── ccsocket.h          # Public API — types, enums, function declarations
 ├── ccsocket.c          # Core socket implementation (~1058 lines)
 ├── ccicmp.h            # ICMP ping public API
-├── ccicmp.c            # ICMP echo/response implementation (~306 lines)
+├── ccicmp.c            # ICMP echo/response implementation (~374 lines)
 ├── httpc.txt           # Sample HTTP/1.1 request (test fixture)
 ├── LICENSE             # MIT license
 ├── .gitignore          # Build artifacts

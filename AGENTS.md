@@ -34,7 +34,7 @@
 ├── ccsocket.h          # Public API header — types, enums, macros, exported function declarations
 ├── ccsocket.c          # Implementation — ~1058 lines, all platform backends in one translation unit
 ├── ccicmp.h            # Public API header — ICMP context struct, function declarations
-├── ccicmp.c            # Implementation — ~306 lines, ICMP echo/response logic
+├── ccicmp.c            # Implementation — ~374 lines, ICMP echo/response logic
 ├── httpc.txt           # Sample HTTP/1.1 request payload (test fixture)
 ├── LICENSE             # MIT license text
 ├── .gitignore          # Build artifacts, IDE configs, object files
@@ -217,7 +217,7 @@ Test infrastructure is live via CTest. Test sources live in [`tests/`](tests/).
 | `ccsocket/addr` | Functional | IP version detection (`get_version`), `getaddrinfo` for localhost |
 | `ccsocket/opts` | Functional | nodelay/reuseaddr/keepalive/nonblock/cloexec (valid + invalid handle) |
 | `ccsocket/http` | **Combined protocol** | HTTP request/response round-trip using `httpc.txt` as template |
-| `ccicmp/ping` | **Combined (ICMP)** | Checksum (RFC 1071 vectors), packet layout, init/close lifecycle |
+| `ccicmp/ping` | **Combined (ICMP)** | IPv4/IPv6 checksum (RFC 1071 / RFC 4443), packet layout, init/close lifecycle |
 
 ### 5.2 Test Conventions
 
@@ -239,6 +239,7 @@ ctest --test-dir build --output-on-failure -V
 | Gap | Reason |
 |---|---|
 | ICMP echo/reply round-trip | Requires `CAP_NET_RAW` / root |
+| ICMPv6 echo/reply round-trip | Same privilege requirement as IPv4 |
 | sendfile functional test | Needs a temporary file descriptor |
 | Cross-platform CI | No CI pipeline configured |
 
@@ -306,6 +307,17 @@ Per [RFC 4443 §2.3](https://datatracker.ietf.org/doc/html/rfc4443#section-2.3),
 - `ccicmp_skip_ip_header()` auto-detects both cases.
 - **Windows ICMP**: Raw socket ICMP is restricted; `ccicmp_init()` will fail. Callers must handle this case.
 - **sendfile**: macOS/FreeBSD/Linux/Solaris use kernel `sendfile()` (zero-copy). Windows and other platforms fall back to `read()` + `send()`.
+
+### 7.4 ICMP DGRAM vs RAW Semantics
+
+`ccicmp_init()` automatically selects the best available socket type:
+
+| Socket | Platforms | Privilege | ICMP header |
+|--------|-----------|-----------|-------------|
+| `SOCK_DGRAM` + `IPPROTO_ICMP` (CC_ICMP1) | Linux ≥ 3.0, macOS, FreeBSD | No root needed | **Linux**: kernel adds ICMP header (user sends payload only). **macOS/BSD**: user sends full ICMP header + checksum (kernel adds only IP header) |
+| `SOCK_RAW` + `IPPROTO_ICMP` (CC_ICMP) | All POSIX | Requires root / `CAP_NET_RAW` | User sends full IP + ICMP header + checksum |
+
+The runtime helper `ccsocket_get_protocol()` returns the OS socket type (`SOCK_DGRAM` / `SOCK_RAW` / `SOCK_STREAM`), used by `ccicmp_is_dgram()` inside echo/reply to select the correct I/O path.
 
 ---
 

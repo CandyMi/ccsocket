@@ -28,16 +28,20 @@ extern "C" {
 /**
  * @brief Initialise an ICMP ping context.
  *
- * Creates a raw ICMP socket for the given address family.
+ * Creates either a SOCK_DGRAM (CC_ICMP1) or SOCK_RAW (CC_ICMP) socket
+ * for the given address family, preferring DGRAM when the platform
+ * supports it (Linux ≥ 3.0, macOS) for privilege-free operation.
+ * Falls back to RAW automatically.
+ *
  * Must be called before ccicmp_echo() / ccicmp_reply().
  *
  * @param ctx     Uninitialised ccicmp_t context pointer.
  * @param domain  Address family: CC_INET4 or CC_INET6.
  *
- * @note ICMP raw socket requires elevated privileges:
- *       - Linux: CAP_NET_RAW or root.
- *       - BSD/macOS: root.
- *       - Windows: raw socket is restricted; init will fail.
+ * @note On Linux the DGRAM ping socket works without special privileges.
+ *       On macOS the DGRAM ping socket works without root but the
+ *       process must have the com.apple.private.network.socket entitlement.
+ *       On Windows raw socket ICMP is restricted; init will fail.
  *       Call early so the caller can fall back gracefully.
  *
  * @return true on success, false on failure.

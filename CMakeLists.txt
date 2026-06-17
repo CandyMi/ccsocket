@@ -75,7 +75,7 @@ target_compile_definitions(ccsocket
     CCICMP_RECV_BUFSZ=${CCICMP_RECV_BUFSZ}
   PUBLIC
     # Consumers of a shared build get dllimport; static builds get nothing.
-    $<$<AND:$<BOOL:${BUILD_SHARED_LIBS}>,$<NOT:$<TARGET_PROPERTY:ccsocket,TYPE>>>:CCSOCKET_SHARED>
+    $<$<AND:$<BOOL:${BUILD_SHARED_LIBS}>,$<NOT:$<STREQUAL:$<TARGET_PROPERTY:ccsocket,TYPE>,SHARED_LIBRARY>>>:CCSOCKET_SHARED>
 )
 
 # -- Platform Linkage ---------------------------------------------------------

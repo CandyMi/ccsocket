@@ -22,12 +22,14 @@
   #include <sys/timeb.h>
   #define cc_alloca _alloca
 #else
-  #include <alloca.h>
+  #include <sys/types.h>
+  #include <sys/socket.h>   /* SOCK_DGRAM, getpeername, getsockname */
   #include <sys/time.h>
   #include <netinet/in.h>
+  #include <netinet/ip.h>   /* struct ip (needed by ip_icmp.h on FreeBSD) */
   #include <netinet/ip_icmp.h>
   #include <netinet/icmp6.h>
-  #define cc_alloca alloca
+  #define cc_alloca __builtin_alloca   /* GCC/Clang builtin, no header needed */
   #if defined(__FreeBSD__) || defined(__APPLE__)
     #include <netinet/icmp_var.h>
   #endif
@@ -108,6 +110,10 @@ void ccicmp_fill_timestamp(uint8_t *timestamp)
 #endif
 }
 
+/* Detect whether the socket is SOCK_DGRAM (CC_ICMP1) or SOCK_RAW (CC_ICMP).
+ * Used to select the correct I/O semantics inside echo/reply. */
+#define ccicmp_is_dgram(fd) (ccsocket_get_protocol(fd) == SOCK_DGRAM)
+
 /**
  * @brief `RFC793`:
  *
@@ -142,7 +148,12 @@ bool ccicmp_init(struct ccicmp_t *ctx, ccsocket_family_t domain)
     return false;
   ctx->id = ((intptr_t)ctx) & 0xffff;
   ctx->no = 0;
-  ctx->fd = ccsocket1(domain, CC_ICMP, CC_NONBLOCK | CC_CLOEXEC);
+  /* Try SOCK_DGRAM (CC_ICMP1 = privilege-free ping socket) first.
+   * Falls back to SOCK_RAW (CC_ICMP) when the platform or runtime
+   * doesn't support it (e.g. Windows, or older kernels). */
+  ctx->fd = ccsocket1(domain, CC_ICMP1, CC_NONBLOCK | CC_CLOEXEC);
+  if (ctx->fd == INVALID_SOCKET)
+    ctx->fd = ccsocket1(domain, CC_ICMP, CC_NONBLOCK | CC_CLOEXEC);
   return ctx->fd != INVALID_SOCKET;
 }
 
@@ -167,11 +178,31 @@ bool ccicmp_echo(struct ccicmp_t *ctx, const char *addr, const char *data, size_
   if (af != CC_INET4 && af != CC_INET6)
     return false;
 
-  /* connect raw socket to target (enables send/recv instead of sendto/recvfrom) */
+  /* connect socket to target (enables send/recv instead of sendto/recvfrom) */
   if (!ccsocket_connect(ctx->fd, addr, 0))
     return false;
 
-  /* build ICMP echo packet */
+  /* -- SOCK_DGRAM (CC_ICMP1) on Linux ping socket:
+   *    kernel constructs ICMP header + checksum, send only payload. -- */
+  if (ccicmp_is_dgram(ctx->fd)) {
+#if defined(__linux__)
+    size_t pktlen = CCICMP_TS_LEN + len;
+    uint8_t *packet = (uint8_t *)cc_alloca(pktlen);
+    memset(packet, 0, pktlen);
+    ccicmp_fill_timestamp(packet);
+    if (data && len > 0)
+      memcpy(packet + CCICMP_TS_LEN, data, len);
+    int wsize = 0;
+    ccsocket_stcode_t state = ccsocket_send(ctx->fd, packet, pktlen, &wsize);
+    return state == CC_OPCODE_OK && (size_t)wsize == pktlen;
+#else
+    /* macOS/BSD DGRAM: kernel adds only IP header.
+     * Fall through to full ICMP header + checksum (same as RAW). */
+#endif
+  }
+
+  /* -- SOCK_RAW (all platforms) + SOCK_DGRAM (macOS/BSD):
+   *    build full ICMP echo packet -- */
   size_t pktlen = CCICMP_HEADER_LEN + CCICMP_TS_LEN + len;
   uint8_t *packet = (uint8_t *)cc_alloca(pktlen);
   memset(packet, 0, pktlen);
@@ -287,9 +318,36 @@ bool ccicmp_reply(struct ccicmp_t *ctx, char *data, size_t *len)
   if (state != CC_OPCODE_OK || rsize <= 0)
     return false;
 
-  /* skip IP header to get ICMP header */
+  /* -- SOCK_DGRAM (CC_ICMP1) on Linux ping socket:
+   *    kernel strips IP + ICMP headers, delivers payload only. -- */
+  if (ccicmp_is_dgram(ctx->fd)) {
+#if defined(__linux__)
+    if ((size_t)rsize < CCICMP_TS_LEN)
+      return false;
+    size_t datalen = (size_t)rsize - CCICMP_TS_LEN;
+    if (data && len && datalen > 0) {
+      size_t copylen = (datalen < *len) ? datalen : *len;
+      memcpy(data, buf + CCICMP_TS_LEN, copylen);
+      *len = copylen;
+    } else if (len) {
+      *len = datalen;
+    }
+    return true;
+#else
+    /* macOS/BSD DGRAM: kernel strips IP header only.
+     * ICMP header is present — fall through to RAW-style parsing. */
+#endif
+  }
+
+  /* -- SOCK_RAW (all platforms) + SOCK_DGRAM (macOS/BSD):
+   *    parse IP + ICMP headers, match by type/code/id -- */
   size_t off = ccicmp_skip_ip_header(buf, (size_t)rsize, af);
-  if (off == (size_t)-1 || off + CCICMP_HEADER_LEN > (size_t)rsize)
+  if (off == (size_t)-1) {
+    /* No IP header detected (e.g. macOS DGRAM where kernel strips it).
+     * Buffer starts at ICMP header — use offset 0 if that's valid. */
+    off = 0;
+  }
+  if (off + CCICMP_HEADER_LEN > (size_t)rsize)
     return false;
 
   /* parse ICMP header */

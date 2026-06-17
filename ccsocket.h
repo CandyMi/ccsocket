@@ -118,12 +118,14 @@ typedef enum {
 typedef enum {
 #define CC_PROTOCOL_INVALID  CC_PROTOCOL_INVALID
   CC_PROTOCOL_INVALID = -1,
-#define CC_TCP  CC_TCP
+#define CC_TCP    CC_TCP
   CC_TCP   = 1,
-#define CC_UDP  CC_UDP
+#define CC_UDP    CC_UDP
   CC_UDP   = 2,
-#define CC_ICMP CC_ICMP
+#define CC_ICMP   CC_ICMP  /* raw + icmp */
   CC_ICMP  = 3,
+#define CC_ICMP1  CC_ICMP1 /* dgram + icmp */
+  CC_ICMP1 = 4,
 } ccsocket_protocol_t;
 
 /* Used for ccsocket_connect* */
@@ -401,6 +403,18 @@ CCSOCKET_EXPORT bool ccsocket_get_sockname(ccsocket_t s, char *addr, uint16_t *p
  * @return CC_INET4, CC_INET6, CC_UNIX, or CC_FAMILY_INVALID.
  */
 CCSOCKET_EXPORT ccsocket_family_t ccsocket_get_family(ccsocket_t s);
+
+/**
+ * @brief Get the underlying OS socket type (SOCK_STREAM, SOCK_DGRAM, SOCK_RAW, ...).
+ *
+ * Useful for runtime protocol detection, e.g. distinguishing a
+ * SOCK_DGRAM (CC_ICMP1) from a SOCK_RAW (CC_ICMP) ICMP socket.
+ *
+ * @param s  Socket handle.
+ * @return The socket type (e.g. SOCK_STREAM, SOCK_DGRAM, SOCK_RAW)
+ *         on success, or -1 on failure (check errno / WSAGetLastError).
+ */
+CCSOCKET_EXPORT int ccsocket_get_protocol(ccsocket_t s);
 
 /**
  * @brief Determine the address family from an address string.

@@ -47,6 +47,7 @@ int main(void)
 
     /* --- Invalid handle: all setters should return false --- */
     ccsocket_t bad = INVALID_SOCKET;
+    (void)bad;
     assert(!ccsocket_set_nodelay(bad, true));
     assert(!ccsocket_set_reuseaddr(bad, true));
     assert(!ccsocket_set_keepalive(bad, true));

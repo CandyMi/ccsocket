@@ -16,6 +16,7 @@ int main(void)
     ccsocket_t srv, cli, acc;
     char addr[MAX_ADDRLEN];
     uint16_t port;
+    (void)addr; (void)port;
 
     /* --- Server: create, bind, listen --- */
     srv = ccsocket(CC_INET4, CC_TCP);
@@ -43,21 +44,20 @@ int main(void)
     char peer[MAX_ADDRLEN];
     uint16_t peer_port;
     assert(ccsocket_get_peername(acc, peer, &peer_port));
+    (void)peer; (void)peer_port;
     assert(strcmp(peer, "127.0.0.1") == 0);
 
     /* --- Send data: client → server --- */
     const char *tx = "Hello TCP!";
     size_t txlen = strlen(tx);
     int wsent = 0;
-    ccsocket_stcode_t rc = ccsocket_send(cli, tx, txlen, &wsent);
-    assert(rc == CC_OPCODE_OK);
+    assert(ccsocket_send(cli, tx, txlen, &wsent) == CC_OPCODE_OK);
     assert(wsent > 0);
 
     /* --- Receive data: server side --- */
     char rx[64];
     int rrecv = 0;
-    rc = ccsocket_recv(acc, rx, sizeof(rx), &rrecv);
-    assert(rc == CC_OPCODE_OK);
+    assert(ccsocket_recv(acc, rx, sizeof(rx), &rrecv) == CC_OPCODE_OK);
     assert(rrecv == (int)txlen);
     rx[rrecv] = '\0';
     assert(strcmp(rx, tx) == 0);

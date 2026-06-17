@@ -356,8 +356,9 @@ ccsocket_t ccsocket2(ccsocket_family_t domain, ccsocket_protocol_t proto, ccsock
       proto_r = SOCK_DGRAM;
       flag_r = IPPROTO_UDP;
       break;
-    case CC_ICMP:
-      proto_r = SOCK_RAW;
+    case CC_ICMP: case CC_ICMP1:
+      proto_r = proto == CC_ICMP ? 
+            SOCK_RAW : SOCK_DGRAM;
       flag_r = IPPROTO_ICMP;
       /* IPv6 ICMP uses IPPROTO_ICMPV6 (58) not IPPROTO_ICMP (1) */
       if (domain == CC_INET6) {
@@ -865,6 +866,20 @@ ccsocket_family_t ccsocket_get_family(ccsocket_t s)
       return CC_INET6;
   }
   return CC_FAMILY_INVALID;
+}
+
+int ccsocket_get_protocol(ccsocket_t s)
+{
+  int type = -1;
+  socklen_t optlen = sizeof(type);
+#if _WIN32
+  if (getsockopt((SOCKET)s, SOL_SOCKET, SO_TYPE, (char *)&type, &optlen) != 0)
+    return -1;
+#else
+  if (getsockopt((SOCKET)s, SOL_SOCKET, SO_TYPE, &type, &optlen) != 0)
+    return -1;
+#endif
+  return type;
 }
 
 ccsocket_family_t ccsocket_get_version(const char *addr)

@@ -34,6 +34,7 @@ int main(void)
     uint16_t port;
     char buf[512];
     int n;
+    (void)addr; (void)port;
 
     /* --- Server: create, bind, listen --- */
     srv = ccsocket(CC_INET4, CC_TCP);
@@ -55,16 +56,14 @@ int main(void)
     /* --- Client: send HTTP request --- */
     {
         size_t reqlen = strlen(HTTP_REQ);
-        ccsocket_stcode_t rc = ccsocket_send(cli, HTTP_REQ, reqlen, &n);
-        assert(rc == CC_OPCODE_OK);
+        assert(ccsocket_send(cli, HTTP_REQ, reqlen, &n) == CC_OPCODE_OK);
         assert(n == (int)reqlen);
     }
 
     /* --- Server: receive and verify HTTP request --- */
     {
         n = 0;
-        ccsocket_stcode_t rc = ccsocket_recv(acc, buf, sizeof(buf) - 1, &n);
-        assert(rc == CC_OPCODE_OK);
+        assert(ccsocket_recv(acc, buf, sizeof(buf) - 1, &n) == CC_OPCODE_OK);
         assert(n > 0);
         buf[n] = '\0';
 
@@ -77,16 +76,14 @@ int main(void)
     /* --- Server: send HTTP response --- */
     {
         size_t reslen = strlen(HTTP_RES);
-        ccsocket_stcode_t rc = ccsocket_send(acc, HTTP_RES, reslen, &n);
-        assert(rc == CC_OPCODE_OK);
+        assert(ccsocket_send(acc, HTTP_RES, reslen, &n) == CC_OPCODE_OK);
         assert(n == (int)reslen);
     }
 
     /* --- Client: receive and verify HTTP response --- */
     {
         n = 0;
-        ccsocket_stcode_t rc = ccsocket_recv(cli, buf, sizeof(buf) - 1, &n);
-        assert(rc == CC_OPCODE_OK);
+        assert(ccsocket_recv(cli, buf, sizeof(buf) - 1, &n) == CC_OPCODE_OK);
         assert(n > 0);
         buf[n] = '\0';
 

@@ -27,6 +27,7 @@ int main(void)
     ccsocket_t cli;
     char addr[MAX_ADDRLEN];
     uint16_t port;
+    (void)addr; (void)port;
 
     /* --- Create UDP socket --- */
     cli = ccsocket(CC_INET4, CC_UDP);
@@ -56,8 +57,7 @@ int main(void)
     {
         char buf[16];
         int n = 0;
-        ccsocket_stcode_t rc = ccsocket_recv(cli, buf, sizeof(buf), &n);
-        assert(rc == CC_OPCODE_WAIT);
+        assert(ccsocket_recv(cli, buf, sizeof(buf), &n) == CC_OPCODE_WAIT);
     }
 
     /* --- Cleanup --- */
