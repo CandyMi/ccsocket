@@ -256,10 +256,13 @@ int ccdns_decode(struct ccdns_t *ctx,
     /* ---- Skip Question Section ---- */
     uint16_t pos = off + DNS_HDR_SZ;
     for (uint16_t i = 0; i < qdcnt; i++) {
+        unsigned labels = 0;
         while (pos < len) {
             uint8_t b = buf[pos];
             if (b == 0) { pos++; break; }
             if ((b & 0xC0) == 0xC0) { pos += 2; break; }
+            if (b > 63) return -1;           /* RFC 1035 §2.3.4: label length ≤ 63 */
+            if (++labels > 255) return -1;   /* defense: max 255 labels per QNAME */
             pos += 1 + b;
         }
         if (pos + 4 > len) return -1;
