@@ -29,6 +29,8 @@
 #define DNS_HDR_FLAGS   2   /* uint16_t */
 #define DNS_HDR_QDCNT   4   /* uint16_t */
 #define DNS_HDR_ANCNT   6   /* uint16_t */
+#define DNS_HDR_AUCNT   8   /* uint16_t */
+#define DNS_HDR_ADCNT   10  /* uint16_t */
 
 /* Standard DNS flags */
 #define DNS_FLAG_QR_QUERY   0x0100  /* RD = 1 (recursion desired) */
@@ -124,6 +126,8 @@ bool ccdns_init(struct ccdns_t *ctx)
 
     ctx->no = 1;
     ctx->last = 0;
+    ctx->edns_payload = 0;
+    ctx->edns_flags = 0;
     return true;
 }
 
@@ -133,6 +137,15 @@ void ccdns_close(struct ccdns_t *ctx)
         return;
     ctx->no = 0;
     ctx->last = 0;
+    ctx->edns_payload = 0;
+    ctx->edns_flags = 0;
+}
+
+void ccdns_set_edns(struct ccdns_t *ctx, uint16_t payload, uint8_t flags)
+{
+    if (!ctx) return;
+    ctx->edns_payload = payload;
+    ctx->edns_flags = flags;
 }
 
 uint16_t ccdns_encode(struct ccdns_t *ctx,
@@ -172,6 +185,22 @@ uint16_t ccdns_encode(struct ccdns_t *ctx,
     buf[pos + 2] = 0;
     buf[pos + 3] = CCDNS_CLASS_IN;
     pos += 4;
+
+    /* ---- OPT Pseudo-Record (EDNS, RFC 6891) ---- */
+    if (ctx->edns_payload > 0) {
+        buf[DNS_HDR_ADCNT + 1] = 1; // EDNS add count must > 0;        
+        if (pos + 11 > buflen) return 0;
+        buf[pos]     = 0x00;                       /* NAME = root */
+        buf[pos + 1] = 0x00; buf[pos + 2] = 0x29;  /* TYPE = OPT(41) */
+        buf[pos + 3] = (uint8_t)(ctx->edns_payload >> 8);
+        buf[pos + 4] = (uint8_t)(ctx->edns_payload & 0xFF);  /* CLASS = payload size */
+        buf[pos + 5] = 0;                           /* extended RCODE */
+        buf[pos + 6] = 0;                           /* version = 0 */
+        buf[pos + 7] = 0;
+        buf[pos + 8] = ctx->edns_flags;             /* flags (DO bit = 0x80) */
+        buf[pos + 9] = 0;  buf[pos + 10] = 0;       /* RDLENGTH = 0 */
+        pos += 11;
+    }
 
     return pos;
 }

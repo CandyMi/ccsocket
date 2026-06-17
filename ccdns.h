@@ -25,8 +25,8 @@ extern "C" {
 #define CCDNS_MAX_ADDR  65
 /** @brief Maximum domain name length (RFC 1035 §2.3.4). */
 #define CCDNS_MAX_NAME  255
-/** @brief Maximum DNS message size (UDP, RFC 1035 §4.2.1). */
-#define CCDNS_MAX_MSG   512
+/** @brief Maximum DNS message size (UDP, RFC 6891 EDNS). */
+#define CCDNS_MAX_MSG   4096
 
 /* ---- Enums --------------------------------------------------------------- */
 
@@ -70,8 +70,10 @@ typedef struct ccdns_ans {
  * query identifier and is never 0 while the context is active.
  */
 typedef struct ccdns_t {
-    uint16_t no;    /**< Next query identifier (never 0 while active). */
-    uint16_t last;  /**< Last query identifier used (for decode verification). */
+    uint16_t no;           /**< Next query identifier (never 0 while active). */
+    uint16_t last;         /**< Last query identifier used (for decode verification). */
+    uint16_t edns_payload; /**< EDNS UDP payload size (0 = disabled). */
+    uint8_t  edns_flags;   /**< EDNS flags (e.g. 0x80 for DO bit). */
 } ccdns_t;
 
 /* ---- Callback ------------------------------------------------------------ */
@@ -107,6 +109,23 @@ CCSOCKET_EXPORT bool ccdns_init(struct ccdns_t *ctx);
 CCSOCKET_EXPORT void ccdns_close(struct ccdns_t *ctx);
 
 /**
+ * @brief Enable EDNS (RFC 6891) on subsequent queries.
+ *
+ * When enabled, ccdns_encode() appends an OPT pseudo-record with the
+ * specified UDP payload size, allowing the DNS server to send responses
+ * larger than 512 bytes.
+ *
+ * Call this after ccdns_init() and before ccdns_encode().
+ *
+ * @param ctx     Initialised ccdns_t context.
+ * @param payload Maximum UDP payload size the caller can receive
+ *                (recommend 4096, 0 to disable).
+ * @param flags   EDNS flags (e.g. 0x80 for DNSSEC OK).
+ */
+CCSOCKET_EXPORT void ccdns_set_edns(struct ccdns_t *ctx,
+                                     uint16_t payload, uint8_t flags);
+
+/**
  * @brief Encode a DNS question into wire-format bytes.
  *
  * Builds a 12-byte DNS header followed by the question section.
@@ -115,7 +134,8 @@ CCSOCKET_EXPORT void ccdns_close(struct ccdns_t *ctx);
  *
  * @param ctx     Initialised ccdns_t context.
  * @param buf     Output buffer for the wire-format message.
- * @param buflen  Capacity of buf (recommend CCDNS_MAX_MSG).
+ * @param buflen  Capacity of buf (recommend CCDNS_MAX_MSG when EDNS
+ *                is disabled, up to 65535 with EDNS).
  * @param domain  Query domain name (e.g. "example.com").
  * @param qtype   Query record type (CCDNS_A / CCDNS_AAAA / etc.).
  * @return The encoded message length on success, 0 on failure.

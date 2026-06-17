@@ -1237,6 +1237,7 @@ bool ccsocket_getaddrinfo(const char *domain, ccaddrinfo_t **addrlist)
   bool got_v4 = false, got_v6 = false;
 
   ccdns_init(&dns);
+  ccdns_set_edns(&dns, CCDNS_MAX_MSG, 0);  /* enable EDNS, 4KB payload */
   col.head = addrlist;
   col.tail = NULL;
 
