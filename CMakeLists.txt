@@ -13,8 +13,6 @@ project(libccsocket
 )
 
 # -- C Standard ---------------------------------------------------------------
-# Baseline C99 (inline, stdbool.h, stdint.h, // comments).
-# Prefer C11 when available; not required — C99 toolchains are still valid.
 set(CMAKE_C_STANDARD          11)
 set(CMAKE_C_STANDARD_REQUIRED OFF)
 set(CMAKE_C_EXTENSIONS        OFF)
@@ -25,78 +23,100 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # -- Options ------------------------------------------------------------------
-option(BUILD_SHARED_LIBS "Build shared libraries (.so/.dylib/.dll)" ON)
-option(BUILD_TESTING     "Build test suite"                         ON)
+option(BUILD_SHARED_LIBS "Let ccsocket alias point to the shared library" ON)
+option(BUILD_TESTING     "Build test suite"                               ON)
 
-# Numeric compile-time configuration (CACHE STRING, NOT option() — option treats 65500 as OFF)
+# Numeric compile-time configuration (CACHE STRING, NOT option)
 set(CCICMP_MAX_PAYLOAD 65500 CACHE STRING "Max ICMP payload bytes")
 set(CCICMP_RECV_BUFSZ  65535 CACHE STRING "ICMP receive buffer size")
 
 # -- Compile Warnings ---------------------------------------------------------
+set(CC_WARNINGS "")
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
-  add_compile_options(-Wall -Wextra -Wpedantic)
-  add_compile_options(-Wshadow)
-  add_compile_options(-Wstrict-prototypes -Wold-style-definition)
-  add_compile_options(-Wmissing-prototypes -Wmissing-declarations)
-  # Treat some portability issues as errors
-  add_compile_options(-Werror=implicit-function-declaration)
-  add_compile_options(-Werror=return-type)
-  # The following flags are strict but the existing codebase has pre-existing
-  # issues. Uncomment when those are resolved:
-  # add_compile_options(-Wcast-align -Wconversion -Wsign-conversion)
+  set(CC_WARNINGS
+    -Wall -Wextra -Wpedantic -Wshadow
+    -Wstrict-prototypes -Wold-style-definition
+    -Wmissing-prototypes -Wmissing-declarations
+    -Werror=implicit-function-declaration -Werror=return-type
+  )
 elseif(MSVC)
-  add_compile_options(/W4 /utf-8)
+  set(CC_WARNINGS /W4 /utf-8)
 endif()
 
-# -- Symbol Visibility (non-Windows) ------------------------------------------
-# CCSOCKET_EXPORT is handled per-symbol in the header;
-# hide everything else by default.
-set(CMAKE_C_VISIBILITY_PRESET hidden)
-set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
-
-# -- Library: ccsocket (includes ccicmp + ccdns sub-modules) -----------------
-add_library(ccsocket
-  ccsocket.h
+# -- Sources ------------------------------------------------------------------
+set(CCSOCKET_SOURCES
   ccsocket.c
-  ccicmp.h
   ccicmp.c
-  ccdns.h
   ccdns.c
 )
+set(CCSOCKET_HEADERS
+  ccsocket.h
+  ccicmp.h
+  ccdns.h
+)
 
-target_include_directories(ccsocket
+# -- Object library (compiled once with PIC) ----------------------------------
+add_library(ccsocket_obj OBJECT ${CCSOCKET_SOURCES} ${CCSOCKET_HEADERS})
+
+target_include_directories(ccsocket_obj
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<INSTALL_INTERFACE:include>
 )
 
-target_compile_definitions(ccsocket
+target_compile_definitions(ccsocket_obj
   PRIVATE
-    $<$<BOOL:${BUILD_SHARED_LIBS}>:CCSOCKET_BUILD_SHARED>
     CCICMP_MAX_PAYLOAD=${CCICMP_MAX_PAYLOAD}
     CCICMP_RECV_BUFSZ=${CCICMP_RECV_BUFSZ}
-  PUBLIC
-    # Consumers of a shared build get dllimport; static builds get nothing.
-    $<$<AND:$<BOOL:${BUILD_SHARED_LIBS}>,$<NOT:$<STREQUAL:$<TARGET_PROPERTY:ccsocket,TYPE>,SHARED_LIBRARY>>>:CCSOCKET_SHARED>
 )
 
-# -- Platform Linkage ---------------------------------------------------------
+target_compile_options(ccsocket_obj PRIVATE ${CC_WARNINGS})
+
+# Symbol visibility: hide everything except CCSOCKET_EXPORT symbols.
+set(CMAKE_C_VISIBILITY_PRESET hidden)
+set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
+
+set_target_properties(ccsocket_obj PROPERTIES
+  POSITION_INDEPENDENT_CODE ON
+)
+
+# -- Shared library -----------------------------------------------------------
+add_library(ccsocket_shared SHARED)
+
+target_link_libraries(ccsocket_shared PUBLIC ccsocket_obj)
+
+target_compile_definitions(ccsocket_shared
+  PRIVATE   CCSOCKET_BUILD_SHARED   # dllexport when building
+  PUBLIC    CCSOCKET_SHARED         # dllimport when consuming
+)
+
+set_target_properties(ccsocket_shared PROPERTIES
+  OUTPUT_NAME ccsocket
+)
+
+# -- Static library -----------------------------------------------------------
+add_library(ccsocket_static STATIC)
+
+target_link_libraries(ccsocket_static PUBLIC ccsocket_obj)
+
+set_target_properties(ccsocket_static PROPERTIES
+  OUTPUT_NAME ccsocket
+)
+
+# -- Platform Linkage (applied to both via the object library) ----------------
 if(WIN32)
-  # ws2_32 is auto-linked via #pragma comment(lib) on MSVC,
-  # but MinGW / cross-compilation toolchains need the explicit link.
-  target_link_libraries(ccsocket PUBLIC ws2_32)
+  target_link_libraries(ccsocket_obj PUBLIC ws2_32)
 endif()
 
-# Solaris / illumos: socket functions live in libsocket, gethostbyname
-# and related resolver functions live in libnsl.  Without these the
-# linker will emit undefined references for socket(), sendfile(), etc.
 if(CMAKE_SYSTEM_NAME STREQUAL "SunOS")
-  # Socket functions → libsocket, resolver → libnsl, sendfile → libsendfile.
-  # On Solaris 11.4+ sendfile may also reside in libc; linking extra is harmless.
-  target_link_libraries(ccsocket PUBLIC socket nsl sendfile)
+  target_link_libraries(ccsocket_obj PUBLIC socket nsl sendfile)
 endif()
 
-# -- Alias for convenience ----------------------------------------------------
+# -- Consumer alias (shared or static depending on BUILD_SHARED_LIBS) ---------
+add_library(ccsocket INTERFACE)
+target_link_libraries(ccsocket INTERFACE
+  $<IF:$<BOOL:${BUILD_SHARED_LIBS}>,ccsocket_shared,ccsocket_static>
+)
 add_library(ccsocket::ccsocket ALIAS ccsocket)
 
 # -- Tests --------------------------------------------------------------------
