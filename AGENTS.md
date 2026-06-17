@@ -180,13 +180,6 @@ docs(AGENTS): add git commit conventions section
 
 Multiple commits addressing the same feature should be squashed before pushing.
 
-### 3.8 Portability Patterns
-
-- **Platform detection**: `#if _WIN32` for Windows vs. `#else` for POSIX.
-- **Socket type**: `SOCKET` (Windows) vs `int` (POSIX), unified via `ccsocket_t`.
-- **IO vectors**: Different field order on Windows (`len` first) vs POSIX (`buf` first) — always use accessor macros (`ccsocket_set_iov_len`, etc.), never direct struct access.
-- **Inline**: `CC_INLINE` macro resolves to `static inline` (C99), `static __inline` (MSVC), or `static` (C89 fallback).
-
 ---
 
 ## 4. Build System
@@ -328,7 +321,6 @@ ctest --test-dir build --output-on-failure -V
 | New compile-time macro added | §4.5 Compile-Time Configuration Macros |
 | Test suite added or reorganized | §5 Testing |
 | New public module created | §2.1 Module Dependency |
-| New coding convention adopted | §3 Language & Coding Conventions |
 | License change | §1.1 Identity + LICENSE |
 
 When updating AGENTS.md, the agent should consider whether the change has **extensions** that warrant documentation beyond the immediate diff — for example, a new platform `#ifdef` may also affect error-handling patterns in §3.4, a new test file may imply test framework choices in §5.1.
