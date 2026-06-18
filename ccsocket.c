@@ -1039,47 +1039,49 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
 
 /* ---- DNS resolver via ccdns + ccsocket (replaces getaddrinfo) ---------- */
 
+#define MAX_NS 4
+
 #if !defined(_WIN32)
-/** @brief Read the first nameserver from /etc/resolv.conf. */
-static bool read_dns_server(char *buf, size_t buflen)
+/** @brief Read nameservers from /etc/resolv.conf, up to max. Returns count. */
+static int read_dns_servers(char nslist[][CCDNS_MAX_ADDR], int max)
 {
   FILE *f = fopen("/etc/resolv.conf", "r");
-  if (!f) return false;
+  if (!f) return 0;
   char line[256];
-  while (fgets(line, sizeof(line), f)) {
+  int count = 0;
+  while (fgets(line, sizeof(line), f) && count < max) {
     if (strncmp(line, "nameserver", 10) == 0) {
       const char *ns = line + 10;
       while (*ns == ' ' || *ns == '\t') ns++;
       const char *end = ns;
       while (*end && *end != '\n' && *end != ' ' && *end != '\t') end++;
       size_t len = (size_t)(end - ns);
-      if (len > 0 && len < buflen) {
-        memcpy(buf, ns, len);
-        buf[len] = '\0';
-        fclose(f);
-        return true;
+      if (len > 0 && len < CCDNS_MAX_ADDR) {
+        memcpy(nslist[count], ns, len);
+        nslist[count][len] = '\0';
+        count++;
       }
     }
   }
   fclose(f);
-  return false;
+  return count;
 }
 
 #else
 
-/** @brief Read the first nameserver from Windows registry. */
-static bool read_dns_server(char *buf, size_t buflen)
+/** @brief Read nameservers from Windows registry, up to max. Returns count. */
+static int read_dns_servers(char nslist[][CCDNS_MAX_ADDR], int max)
 {
   HKEY hKey;
   LONG ret = RegOpenKeyEx(HKEY_LOCAL_MACHINE,
     "SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces",
     0, KEY_READ, &hKey);
-  if (ret != ERROR_SUCCESS) return false;
+  if (ret != ERROR_SUCCESS) return 0;
 
   DWORD idx = 0;
-  bool found = false;
+  int count = 0;
 
-  while (!found) {
+  while (count < max) {
     char guid[256];
     DWORD guidlen = sizeof(guid);
     ret = RegEnumKeyEx(hKey, idx++, guid, &guidlen, NULL, NULL, NULL, NULL);
@@ -1095,21 +1097,25 @@ static bool read_dns_server(char *buf, size_t buflen)
     ret = RegQueryValueEx(hSub, "NameServer", NULL, &type, (BYTE*)ns, &nslen);
     if (ret == ERROR_SUCCESS && type == REG_SZ && ns[0]) {
       char *p = ns;
-      while (*p == ' ') p++;
-      char *end = p;
-      while (*end && *end != ' ' && *end != ',') end++;
-      size_t len = (size_t)(end - p);
-      if (len > 0 && len < buflen) {
-        memcpy(buf, p, len);
-        buf[len] = '\0';
-        found = true;
+      while (*p && count < max) {
+        while (*p == ' ' || *p == ',' || *p == '\t') p++;
+        if (!*p) break;
+        char *end = p;
+        while (*end && *end != ' ' && *end != ',' && *end != '\t') end++;
+        size_t len = (size_t)(end - p);
+        if (len > 0 && len < CCDNS_MAX_ADDR) {
+          memcpy(nslist[count], p, len);
+          nslist[count][len] = '\0';
+          count++;
+        }
+        p = end;
       }
     }
     RegCloseKey(hSub);
   }
 
   RegCloseKey(hKey);
-  return found;
+  return count;
 }
 #endif
 
@@ -1191,6 +1197,18 @@ static bool dns_query_one(const char *dns_server, struct ccdns_t *dns,
   return ccdns_decode(dns, rbuf, (uint16_t)rsize, col, on_dns_answer) > 0;
 }
 
+/** @brief Try dns_query_one across multiple nameservers with retries. */
+static bool dns_query_retry(const char nslist[][CCDNS_MAX_ADDR], int nscount,
+                             struct ccdns_t *dns, const char *domain,
+                             ccdns_type_t qtype, struct dns_collect_ctx *col)
+{
+  for (int try = 0; try < 2; try++)
+    for (int i = 0; i < nscount; i++)
+      if (dns_query_one(nslist[i], dns, domain, qtype, col))
+        return true;
+  return false;
+}
+
 bool ccsocket_getaddrinfo(const char *domain, ccaddrinfo_t **addrlist)
 {
   if (!domain) { ccsocket_set_errno(EINVAL); return false; }
@@ -1205,10 +1223,10 @@ bool ccsocket_getaddrinfo(const char *domain, ccaddrinfo_t **addrlist)
       *addrlist = (ccaddrinfo_t*)malloc(sizeof(ccaddrinfo_t));
       if (!*addrlist) return false;
       memset(*addrlist, 0, sizeof(ccaddrinfo_t));
-      (*addrlist)->af = af;
       strncpy((*addrlist)->address, domain, sizeof((*addrlist)->address) - 1);
       (*addrlist)->address[sizeof((*addrlist)->address) - 1] = '\0';
       (*addrlist)->ttl = 0;
+      (*addrlist)->af = af;
       return true;
     }
   }
@@ -1219,18 +1237,18 @@ bool ccsocket_getaddrinfo(const char *domain, ccaddrinfo_t **addrlist)
     *addrlist = (ccaddrinfo_t*)malloc(sizeof(ccaddrinfo_t));
     if (!*addrlist) return false;
     memset(*addrlist, 0, sizeof(ccaddrinfo_t));
+    memcpy((*addrlist)->address, "127.0.0.1", 10);
     (*addrlist)->af = CC_INET4;
     (*addrlist)->ttl = 0;
-    memcpy((*addrlist)->address, "127.0.0.1", 10);
     return true;
   }
 
-  /* --- 3. Get DNS server address --- */
-  char dns_server[CCDNS_MAX_ADDR] = "8.8.8.8";
-  {
-    char buf[CCDNS_MAX_ADDR];
-    if (read_dns_server(buf, sizeof(buf)))
-      memcpy(dns_server, buf, sizeof(buf));
+  /* --- 3. Get DNS server addresses --- */
+  char nslist[MAX_NS][CCDNS_MAX_ADDR];
+  int nscount = read_dns_servers(nslist, MAX_NS);
+  if (nscount == 0) {
+    nscount = 1;
+    memcpy(nslist[0], "1.1.1.1", 9);
   }
 
   /* --- 4. DNS lookup via ccdns + ccsocket --- */
@@ -1244,10 +1262,10 @@ bool ccsocket_getaddrinfo(const char *domain, ccaddrinfo_t **addrlist)
   col.tail = NULL;
 
   /* Query A (IPv4) */
-  got_v4 = dns_query_one(dns_server, &dns, domain, CCDNS_A, &col);
+  got_v4 = dns_query_retry(nslist, nscount, &dns, domain, CCDNS_A, &col);
 
   /* Query AAAA (IPv6) */
-  got_v6 = dns_query_one(dns_server, &dns, domain, CCDNS_AAAA, &col);
+  got_v6 = dns_query_retry(nslist, nscount, &dns, domain, CCDNS_AAAA, &col);
 
   ccdns_close(&dns);
 
