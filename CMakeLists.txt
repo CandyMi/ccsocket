@@ -135,3 +135,22 @@ if(BUILD_TESTING)
   enable_testing()
   add_subdirectory(tests)
 endif()
+
+# -- Documentation (Doxygen) --------------------------------------------------
+option(BUILD_DOCS "Build Doxygen documentation (requires Doxygen)" OFF)
+
+if(BUILD_DOCS)
+  find_package(Doxygen REQUIRED)
+
+  configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/Doxyfile"
+    @ONLY
+  )
+
+  add_custom_target(docs
+    COMMAND ${DOXYGEN_EXECUTABLE} "${CMAKE_CURRENT_BINARY_DIR}/Doxyfile"
+    COMMENT "Generating API documentation (Doxygen) — open ${CMAKE_CURRENT_BINARY_DIR}/docs/html/index.html"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+  )
+endif()

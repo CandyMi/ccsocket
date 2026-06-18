@@ -6,7 +6,7 @@
  * Compiled as part of the ccsocket library target.
  *
  * @author CandyMi
- * @license MIT
+ * @copyright MIT
  */
 
 #ifndef CCICMP_H

@@ -208,6 +208,7 @@ Build defined in [`CMakeLists.txt`](CMakeLists.txt) — CMake ≥ 3.0, C99.
 
 - **C compiler**: GCC, Clang, MSVC, or MinGW — C99 mode or later
 - **CMake**: ≥ 3.0
+- **Doxygen** (optional): required only when `BUILD_DOCS=ON`
 - **No external dependencies**: The library uses only OS-native socket APIs and standard C headers
 
 ### 4.2 Build Commands
@@ -226,6 +227,11 @@ cmake --build build && ctest --test-dir build --output-on-failure -V
 cmake -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
 cmake --build build
 ctest --test-dir build --output-on-failure -V
+
+# Generate Doxygen API documentation (requires Doxygen)
+cmake -B build -DBUILD_DOCS=ON
+cmake --build build --target docs
+# Open build/docs/html/index.html
 ```
 
 ### 4.3 CMake Options
@@ -236,6 +242,7 @@ ctest --test-dir build --output-on-failure -V
 | `BUILD_TESTING` | `ON` | tests | Enable test targets |
 | `CCICMP_MAX_PAYLOAD` | `65500` | ccicmp | Max ICMP payload size |
 | `CCICMP_RECV_BUFSZ` | `65535` | ccicmp | ICMP receive buffer size |
+| `BUILD_DOCS` | `OFF` | docs | Build Doxygen API documentation (requires Doxygen) |
 
 Pass via `-D<OPTION>=<VALUE>` on the cmake command line.
 

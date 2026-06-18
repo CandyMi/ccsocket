@@ -6,7 +6,7 @@
  * across Linux, macOS, FreeBSD, Solaris, AIX, and Windows.
  *
  * @author CandyMi
- * @license MIT
+ * @copyright MIT
  */
 
 #ifndef CCSOCKET_H
@@ -173,6 +173,7 @@ CCSOCKET_EXPORT bool ccsocket_init(void);
 
 /**
  * @brief Create a pair of connected pipes backed by socket handles.
+ * @fn ccsocket_pipe
  *
  * Emulates POSIX pipe() using a socketpair.  The returned handles
  * are ccsocket_t values fully compatible with ccsocket_send/recv/close.

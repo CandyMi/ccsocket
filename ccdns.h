@@ -7,7 +7,7 @@
  * ccsocket_send(), decode parses bytes from ccsocket_recv().
  *
  * @author CandyMi
- * @license MIT
+ * @copyright MIT
  */
 
 #ifndef CCDNS_H

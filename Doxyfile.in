@@ -1,0 +1,76 @@
+# ============================================================================
+# Doxygen configuration for libccsocket
+# Template processed by CMake (configure_file @ONLY)
+# ============================================================================
+
+# -- Project info ------------------------------------------------------------
+PROJECT_NAME           = "@PROJECT_NAME@"
+PROJECT_NUMBER         = @PROJECT_VERSION@
+PROJECT_BRIEF          = "@PROJECT_DESCRIPTION@"
+OUTPUT_DIRECTORY       = "@CMAKE_CURRENT_BINARY_DIR@/docs"
+
+# -- Input -------------------------------------------------------------------
+INPUT                  = @CMAKE_CURRENT_SOURCE_DIR@
+FILE_PATTERNS          = *.h
+RECURSIVE              = NO
+EXCLUDE_PATTERNS       =
+
+# -- Extraction level --------------------------------------------------------
+EXTRACT_ALL            = YES
+EXTRACT_STATIC         = YES
+EXTRACT_PRIVATE        = NO
+EXTRACT_PACKAGE        = NO
+EXTRACT_LOCAL_METHODS  = NO
+SORT_MEMBER_DOCS       = YES
+SORT_BRIEF_DOCS        = YES
+SORT_BY_SCOPE_NAME     = NO
+
+# -- Output format -----------------------------------------------------------
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+GENERATE_MAN           = NO
+GENERATE_RTF           = NO
+GENERATE_XML           = NO
+
+# -- HTML output -------------------------------------------------------------
+HTML_OUTPUT            = html
+HTML_HEADER            =
+HTML_FOOTER            =
+HTML_STYLESHEET        =
+HTML_EXTRA_STYLESHEET  =
+HTML_COLORSTYLE_HUE    = 220
+HTML_COLORSTYLE_SAT    = 100
+HTML_COLORSTYLE_GAMMA  = 80
+# HTML_TIMESTAMP removed (obsolete since Doxygen 1.10)
+
+# -- Diagrams ----------------------------------------------------------------
+HAVE_DOT               = NO
+UML_LOOK               = NO
+CALL_GRAPH             = NO
+CALLER_GRAPH           = NO
+
+# -- Preprocessor ------------------------------------------------------------
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = YES
+EXPAND_ONLY_PREDEF     = YES
+INCLUDE_PATH           = @CMAKE_CURRENT_SOURCE_DIR@
+
+# Expand only these macros (set to empty to avoid Doxygen mis-parsing
+# __attribute__((visibility)) / __declspec(dllexport) decorations).
+PREDEFINED             = CCSOCKET_EXPORT= \
+                         CCDNS_EXPORT= \
+                         OPTIONAL= \
+                         pipe=
+
+# -- Source browsing ---------------------------------------------------------
+SOURCE_BROWSER         = NO
+INLINE_SOURCES         = NO
+REFERENCED_BY_RELATION = NO
+REFERENCES_RELATION    = NO
+
+# -- Quiet mode --------------------------------------------------------------
+QUIET                  = YES
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+WARN_NO_PARAMDOC       = NO
