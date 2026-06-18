@@ -64,16 +64,31 @@
 ┌─────────────────────────────────────┐
 │           libccsocket               │
 │  ┌────────────┐  ┌──────────────┐   │
-│  │  ccicmp    │  │  ccsocket    │   │
-│  │ (ICMP ping)│  │ (socket ABI) │   │
+│  ┌────────────┐  ┌──────────────┐   │
+│  │  ccdns     │  │  ccicmp      │   │
+│  │ (DNS clnt) │  │ (ICMP ping)  │   │
 │  └─────┬──────┘  └──────┬───────┘   │
-│        └────────┬───────┘           │
-│                 ▼                   │
+│        │                │           │
+│        └────┬───┬───────┘           │
+│             ▼   ▼                   │
 │      ┌──────────────────┐           │
-│      │  ccicmp built-in │           │
-│      │  as part of same │           │
-│      │  library target  │           │
-│      └──────────────────┘           │
+│      │  ccsocket        │           │
+│      │  (socket ABI)    │           │
+│      └────────┬─────────┘           │
+│               │                     │
+│     ┌─────────┴──────────┐          │
+│     ▼                    ▼          │
+│  ccicmp / ccdns    single library   │
+│  built into same    target: ccsocket│
+│  library target                     │
+│  consuming ccsocket                 │
+│  provides all APIs                  │
+│  ┌──────────────────┐               │
+│  │  ccdns uses      │               │
+│  │  ccdns.h (.h)    │               │
+│  │  no ccsocket.h   │               │
+│  │  dependency      │               │
+│  └──────────────────┘               │
 └─────────────────────────────────────┘
                   │
      ┌────────────┴────────────┐
@@ -261,7 +276,7 @@ Test infrastructure is live via CTest. Test sources live in [`tests/`](tests/).
 | `ccsocket/opts` | Functional | nodelay/reuseaddr/keepalive/nonblock/cloexec (valid + invalid handle) |
 | `ccsocket/http` | **Combined protocol** | HTTP request/response round-trip using `httpc.txt` as template |
 | `ccicmp/ping` | **Combined (ICMP)** | IPv4/IPv6 checksum (RFC 1071 / RFC 4443), packet layout, init/close lifecycle |
-| `ccdns/test` | **DNS client** | DNS query encode, response decode (A/AAAA/CNAME), compression ptr (RFC 1035 §4.1.4), lifecycle |
+| `ccdns/test` | **DNS client** | DNS query encode, response decode (A/AAAA/CNAME/TXT/MX), compression ptr (RFC 1035 §4.1.4), TCP mode (RFC 1035 §4.2.2), lifecycle |
 
 ### 5.2 Test Conventions
 
@@ -365,7 +380,17 @@ The TCP mode is controlled via the `tcp` field in `ccdns_t` (set via `ccdns_set_
 
 **EDNS interaction**: EDNS OPT records are technically unnecessary over TCP (no 512-byte limit), but remain supported.  The EDNS and TCP flags are independent — callers may enable both.
 
-### 7.5 ICMP DGRAM vs RAW Semantics
+### 7.5 Internal DNS Resolver
+
+`ccsocket_getaddrinfo()` uses a built-in DNS resolver built on `ccdns` + `ccsocket` UDP sockets, rather than calling the system `getaddrinfo()`.  This preserves TTL information and provides cross-platform consistency (Windows `getaddrinfo` does not read `/etc/resolv.conf`).
+
+The resolver supports retry and failover:
+
+- **Multi-NS**: reads up to 4 nameservers from `/etc/resolv.conf` (POSIX) or registry (Windows).
+- **Retry**: 2 rounds across all nameservers (glibc-style sequential), total up to 8 attempts.
+- **Fallback**: when no nameserver is configured, defaults to `8.8.8.8`.
+
+### 7.6 ICMP DGRAM vs RAW Semantics
 
 `ccicmp_init()` automatically selects the best available socket type:
 

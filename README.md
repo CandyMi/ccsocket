@@ -14,6 +14,7 @@ Included sub-module: **ccicmp** — a portable ICMP echo ("ping") library with I
 ## Features
 
 - **TCP, UDP, ICMP, Unix Domain Sockets** — single API, multiple protocols
+- **DNS client (A/AAAA/TXT/MX/CNAME)** — built-in resolver with TCP mode, EDNS, multi-NS retry
 - **Cross-platform** — Linux, macOS, FreeBSD, Solaris, AIX, Windows
 - **Zero-copy file transfer** — `sendfile()` on supported kernels, transparent fallback elsewhere
 - **Scatter/gather I/O** — `iovec`-based send/recv with platform-safe accessor macros
