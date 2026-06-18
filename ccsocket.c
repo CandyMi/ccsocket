@@ -1164,7 +1164,9 @@ static bool dns_query_one(const char *dns_server, struct ccdns_t *dns,
   int rsize;
   ccsocket_stcode_t st;
 
-  ccsocket_t fd = ccsocket(CC_INET4, CC_UDP);
+  ccsocket_family_t af = ccsocket_get_version(dns_server);
+  if (af != CC_INET4 && af != CC_INET6) return false;
+  ccsocket_t fd = ccsocket(af, CC_UDP);
   if (fd == INVALID_SOCKET) return false;
 
   ccsocket_set_rcvtimeout(fd, 5000);
@@ -1184,7 +1186,7 @@ static bool dns_query_one(const char *dns_server, struct ccdns_t *dns,
   rsize = 0;
   st = ccsocket_recv(fd, (char *)rbuf, sizeof(rbuf), &rsize);
   ccsocket_close(fd);
-  if (st != CC_OPCODE_OK || rsize <= 0) return false;
+  if (st != CC_OPCODE_OK || rsize <= 0 || (size_t)rsize > sizeof(rbuf)) return false;
 
   return ccdns_decode(dns, rbuf, (uint16_t)rsize, col, on_dns_answer) > 0;
 }
@@ -1249,7 +1251,7 @@ bool ccsocket_getaddrinfo(const char *domain, ccaddrinfo_t **addrlist)
 
   ccdns_close(&dns);
 
-  if (got_v4 || got_v6) return true;
+  if ((got_v4 || got_v6) && *addrlist) return true;
 
   ccsocket_set_errno(EHOSTUNREACH);
   return false;
