@@ -63,3 +63,6 @@ Makefile
 # debug information files
 *.dwo
 .DS_Store
+
+# Reasonix agent artifacts
+.reasonix
