@@ -9,8 +9,6 @@
  * @license MIT
  */
 
-#include "ccdns.h"
-
 #include <string.h>
 #include <stdio.h>
 
@@ -19,6 +17,8 @@
 #else
   #define ccdns_snprintf snprintf
 #endif
+
+#include "ccdns.h"
 
 /* ---- DNS Header Offsets (RFC 1035 §4.1.1) -------------------------------- */
 #define DNS_HDR_SZ      12

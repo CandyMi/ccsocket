@@ -28,9 +28,6 @@
 */
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 
-#include "ccsocket.h"
-#include "ccdns.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -179,6 +176,9 @@
   #define ccsocket_is_errno(err) (err == errno)
   #define ccsocket_set_errno(err) errno = err
 #endif
+
+#include "ccsocket.h"
+#include "ccdns.h"
 
 /* -- Windows: public init (WSAStartup) ------------------------------------ */
 CCSOCKET_EXPORT bool ccsocket_init(void)

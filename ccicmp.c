@@ -10,8 +10,6 @@
   #define _GNU_SOURCE
 #endif
 
-#include "ccicmp.h"
-
 #include <assert.h>
 #include <string.h>
 #include <errno.h>
@@ -28,6 +26,7 @@
   #include <sys/time.h>
   #include <netinet/in.h>
   #include <netinet/ip.h>   /* struct ip (needed by ip_icmp.h on FreeBSD) */
+
   #include <netinet/ip_icmp.h>
   #include <netinet/icmp6.h>
   #define cc_alloca __builtin_alloca   /* GCC/Clang builtin, no header needed */
@@ -35,6 +34,8 @@
     #include <netinet/icmp_var.h>
   #endif
 #endif
+
+#include "ccicmp.h"
 
 /* for C89/C90 with C99 inline support */
 #if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199409L)
