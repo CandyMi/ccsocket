@@ -158,11 +158,15 @@ CCSOCKET_EXPORT bool ccsocket_init(void)
     #if _WIN64
       #define read  _read
       #define lseek _lseeki64
-      typedef int64_t off_t;
+      #ifndef _OFF_T_DEFINED
+        typedef int64_t off_t;
+      #endif
     #else
       #define read  _read
       #define lseek _lseek
-      typedef int32_t off_t;
+      #ifndef _OFF_T_DEFINED
+        typedef int32_t off_t;
+      #endif
     #endif
     #define CC_SENDFILE_FALLBACK
   #endif
@@ -1202,7 +1206,7 @@ static bool dns_query_retry(const char nslist[][CCDNS_MAX_ADDR], int nscount,
                              struct ccdns_t *dns, const char *domain,
                              ccdns_type_t qtype, struct dns_collect_ctx *col)
 {
-  for (int try = 0; try < 2; try++)
+  for (int attempt = 0; attempt < 2; attempt++)
     for (int i = 0; i < nscount; i++)
       if (dns_query_one(nslist[i], dns, domain, qtype, col))
         return true;

@@ -275,7 +275,7 @@ int ccdns_decode(struct ccdns_t *ctx,
     for (uint16_t i = 0; i < ancnt; i++) {
         ccdns_ans_t ans;
         memset(&ans, 0, sizeof(ans));
-        ans.cls = 0;
+        /* ans.cls is already zeroed by memset above */
 
         /* NAME */
         if (dns_name_decode(buf, &pos, len, off, ans.domain, sizeof(ans.domain)) != 0)

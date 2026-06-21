@@ -49,7 +49,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
     -Werror=implicit-function-declaration -Werror=return-type
   )
 elseif(MSVC)
-  set(CC_WARNINGS /W4 /utf-8)
+  set(CC_WARNINGS /W4 /utf-8 /wd4996)
 endif()
 
 # -- Sources ------------------------------------------------------------------

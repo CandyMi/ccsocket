@@ -185,8 +185,11 @@ CCSOCKET_EXPORT bool ccsocket_init(void);
  * @param sv  Output array of two connected socket handles.
  * @return 0 on success, SOCKET_ERROR on failure.
  */
-#undef pipe
-#define pipe(fds) ccsocket_pipe(fds)
+#if defined(_WIN32)
+  #ifndef pipe
+    #define pipe(fds) ccsocket_pipe(fds)
+  #endif
+#endif
 CCSOCKET_EXPORT int ccsocket_pipe(ccsocket_t sv[2]);
 
 /* create socketpair base `SOCK_STREAM` */

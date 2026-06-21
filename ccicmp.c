@@ -18,6 +18,7 @@
 
 #if _WIN32
   #include <winsock2.h>
+  #include <ws2tcpip.h>
   #include <malloc.h>
   #include <sys/timeb.h>
   #define cc_alloca _alloca

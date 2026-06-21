@@ -50,10 +50,7 @@ jobs:
 
       - name: Static-link smoke test
         run: |
-          cmake -B build-static
-            -DBUILD_TESTING=OFF
-            -DBUILD_SHARED_LIBS=OFF
-            -DCMAKE_C_COMPILER=gcc
+          cmake -B build-static -DBUILD_TESTING=OFF -DBUILD_SHARED_LIBS=OFF -DCMAKE_C_COMPILER=gcc
           cmake --build build-static --parallel
 
       # --- C++ smoke: compile library .c files as C++ ---
@@ -66,7 +63,7 @@ jobs:
             #include "ccicmp.h"
             #include "ccdns.h"
             int main() {
-                const char *ver = ccsocket_get_version();
+                ccsocket_family_t ver = ccsocket_get_version("1.1.1.1");
                 (void)ver;
                 return 0;
             }
@@ -116,7 +113,7 @@ jobs:
             #include "ccicmp.h"
             #include "ccdns.h"
             int main() {
-                const char *ver = ccsocket_get_version();
+                ccsocket_family_t ver = ccsocket_get_version("1.1.1.1");
                 (void)ver;
                 return 0;
             }
@@ -170,7 +167,7 @@ jobs:
             #include "ccicmp.h"
             #include "ccdns.h"
             int main() {
-                const char *ver = ccsocket_get_version();
+                ccsocket_family_t ver = ccsocket_get_version("1.1.1.1");
                 (void)ver;
                 return 0;
             }
@@ -192,58 +189,61 @@ jobs:
   centos7:
     name: CentOS 7 (x86_64)
     runs-on: ubuntu-latest
-    container:
-      image: centos:7
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install build tools
+      - name: Build and test in CentOS 7 container
         run: |
-          sed -i 's|mirror.centos.org|vault.centos.org|g' /etc/yum.repos.d/*.repo
-          sed -i 's|^#baseurl|baseurl|' /etc/yum.repos.d/*.repo
-          sed -i 's|^mirrorlist=|#mirrorlist=|' /etc/yum.repos.d/*.repo
-          yum install -y -q epel-release
-          yum install -y -q cmake3 gcc gcc-c++ make
+          docker run --rm -v $PWD:/workspace -w /workspace centos:7 \
+            sh -c "
+              sed -i 's|mirror.centos.org|vault.centos.org|g' /etc/yum.repos.d/*.repo &&
+              sed -i 's|^#baseurl|baseurl|' /etc/yum.repos.d/*.repo &&
+              sed -i 's|^mirrorlist=|#mirrorlist=|' /etc/yum.repos.d/*.repo &&
+              yum install -y -q epel-release &&
+              yum install -y -q cmake3 gcc gcc-c++ make &&
+              cmake3 -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DCMAKE_C_COMPILER=gcc &&
+              cmake3 --build build --parallel &&
+              ctest3 --test-dir build --output-on-failure
+            "
 
-      - name: Configure (C)
-        run: >
-          cmake3 -B build
-          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
-          -DBUILD_TESTING=ON
-          -DCMAKE_C_COMPILER=gcc
-
-      - name: Build (C)
-        run: cmake3 --build build --parallel
-
-      - name: Test (C)
-        run: ctest3 --test-dir build --output-on-failure
-
-      # --- C++ smoke ---
-      - name: C++ smoke — compile+link as C++
+      - name: C++ smoke - compile+link as C++
         run: |
-          g++ -std=c++11 -I. -o /tmp/cxx_smoke \
-            -x c++ ccsocket.c ccicmp.c ccdns.c \
-            -x c++ - <<'PLAINTEXT'
+          docker run --rm -v $PWD:/workspace -w /workspace centos:7 \
+            sh -c "
+              sed -i 's|mirror.centos.org|vault.centos.org|g' /etc/yum.repos.d/*.repo &&
+              sed -i 's|^#baseurl|baseurl|' /etc/yum.repos.d/*.repo &&
+              sed -i 's|^mirrorlist=|#mirrorlist=|' /etc/yum.repos.d/*.repo &&
+              yum install -y -q epel-release &&
+              yum install -y -q cmake3 gcc gcc-c++ make &&
+              g++ -std=c++11 -I. -o /tmp/cxx_smoke -x c++ ccsocket.c ccicmp.c ccdns.c -x c++ - <<'PLAINTEXT'
             #include "ccsocket.h"
             #include "ccicmp.h"
             #include "ccdns.h"
             int main() {
-                const char *ver = ccsocket_get_version();
+                ccsocket_family_t ver = ccsocket_get_version("1.1.1.1");
                 (void)ver;
                 return 0;
             }
           PLAINTEXT
+            "
 
-      - name: C++ smoke — header-only inclusion
+      - name: C++ smoke - header-only inclusion
         run: |
-          g++ -std=c++11 -I. -o /tmp/cxx_include_check \
-            -x c++ - <<'PLAINTEXT'
+          docker run --rm -v $PWD:/workspace -w /workspace centos:7 \
+            sh -c "
+              sed -i 's|mirror.centos.org|vault.centos.org|g' /etc/yum.repos.d/*.repo &&
+              sed -i 's|^#baseurl|baseurl|' /etc/yum.repos.d/*.repo &&
+              sed -i 's|^mirrorlist=|#mirrorlist=|' /etc/yum.repos.d/*.repo &&
+              yum install -y -q epel-release &&
+              yum install -y -q cmake3 gcc gcc-c++ make &&
+              g++ -std=c++11 -I. -o /tmp/cxx_include_check -x c++ - <<'PLAINTEXT'
             #include "ccsocket.h"
             #include "ccicmp.h"
             #include "ccdns.h"
             int main() { return 0; }
           PLAINTEXT
+            "
 
   # ==================================================================
   #  macOS — AppleClang, x86_64 (Intel)
@@ -277,7 +277,7 @@ jobs:
             #include "ccicmp.h"
             #include "ccdns.h"
             int main() {
-                const char *ver = ccsocket_get_version();
+                ccsocket_family_t ver = ccsocket_get_version("1.1.1.1");
                 (void)ver;
                 return 0;
             }
@@ -325,7 +325,7 @@ jobs:
             #include "ccicmp.h"
             #include "ccdns.h"
             int main() {
-                const char *ver = ccsocket_get_version();
+                ccsocket_family_t ver = ccsocket_get_version("1.1.1.1");
                 (void)ver;
                 return 0;
             }
@@ -436,7 +436,7 @@ jobs:
             #include "ccicmp.h"
             #include "ccdns.h"
             int main() {
-                const char *ver = ccsocket_get_version();
+                ccsocket_family_t ver = ccsocket_get_version("1.1.1.1");
                 (void)ver;
                 return 0;
             }
@@ -498,7 +498,7 @@ jobs:
             #include "ccicmp.h"
             #include "ccdns.h"
             int main() {
-                const char *ver = ccsocket_get_version();
+                ccsocket_family_t ver = ccsocket_get_version("1.1.1.1");
                 (void)ver;
                 return 0;
             }
