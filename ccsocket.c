@@ -59,7 +59,9 @@
       char  sun_path[UNIX_PATH_MAX]; /* pathname */
     } SOCKADDR_UN, * PSOCKADDR_UN;
   #endif
+#if defined(_MSC_VER)
   #pragma comment(lib, "Ws2_32.lib")
+#endif
 
   /* WSARecvMsg / WSASendMsg function pointers (loaded via WSAIoctl at runtime).
    * Avoids dependency on mswsock.h declarations which vary across compilers. */
@@ -112,6 +114,8 @@
     _In_ DWORD     fdwReason,
     _In_ LPVOID    lpvReserved
   ) {
+    (void)hinstDLL;
+    (void)lpvReserved;
     if (fdwReason == DLL_PROCESS_ATTACH) {
   #ifndef NDEBUG
       /* Debug builds: auto-init for developer convenience.
@@ -167,7 +171,6 @@
   #include <sys/sendfile.h>
 #endif
   #define closesocket(s) close(s)
-  typedef int SOCKET;
   #define SOCKET_ERROR (~0)
 #ifndef EWOULDBLOCK
   #define EWOULDBLOCK EAGAIN
@@ -313,7 +316,7 @@ int _ccsocket_get_family(ccsocket_t s, struct sockaddr_storage* sa)
 #if _WIN32
   WSAPROTOCOL_INFOA info; int len = sizeof(info); // getsockname will fail on WinSock.
   int r = getsockopt((SOCKET)s, SOL_SOCKET, SO_PROTOCOL_INFO, (char*)&info, &len);
-  sa->ss_family = info.iAddressFamily;
+  sa->ss_family = (ADDRESS_FAMILY)info.iAddressFamily;
 #else
   socklen_t addrlen = sizeof(*sa);
   int r = getsockname((SOCKET)s, (struct sockaddr*)sa, (socklen_t*)&addrlen);
@@ -1076,6 +1079,8 @@ bool ccsocket_set_reuseport(ccsocket_t s, bool on)
   int Enable = on ? 1 : 0;
   return SOCKET_ERROR != setsockopt((SOCKET)s, SOL_SOCKET, SO_REUSEPORT, (char*)&Enable, sizeof(Enable));
 #else
+  (void)s;
+  (void)on;
   return false;
 #endif
 }
@@ -1472,7 +1477,7 @@ static void on_dns_answer(void *udata, const ccdns_ans_t *ans)
   memset(node, 0, sizeof(*node));
   node->af = af;
   node->ttl = ans->ttl;
-  strncpy(node->address, addr_str, sizeof(node->address) - 1);
+  memcpy(node->address, addr_str, sizeof(node->address) - 1);
   node->address[sizeof(node->address) - 1] = '\0';
 
   if (col->tail)
@@ -1519,7 +1524,7 @@ static bool dns_query_one(const char *dns_server, struct ccdns_t *dns,
 }
 
 /** @brief Try dns_query_one across multiple nameservers with retries. */
-static bool dns_query_retry(const char nslist[][CCDNS_MAX_ADDR], int nscount,
+static bool dns_query_retry(char nslist[][CCDNS_MAX_ADDR], int nscount,
                              struct ccdns_t *dns, const char *domain,
                              ccdns_type_t qtype, struct dns_collect_ctx *col)
 {
@@ -1569,7 +1574,7 @@ bool ccsocket_getaddrinfo(const char *domain, ccaddrinfo_t **addrlist)
   int nscount = read_dns_servers(nslist, MAX_NS);
   if (nscount == 0) {
     nscount = 1;
-    memcpy(nslist[0], "1.1.1.1", 9);
+    strcpy(nslist[0], "1.1.1.1");
   }
 
   /* --- 4. DNS lookup via ccdns + ccsocket --- */
