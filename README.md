@@ -6,7 +6,9 @@
 
 A lightweight, portable C library that provides a unified API for network and inter-process communication across POSIX (Linux, macOS, FreeBSD, Solaris, AIX) and Windows. It wraps raw system sockets behind a consistent interface — handling platform quirks so you don't have to.
 
-Included sub-module: **ccicmp** — a portable ICMP echo ("ping") library with IPv4/IPv6 support and timestamp-based RTT measurement.
+Included sub-modules:
+- **ccicmp** — portable ICMP echo ("ping") library with IPv4/IPv6 support and timestamp-based RTT measurement.
+- **ccdns** — DNS wire-format client (RFC 1035) with A/AAAA/CNAME/TXT/MX queries, EDNS, and TCP mode.
 
 ---
 
@@ -143,7 +145,7 @@ ctest --test-dir build --output-on-failure -V
 ctest --test-dir build -R ccsocket/tcp -V
 ```
 
-### Test Suite (11 tests)
+### Test Suite (12 tests)
 
 | Test | Verifies |
 |---|---|
@@ -154,6 +156,7 @@ ctest --test-dir build -R ccsocket/tcp -V
 | `ccsocket/pair` | **socketpair**: bidirectional send/recv |
 | `ccsocket/addr` | **Address**: get_version, getaddrinfo |
 | `ccsocket/opts` | **Options**: nodelay, keepalive, nonblock, cloexec |
+| `ccsocket/msg` | **recvmsg/sendmsg**: CMSG macros, sendto/recvfrom, TCP socketpair round-trip |
 | `ccsocket/http` | **HTTP text protocol**: request/response with `httpc.txt` |
 | `ccicmp/ping` | **ICMP (IPv4 + IPv6)**: RFC 1071 / RFC 4443 checksum, packet layout, lifecycle |
 | `ccdns/test` | **DNS**: query encode, response decode (A/AAAA/CNAME/TXT/MX), compression ptr, TCP mode |
@@ -177,7 +180,7 @@ ctest --test-dir build -R ccsocket/tcp -V
 ├── httpc.txt           # Sample HTTP/1.1 request (test fixture)
 ├── LICENSE             # MIT license
 ├── .gitignore          # Build artifacts
-├── tests/              # Test suite (CTest, 11 tests)
+├── tests/              # Test suite (CTest, 12 tests)
 │   ├── CMakeLists.txt
 │   ├── test_ccsocket_smoke.c
 │   ├── test_ccsocket_tcp.c
@@ -185,6 +188,7 @@ ctest --test-dir build -R ccsocket/tcp -V
 │   ├── test_ccsocket_pair.c
 │   ├── test_ccsocket_addr.c
 │   ├── test_ccsocket_opts.c
+│   ├── test_ccsocket_msg.c
 │   ├── test_ccsocket_http.c
 │   ├── test_ccicmp_smoke.c
 │   ├── test_ccicmp_ping.c
