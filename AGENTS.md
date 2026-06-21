@@ -42,7 +42,10 @@
 ├── .gitignore          # Build artifacts, IDE configs, object files
 ├── .vscode/            # Editor workspace settings (not part of the library)
 │   └── settings.json
-├── tests/              # Test suite — 10 tests via CTest
+├── .github/            # GitHub Actions CI workflows
+│   └── workflows/
+│       └── ci.yml
+├── tests/              # Test suite — 11 tests via CTest
 │   ├── CMakeLists.txt
 │   ├── test_ccsocket_smoke.c
 │   ├── test_ccsocket_tcp.c
@@ -53,7 +56,8 @@
 │   ├── test_ccsocket_http.c
 │   ├── test_ccicmp_smoke.c
 │   ├── test_ccicmp_ping.c
-│   └── test_ccdns.c
+│   ├── test_ccdns.c
+│   └── test_ccsocket_cxx_embed.cpp
 ├── AGENTS.md           # ← this file
 └── README.md           # Project introduction (English)
 ```
@@ -270,7 +274,7 @@ When `BUILD_SHARED_LIBS=ON` on Windows, the build will also define `CCSOCKET_BUI
 
 Test infrastructure is live via CTest. Test sources live in [`tests/`](tests/).
 
-### 5.1 Current Tests (10 total)
+### 5.1 Current Tests (11 total)
 
 | Test | Type | What It Verifies |
 |---|---|---|
@@ -284,6 +288,7 @@ Test infrastructure is live via CTest. Test sources live in [`tests/`](tests/).
 | `ccsocket/http` | **Combined protocol** | HTTP request/response round-trip using `httpc.txt` as template |
 | `ccicmp/ping` | **Combined (ICMP)** | IPv4/IPv6 checksum (RFC 1071 / RFC 4443), packet layout, init/close lifecycle |
 | `ccdns/test` | **DNS client** | DNS query encode, response decode (A/AAAA/CNAME/TXT/MX), compression ptr (RFC 1035 §4.1.4), TCP mode (RFC 1035 §4.2.2), lifecycle |
+| `ccsocket/cxx-embed` | **C++ embedding** | All headers compile under C++, `extern "C"` symbols linkable, iovec/ICMP/DNS lifecycle smoke |
 
 ### 5.2 Test Conventions
 
@@ -307,11 +312,44 @@ ctest --test-dir build --output-on-failure -V
 | ICMP echo/reply round-trip | Requires `CAP_NET_RAW` / root |
 | ICMPv6 echo/reply round-trip | Same privilege requirement as IPv4 |
 | sendfile functional test | Needs a temporary file descriptor |
-| Cross-platform CI | No CI pipeline configured |
 
 ---
 
-## 6. Agent Task Constraints
+## 6. CI Pipeline
+
+CI is configured in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — GitHub Actions.
+
+### 6.1 Coverage Matrix (9 jobs)
+
+| Job | OS | Arch | Compiler | Notes |
+|---|---|---|---|---|
+| `linux-gcc` | Ubuntu (Debian) | x86_64 | GCC | Primary Linux |
+| `linux-clang` | Ubuntu (Debian) | x86_64 | Clang | Alternate compiler |
+| `linux-32bit` | Ubuntu (Debian) | i686 | GCC `-m32` | 32-bit via multilib |
+| `centos7` | CentOS 7 (Docker) | x86_64 | GCC 4.8.5 | Legacy platform |
+| `macos-x64` | macOS (Intel) | x86_64 | AppleClang | Intel Mac |
+| `macos-arm64` | macOS (Apple Silicon) | arm64 | AppleClang | Native ARM |
+| `windows-msvc-x64` | Windows | x64 | MSVC | Primary Windows |
+| `windows-msvc-x86` | Windows | x86 | MSVC `-A Win32` | 32-bit Windows |
+| `windows-mingw64` | Windows (MinGW) | x64 | MinGW-w64 (gcc) | MinGW toolchain |
+
+### 6.2 What Each Job Verifies
+
+1. **C build** — shared + static library compiles with `-Werror` / `/WX`
+2. **CTest** — all 11 tests pass via `ctest --output-on-failure`
+3. **C++ compile+link** — library `.c` files compiled as C++ (`-x c++`), verifying `extern "C"` interop
+4. **C++ header-only** — all public headers included from a pure C++ TU
+5. **Static-link smoke** — static library links a standalone executable (Linux)
+6. **Zero warnings** — `-Werror` equivalent on all compilers
+
+### 6.3 Trigger
+
+- On push to any branch
+- On pull request targeting `main` or `master`
+
+---
+
+## 7. Agent Task Constraints
 
 ### 6.1 Mandatory Pre-Check
 
@@ -353,20 +391,20 @@ When updating AGENTS.md, the agent should consider whether the change has **exte
 
 ---
 
-## 7. Design Decisions & Technical Notes
+## 8. Design Decisions & Technical Notes
 
-### 7.1 `ccsocket_iovec_t` Field Order
+### 8.1 `ccsocket_iovec_t` Field Order
 
 The `buf` and `len` fields are **reversed** between Windows (`len` first) and POSIX (`buf` first). This is intentional — it matches the native `WSABUF` / `struct iovec` layout. **Never access fields directly**; always use the `ccsocket_set_iov_*` / `ccsocket_get_iov_*` macros.
 
-### 7.2 IPv6 ICMP Checksum
+### 8.2 IPv6 ICMP Checksum
 
 Per [RFC 4443 §2.3](https://datatracker.ietf.org/doc/html/rfc4443#section-2.3), the ICMPv6 checksum covers a 40-byte pseudo-header: `src(16) + dst(16) + len(4) + zero(3) + next_hdr(1)`.
 
 - `getsockname()` → source address; `getpeername()` → destination address.
 - On macOS raw sockets, `getsockname()` returns `::` — fall back to destination as source (correct for loopback).
 
-### 7.3 Platform Behaviors
+### 8.3 Platform Behaviors
 
 - **macOS/BSD raw ICMPv6**: Receive buffer does **not** contain the IPv6 header — data starts at ICMPv6 header.
 - **Linux raw ICMPv6**: Receive buffer **includes** the 40-byte IPv6 header.
@@ -374,7 +412,7 @@ Per [RFC 4443 §2.3](https://datatracker.ietf.org/doc/html/rfc4443#section-2.3),
 - **Windows ICMP**: Raw socket ICMP is restricted; `ccicmp_init()` will fail. Callers must handle this case.
 - **sendfile**: macOS/FreeBSD/Linux/Solaris use kernel `sendfile()` (zero-copy). Windows and other platforms fall back to `read()` + `send()`.
 
-### 7.4 DNS over TCP (RFC 1035 §4.2.2)
+### 8.4 DNS over TCP (RFC 1035 §4.2.2)
 
 DNS over TCP uses a **2-byte length prefix** before the standard DNS wire-format message.  The prefix is the message body length in network byte order, not including the 2 bytes themselves.
 
@@ -387,7 +425,7 @@ The TCP mode is controlled via the `tcp` field in `ccdns_t` (set via `ccdns_set_
 
 **EDNS interaction**: EDNS OPT records are technically unnecessary over TCP (no 512-byte limit), but remain supported.  The EDNS and TCP flags are independent — callers may enable both.
 
-### 7.5 Internal DNS Resolver
+### 8.5 Internal DNS Resolver
 
 `ccsocket_getaddrinfo()` uses a built-in DNS resolver built on `ccdns` + `ccsocket` UDP sockets, rather than calling the system `getaddrinfo()`.  This preserves TTL information and provides cross-platform consistency (Windows `getaddrinfo` does not read `/etc/resolv.conf`).
 
@@ -397,7 +435,7 @@ The resolver supports retry and failover:
 - **Retry**: 2 rounds across all nameservers (glibc-style sequential), total up to 8 attempts.
 - **Fallback**: when no nameserver is configured, defaults to `8.8.8.8`.
 
-### 7.6 ICMP DGRAM vs RAW Semantics
+### 8.6 ICMP DGRAM vs RAW Semantics
 
 `ccicmp_init()` automatically selects the best available socket type:
 
@@ -410,24 +448,24 @@ The runtime helper `ccsocket_get_protocol()` returns the OS socket type (`SOCK_D
 
 ---
 
-## 8. Quick Reference
+## 9. Quick Reference
 
-### 8.1 Common Agent Workflows
+### 9.1 Common Agent Workflows
 
 | Goal | Steps |
 |---|---|
 | Add a new socket option | (1) Add enum/constant to `ccsocket.h` (Doxygen), (2) implement in `ccsocket.c` with `#if` guards, (3) export via `CCSOCKET_EXPORT` |
 | Add a new DNS feature | (1) Add to `ccdns.h` (Doxygen), (2) implement in `ccdns.c`, (3) export via `CCDNS_EXPORT`, (4) update `AGENTS.md` §2 and §5 |
-| Port to a new OS | (1) Add `#if`/`#elif`/`#else` blocks in `ccsocket.c`, (2) update CC_INLINE / socket types if needed, (3) test via compile, (4) update platform matrix in Doxygen comments and §7.4 here |
+| Port to a new OS | (1) Add `#if`/`#elif`/`#else` blocks in `ccsocket.c`, (2) update CC_INLINE / socket types if needed, (3) test via compile, (4) update platform matrix in Doxygen comments and §8.3 here |
 | Add a new ICMP feature | (1) Add to `ccicmp.h` (Doxygen), (2) implement in `ccicmp.c`, (3) add compile-time macro to §4.3 if configurable, (4) rebuild — ccicmp is compiled as part of ccsocket |
 
-### 8.2 File Modification Permission Levels
+### 9.2 File Modification Permission Levels
 
 | Action | Permission |
 |---|---|
 | Edit `*.c` / `*.h` implementation | Allowed — must follow §3 conventions |
 | Edit existing test files | Allowed — must preserve CTest integration |
-| Edit `AGENTS.md` | **Required** when making structural changes (see §6.4) |
+| Edit `AGENTS.md` | **Required** when making structural changes (see §7.4) |
 | Create new `.c` / `.h` files | Allowed — must update §2 |
 | Edit `CMakeLists.txt` | Allowed — must preserve the library target and test discovery |
 | Modify `LICENSE` | **Forbidden** without explicit user request |

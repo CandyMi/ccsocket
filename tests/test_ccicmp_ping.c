@@ -262,6 +262,8 @@ static void test_lifecycle_v6(void)
 
 int main(void)
 {
+    assert(ccsocket_init());
+
     test_checksum_known();
     test_checksum_odd_length();
     test_packet_layout();

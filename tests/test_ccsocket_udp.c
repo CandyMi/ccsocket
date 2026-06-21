@@ -24,6 +24,8 @@
 
 int main(void)
 {
+    assert(ccsocket_init());
+
     ccsocket_t cli;
     char addr[MAX_ADDRLEN];
     uint16_t port;

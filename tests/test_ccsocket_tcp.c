@@ -13,6 +13,8 @@
 
 int main(void)
 {
+    assert(ccsocket_init());
+
     ccsocket_t srv, cli, acc;
     char addr[MAX_ADDRLEN];
     uint16_t port;

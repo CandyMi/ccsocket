@@ -12,6 +12,8 @@
 
 int main(void)
 {
+    assert(ccsocket_init());
+
     /* --- ccsocket_get_version --- */
     assert(ccsocket_get_version("1.1.1.1")     == CC_INET4);
     assert(ccsocket_get_version("127.0.0.1")   == CC_INET4);
@@ -42,7 +44,8 @@ int main(void)
     list = NULL;
 
     assert(ccsocket_getaddrinfo("www.qq.com", &list));
-    assert(list != NULL); ccaddrinfo_t *addr = list;
+    ccaddrinfo_t *addr = list;
+    assert(list != NULL);
     while (addr) { printf("af = '%d', addr = '%s'\n", addr->af, addr->address); addr = addr->next;}
     ccsocket_freeaddrinfo(list);
     list = NULL;

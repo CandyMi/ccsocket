@@ -95,8 +95,12 @@ add_library(ccsocket_shared SHARED)
 target_link_libraries(ccsocket_shared PUBLIC ccsocket_obj)
 
 target_compile_definitions(ccsocket_shared
-  PRIVATE   CCSOCKET_BUILD_SHARED   # dllexport when building
-  PUBLIC    CCSOCKET_SHARED         # dllimport when consuming
+  PRIVATE
+    CCSOCKET_BUILD_SHARED   # dllexport when building
+    CCDNS_BUILD_SHARED      # dllexport for ccdns symbols
+  PUBLIC
+    CCSOCKET_SHARED         # dllimport when consuming
+    CCDNS_SHARED            # dllimport for ccdns symbols
 )
 
 set_target_properties(ccsocket_shared PROPERTIES

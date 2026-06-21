@@ -12,6 +12,8 @@
 
 int main(void)
 {
+    assert(ccsocket_init());
+
     ccsocket_t sv[2];
     char buf[64];
     int n;

@@ -15,6 +15,8 @@
 
 int main(void)
 {
+    assert(ccsocket_init());
+
     /* — Type size / alignment smoke checks — */
     assert(sizeof(ccsocket_t) > 0);
 

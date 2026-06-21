@@ -13,6 +13,8 @@
 
 int main(void)
 {
+    assert(ccsocket_init());
+
     ccsocket_t s = ccsocket(CC_INET4, CC_TCP);
     assert(s != INVALID_SOCKET);
 

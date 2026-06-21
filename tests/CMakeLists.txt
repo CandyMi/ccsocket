@@ -36,3 +36,10 @@ ccsocket_test(ccicmp/ping     test_ccicmp_ping.c)
 
 # -- DNS client tests (encode, decode, lifecycle) ----------------------------
 ccsocket_test(ccdns/test      test_ccdns.c)
+
+# -- C++ embedding test: compile + link as C++ (extern "C" interop) ---------
+enable_language(CXX)
+
+add_executable(ccsocket_cxx_embed test_ccsocket_cxx_embed.cpp)
+target_link_libraries(ccsocket_cxx_embed PRIVATE ccsocket)
+add_test(NAME ccsocket/cxx-embed COMMAND ccsocket_cxx_embed)

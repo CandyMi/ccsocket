@@ -15,6 +15,8 @@
 
 int main(void)
 {
+    assert(ccsocket_init());
+
     /* — Type layout — */
     assert(sizeof(struct ccicmp_t) >= sizeof(ccsocket_t) + sizeof(uint16_t) * 2);
 
