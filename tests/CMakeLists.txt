@@ -28,6 +28,9 @@ ccsocket_test(ccsocket/addr   test_ccsocket_addr.c)
 # -- Socket option round-trip tests -------------------------------------------
 ccsocket_test(ccsocket/opts   test_ccsocket_opts.c)
 
+# -- recvmsg / sendmsg / sendto / recvfrom functional tests ------------------
+ccsocket_test(ccsocket/msg    test_ccsocket_msg.c)
+
 # -- Combined protocol tests: text protocol over TCP --------------------------
 ccsocket_test(ccsocket/http   test_ccsocket_http.c)
 

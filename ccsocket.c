@@ -47,6 +47,7 @@
   #include <winsock2.h>
   #include <mstcpip.h>
   #include <ws2tcpip.h>
+  #include <mswsock.h>
   #include <Windows.h>
   #include <io.h>
   #if defined(_MSC_VER) && WDK_NTDDI_VERSION > NTDDI_WIN10_RS2
@@ -736,6 +737,255 @@ ccsocket_stcode_t ccsocket_peek(ccsocket_t s, char* buf, size_t bsize, OPTIONAL 
   ccsocket_iovec_t iov[1]; ccsocket_init_iov(iov, 1);
   ccsocket_set_iov_len(iov, 0, bsize); ccsocket_set_iov_buf(iov, 0, buf);
   return ccsocket_recv_internal(s, iov, 1, rsize, MSG_PEEK);
+}
+
+/* ==== msg_flags mapping helpers (cross-platform) ==== */
+
+CC_INLINE
+int ccsocket_msg_flags_to_os(ccsocket_msg_flags_t flags, bool is_recv)
+{
+    int os_flags = 0;
+    (void)is_recv;
+#if _WIN32
+    if (flags & CC_MSG_PEEK)       os_flags |= MSG_PEEK;
+    if (flags & CC_MSG_WAITALL)    os_flags |= MSG_WAITALL;
+    if (flags & CC_MSG_OOB)        os_flags |= MSG_OOB;
+    /* CC_MSG_DONTWAIT — no Windows equivalent; silently ignored */
+    /* CC_MSG_NOSIGNAL — no SIGPIPE on Windows; silently ignored */
+    /* CC_MSG_MORE     — no Windows equivalent; silently ignored */
+#else
+    if (flags & CC_MSG_PEEK)       os_flags |= MSG_PEEK;
+    if (flags & CC_MSG_WAITALL)    os_flags |= MSG_WAITALL;
+    if (flags & CC_MSG_DONTWAIT)   os_flags |= MSG_DONTWAIT;
+#if defined(MSG_NOSIGNAL)
+    if (flags & CC_MSG_NOSIGNAL)   os_flags |= MSG_NOSIGNAL;
+#endif
+#if defined(MSG_MORE)
+    if (flags & CC_MSG_MORE)       os_flags |= MSG_MORE;
+#endif
+    if (flags & CC_MSG_OOB)        os_flags |= MSG_OOB;
+#endif
+    return os_flags;
+}
+
+CC_INLINE
+int ccsocket_ret_flags_from_os(int os_flags)
+{
+    int ret = 0;
+#if _WIN32
+    if (os_flags & MSG_PARTIAL)    ret |= CC_MSG_RET_TRUNC;
+#else
+    if (os_flags & MSG_TRUNC)      ret |= CC_MSG_RET_TRUNC;
+    if (os_flags & MSG_CTRUNC)     ret |= CC_MSG_RET_CTRUNC;
+    if (os_flags & MSG_EOR)        ret |= CC_MSG_RET_EOR;
+    if (os_flags & MSG_OOB)        ret |= CC_MSG_RET_OOB;
+#if defined(MSG_BCAST)
+    if (os_flags & MSG_BCAST)      ret |= CC_MSG_RET_BCAST;
+#endif
+#if defined(MSG_MCAST)
+    if (os_flags & MSG_MCAST)      ret |= CC_MSG_RET_MCAST;
+#endif
+#endif
+    return ret;
+}
+
+/* ==== recvmsg ==== */
+
+ccsocket_stcode_t ccsocket_recvmsg(ccsocket_t s, ccsocket_msghdr_t *msg, ccsocket_msg_flags_t flags)
+{
+    ccsocket_init_errno();
+
+#if _WIN32
+    SOCKADDR_STORAGE sa;
+    WSAMSG hdr;
+    DWORD rsz;
+    int r;
+    int os_flags;
+
+    memset(&hdr, 0, sizeof(hdr));
+    memset(&sa, 0, sizeof(sa));
+    hdr.name = (SOCKADDR *)&sa;
+    hdr.namelen = sizeof(sa);
+    hdr.lpBuffers = (LPWSABUF)msg->msg_iov;
+    hdr.dwBufferCount = (DWORD)msg->msg_iovlen;
+    hdr.Control.len = (ULONG)msg->msg_controllen;
+    hdr.Control.pData = msg->msg_control;
+
+    os_flags = ccsocket_msg_flags_to_os(flags, true);
+    r = WSARecvMsg((SOCKET)s, &hdr, &rsz, NULL, NULL);
+    if (r == SOCKET_ERROR) {
+        if (ccsocket_is_errno(EINTR))
+            return ccsocket_recvmsg(s, msg, flags);
+        if (ccsocket_is_errno(EWOULDBLOCK))
+            return CC_OPCODE_WAIT;
+        return CC_OPCODE_ERROR;
+    }
+
+    ccsocket2addr((const struct sockaddr_storage *)&sa, msg->msg_name, &msg->msg_port);
+    msg->msg_flags = ccsocket_ret_flags_from_os((int)hdr.dwFlags);
+    msg->msg_controllen = (size_t)hdr.Control.len;
+    msg->msg_bytes = (int)rsz;
+#else
+    struct sockaddr_storage sa;
+    struct msghdr hdr;
+    int r;
+    int os_flags;
+
+    memset(&hdr, 0, sizeof(hdr));
+    memset(&sa, 0, sizeof(sa));
+    hdr.msg_name = &sa;
+    hdr.msg_namelen = sizeof(sa);
+    hdr.msg_iov = (struct iovec *)msg->msg_iov;
+    hdr.msg_iovlen = msg->msg_iovlen;
+    hdr.msg_control = msg->msg_control;
+    hdr.msg_controllen = msg->msg_controllen;
+
+    os_flags = ccsocket_msg_flags_to_os(flags, true);
+    r = (int)recvmsg((SOCKET)s, &hdr, os_flags);
+    if (r == -1) {
+        if (ccsocket_is_errno(EINTR))
+            return ccsocket_recvmsg(s, msg, flags);
+        if (ccsocket_is_errno(EWOULDBLOCK))
+            return CC_OPCODE_WAIT;
+        return CC_OPCODE_ERROR;
+    }
+
+    ccsocket2addr((const struct sockaddr_storage *)&sa, msg->msg_name, &msg->msg_port);
+    msg->msg_flags = ccsocket_ret_flags_from_os(hdr.msg_flags);
+    msg->msg_controllen = (size_t)hdr.msg_controllen;
+    msg->msg_bytes = r;
+#endif
+    return CC_OPCODE_OK;
+}
+
+/* ==== sendmsg ==== */
+
+ccsocket_stcode_t ccsocket_sendmsg(ccsocket_t s, ccsocket_msghdr_t *msg, ccsocket_msg_flags_t flags)
+{
+    ccsocket_init_errno();
+
+#if _WIN32
+    SOCKADDR_STORAGE sa;
+    WSAMSG hdr;
+    DWORD wsz;
+    int r;
+    int os_flags;
+
+    memset(&hdr, 0, sizeof(hdr));
+    memset(&sa, 0, sizeof(sa));
+    hdr.lpBuffers = (LPWSABUF)msg->msg_iov;
+    hdr.dwBufferCount = (DWORD)msg->msg_iovlen;
+    hdr.Control.len = (ULONG)msg->msg_controllen;
+    hdr.Control.pData = msg->msg_control;
+
+    /* destination address */
+    if (msg->msg_name[0]) {
+        if (!ccsocket_wrap_ip_and_port(s, (struct sockaddr_storage *)&sa, msg->msg_name, msg->msg_port))
+            return CC_OPCODE_ERROR;
+        hdr.name = (SOCKADDR *)&sa;
+        hdr.namelen = ccsizeof((const struct sockaddr_storage *)&sa);
+    }
+
+    os_flags = ccsocket_msg_flags_to_os(flags, false);
+    r = WSASendMsg((SOCKET)s, &hdr, (DWORD)os_flags, &wsz, NULL, NULL);
+    if (r == SOCKET_ERROR) {
+        if (ccsocket_is_errno(EINTR))
+            return ccsocket_sendmsg(s, msg, flags);
+        if (ccsocket_is_errno(EWOULDBLOCK))
+            return CC_OPCODE_WAIT;
+        return CC_OPCODE_ERROR;
+    }
+
+    msg->msg_bytes = (int)wsz;
+#else
+    struct sockaddr_storage sa;
+    struct msghdr hdr;
+    int os_flags;
+    int w;
+
+    memset(&hdr, 0, sizeof(hdr));
+    memset(&sa, 0, sizeof(sa));
+    hdr.msg_iov = (struct iovec *)msg->msg_iov;
+    hdr.msg_iovlen = msg->msg_iovlen;
+    hdr.msg_control = msg->msg_control;
+    hdr.msg_controllen = msg->msg_controllen;
+
+    /* destination address (sendto semantics) */
+    if (msg->msg_name[0]) {
+        if (!ccsocket_wrap_ip_and_port(s, &sa, msg->msg_name, msg->msg_port))
+            return CC_OPCODE_ERROR;
+        hdr.msg_name = &sa;
+        hdr.msg_namelen = ccsizeof(&sa);
+    }
+
+    os_flags = ccsocket_msg_flags_to_os(flags, false);
+#if defined(MSG_NOSIGNAL)
+    os_flags |= MSG_NOSIGNAL;
+#endif
+    w = (int)sendmsg((SOCKET)s, &hdr, os_flags);
+    if (w == -1) {
+        if (ccsocket_is_errno(EINTR))
+            return ccsocket_sendmsg(s, msg, flags);
+        if (ccsocket_is_errno(EWOULDBLOCK))
+            return CC_OPCODE_WAIT;
+        return CC_OPCODE_ERROR;
+    }
+
+    msg->msg_bytes = w;
+#endif
+    return CC_OPCODE_OK;
+}
+
+/* ==== sendto (thin wrapper over sendmsg) ==== */
+
+ccsocket_stcode_t ccsocket_sendto(ccsocket_t s, const void *buf, size_t bsize,
+                                   const char *addr, uint16_t port,
+                                   OPTIONAL int *wsize)
+{
+    ccsocket_iovec_t iov[1];
+    ccsocket_msghdr_t msg;
+
+    ccsocket_init_iov(iov, 1);
+    ccsocket_set_iov_len(iov, 0, bsize);
+    ccsocket_set_iov_buf(iov, 0, (void *)buf);
+
+    memset(&msg, 0, sizeof(msg));
+    msg.msg_iov = iov;
+    msg.msg_iovlen = 1;
+
+    if (addr) {
+        strncpy(msg.msg_name, addr, sizeof(msg.msg_name) - 1);
+        msg.msg_name[sizeof(msg.msg_name) - 1] = '\0';
+        msg.msg_port = port;
+    }
+
+    ccsocket_stcode_t r = ccsocket_sendmsg(s, &msg, CC_MSG_NOFLAG);
+    if (wsize) *wsize = msg.msg_bytes;
+    return r;
+}
+
+/* ==== recvfrom (thin wrapper over recvmsg) ==== */
+
+ccsocket_stcode_t ccsocket_recvfrom(ccsocket_t s, char *buf, size_t bsize,
+                                     OPTIONAL char *addr, OPTIONAL uint16_t *port,
+                                     OPTIONAL int *rsize)
+{
+    ccsocket_iovec_t iov[1];
+    ccsocket_msghdr_t msg;
+
+    ccsocket_init_iov(iov, 1);
+    ccsocket_set_iov_len(iov, 0, bsize);
+    ccsocket_set_iov_buf(iov, 0, buf);
+
+    memset(&msg, 0, sizeof(msg));
+    msg.msg_iov = iov;
+    msg.msg_iovlen = 1;
+
+    ccsocket_stcode_t r = ccsocket_recvmsg(s, &msg, CC_MSG_NOFLAG);
+    if (addr) memcpy(addr, msg.msg_name, 65);
+    if (port) *port = msg.msg_port;
+    if (rsize) *rsize = msg.msg_bytes;
+    return r;
 }
 
 /* 开启/关闭 nodelay */

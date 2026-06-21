@@ -32,9 +32,9 @@
 .
 ├── CMakeLists.txt      # Root build system — CMake 3.0+, C99 standard
 ├── ccsocket.h          # Public API header — types, enums, macros, exported function declarations
-├── ccsocket.c          # Implementation — ~1058 lines, all platform backends in one translation unit
+├── ccsocket.c          # Implementation — ~1540 lines, all platform backends in one translation unit
 ├── ccicmp.h            # Public API header — ICMP context struct, function declarations
-├── ccicmp.c            # Implementation — ~374 lines, ICMP echo/response logic
+├── ccicmp.c            # Implementation — ~428 lines, ICMP echo/response logic (TTL via CMSG)
 ├── ccdns.h             # Public API header — DNS client context, function declarations
 ├── ccdns.c             # Implementation — ~374 lines, DNS wire-format encode/decode (RFC 1035), TCP mode (RFC 1035 §4.2.2), TXT (RFC 1035 §3.3), MX (RFC 1035 §3.3.9)
 ├── httpc.txt           # Sample HTTP/1.1 request payload (test fixture)
@@ -45,7 +45,7 @@
 ├── .github/            # GitHub Actions CI workflows
 │   └── workflows/
 │       └── ci.yml
-├── tests/              # Test suite — 11 tests via CTest
+├── tests/              # Test suite — 12 tests via CTest
 │   ├── CMakeLists.txt
 │   ├── test_ccsocket_smoke.c
 │   ├── test_ccsocket_tcp.c
@@ -53,6 +53,7 @@
 │   ├── test_ccsocket_pair.c
 │   ├── test_ccsocket_addr.c
 │   ├── test_ccsocket_opts.c
+│   ├── test_ccsocket_msg.c
 │   ├── test_ccsocket_http.c
 │   ├── test_ccicmp_smoke.c
 │   ├── test_ccicmp_ping.c
@@ -280,7 +281,7 @@ When `BUILD_SHARED_LIBS=ON` on Windows, the build will also define `CCSOCKET_BUI
 
 Test infrastructure is live via CTest. Test sources live in [`tests/`](tests/).
 
-### 5.1 Current Tests (11 total)
+### 5.1 Current Tests (12 total)
 
 | Test | Type | What It Verifies |
 |---|---|---|
@@ -291,6 +292,7 @@ Test infrastructure is live via CTest. Test sources live in [`tests/`](tests/).
 | `ccsocket/pair` | Functional | socketpair bidirectional send/recv data integrity |
 | `ccsocket/addr` | Functional | IP version detection (`get_version`), `getaddrinfo` for localhost |
 | `ccsocket/opts` | Functional | nodelay/reuseaddr/keepalive/nonblock/cloexec (valid + invalid handle) |
+| `ccsocket/msg` | **Functional** | recvmsg/sendmsg/sendto/recvfrom: invalid-fd errors, CMSG layout, TCP socketpair round-trip, NULL-addr paths, CMSG control buffer |
 | `ccsocket/http` | **Combined protocol** | HTTP request/response round-trip using `httpc.txt` as template |
 | `ccicmp/ping` | **Combined (ICMP)** | IPv4/IPv6 checksum (RFC 1071 / RFC 4443), packet layout, init/close lifecycle |
 | `ccdns/test` | **DNS client** | DNS query encode, response decode (A/AAAA/CNAME/TXT/MX), compression ptr (RFC 1035 §4.1.4), TCP mode (RFC 1035 §4.2.2), lifecycle |
@@ -453,6 +455,72 @@ The resolver supports retry and failover:
 
 The runtime helper `ccsocket_get_protocol()` returns the OS socket type (`SOCK_DGRAM` / `SOCK_RAW` / `SOCK_STREAM`), used by `ccicmp_is_dgram()` inside echo/reply to select the correct I/O path.
 
+### 8.7 recvmsg / sendmsg API
+
+#### 8.7.1 Message Header (`ccsocket_msghdr_t`)
+
+Cross-platform abstraction over POSIX `struct msghdr` and Windows `WSAMSG`:
+
+| Field | Direction | Purpose |
+|---|---|---|
+| `msg_iov` / `msg_iovlen` | in | Scatter/gather buffer array (same layout as `ccsocket_iovec_t`) |
+| `msg_name[65]` / `msg_port` | in/out | `sendmsg`: destination address; `recvmsg`: source address |
+| `msg_control` / `msg_controllen` | in/out | CMSG ancillary data buffer; recvmsg writes received CMSG here |
+| `msg_flags` | out (recvmsg) | `CC_MSG_RET_*` bitmask (truncated, ctrunc, eor, oob, bcast, mcast) |
+| `msg_bytes` | out | Actual bytes transferred (replaces `rsize`/`wsize` pointer pattern) |
+
+#### 8.7.2 CMSG Header (`ccsocket_cmsghdr_t`)
+
+Layout-compatible with both POSIX `struct cmsghdr` and Windows `WSACMSGHDR`:
+
+```c
+typedef struct ccsocket_cmsghdr {
+    uint32_t cmsg_len;    /* 4 bytes — matches socklen_t (POSIX) and UINT (Win) */
+    int      cmsg_level;  /* 4 bytes */
+    int      cmsg_type;   /* 4 bytes */
+    /* followed by aligned payload */
+} ccsocket_cmsghdr_t;
+```
+
+Alignment differs between platforms: POSIX rounds to `sizeof(size_t)` (8 on 64-bit), Windows rounds to `sizeof(DWORD)` (4). The `CC_CMSG_ALIGN` macro handles this automatically. All `CC_CMSG_*` iteration macros work with raw control buffer pointers (`void *ctl, size_t ctl_len`) — no platform-specific `struct msghdr` / `WSAMSG` pointer is needed.
+
+#### 8.7.3 Flags
+
+**Input flags** (`ccsocket_msg_flags_t`) — used by both `sendmsg` and `recvmsg`:
+
+| Flag | S/R | OS Support |
+|---|---|---|
+| `CC_MSG_PEEK` | recv | All (0x02 on all platforms) |
+| `CC_MSG_WAITALL` | recv | All (0x100 on all platforms) |
+| `CC_MSG_DONTWAIT` | both | POSIX only (Windows: silently ignored) |
+| `CC_MSG_NOSIGNAL` | send | Linux only (auto-added on POSIX; Windows: no SIGPIPE) |
+| `CC_MSG_MORE` | send | Linux only (else silently ignored) |
+| `CC_MSG_OOB` | both | All (0x01 on all platforms) |
+
+**Return flags** (`ccsocket_msg_ret_flags_t`) — written to `msg_flags` by `recvmsg`:
+
+| Flag | OS Support |
+|---|---|
+| `CC_MSG_RET_TRUNC` | POSIX + Windows (MSG_PARTIAL) |
+| `CC_MSG_RET_CTRUNC` | POSIX only |
+| `CC_MSG_RET_EOR` | POSIX only |
+| `CC_MSG_RET_OOB` | POSIX only |
+| `CC_MSG_RET_BCAST` | POSIX only |
+| `CC_MSG_RET_MCAST` | POSIX only |
+
+Unsupported flags are silently dropped in `ccsocket_msg_flags_to_os()`. The mapping functions in `ccsocket.c` concentrate all `#if` branches in two `CC_INLINE` helpers.
+
+#### 8.7.4 sendto / recvfrom
+
+Thin wrappers (≈ 15 lines each) over `ccsocket_sendmsg` / `ccsocket_recvmsg` for the common single-buffer case. They allocate a `ccsocket_iovec_t[1]` + `ccsocket_msghdr_t` on the stack — zero dynamic allocation.
+
+- `ccsocket_sendto(s, buf, len, addr, port, &wsize)` — when `addr` is NULL, behaves like `ccsocket_send` (connected socket path).
+- `ccsocket_recvfrom(s, buf, len, &addr, &port, &rsize)` — `addr`/`port` may be NULL when source address is not needed.
+
+#### 8.7.5 ccicmp TTL Integration
+
+`ccicmp_t` now includes an `int ttl` field. On platforms supporting `IP_RECVTTL` / `IPV6_RECVHOPLIMIT`, `ccicmp_init()` enables the option and `ccicmp_reply()` extracts the TTL/Hop Limit from CMSG data using `CC_CMSG_*` macros. When TTL is unavailable or `ccicmp_reply()` hasn't been called, `ttl` is `-1`.
+
 ---
 
 ## 9. Quick Reference
@@ -464,6 +532,7 @@ The runtime helper `ccsocket_get_protocol()` returns the OS socket type (`SOCK_D
 | Add a new socket option | (1) Add enum/constant to `ccsocket.h` (Doxygen), (2) implement in `ccsocket.c` with `#if` guards, (3) export via `CCSOCKET_EXPORT` |
 | Add a new DNS feature | (1) Add to `ccdns.h` (Doxygen), (2) implement in `ccdns.c`, (3) export via `CCDNS_EXPORT`, (4) update `AGENTS.md` §2 and §5 |
 | Port to a new OS | (1) Add `#if`/`#elif`/`#else` blocks in `ccsocket.c`, (2) update CC_INLINE / socket types if needed, (3) test via compile, (4) update platform matrix in Doxygen comments and §8.3 here |
+| Add recvmsg/sendmsg feature | (1) Add `ccsocket_cmsghdr_t` / `ccsocket_msghdr_t` / `ccsocket_msg_flags_t` to `ccsocket.h`, (2) add `CC_CMSG_*` iteration macros, (3) implement `ccsocket_recvmsg`/`sendmsg` in `ccsocket.c` (POSIX + Windows paths), (4) add `ccsocket_sendto`/`recvfrom` wrappers, (5) add test `tests/test_ccsocket_msg.c`, (6) update `AGENTS.md` §2, §5, §8.7 |
 | Add a new ICMP feature | (1) Add to `ccicmp.h` (Doxygen), (2) implement in `ccicmp.c`, (3) add compile-time macro to §4.3 if configurable, (4) rebuild — ccicmp is compiled as part of ccsocket |
 | Add a CI job | (1) Add entry to `.github/workflows/ci.yml` matrix, (2) update §6.1 Coverage Matrix, (3) verify CTest passes on target platform |
 

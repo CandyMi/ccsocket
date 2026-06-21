@@ -19,6 +19,7 @@ typedef struct ccicmp_t
   ccsocket_t fd; // socket
   uint16_t id;   // id
   uint16_t no;   // seq
+  int ttl;       // TTL / Hop Limit of last reply (-1 = unknown)
 } ccicmp_t;
 
 #ifdef __cplusplus
@@ -34,6 +35,10 @@ extern "C" {
  * Falls back to RAW automatically.
  *
  * Must be called before ccicmp_echo() / ccicmp_reply().
+ * Initialises ctx->ttl to -1 (unknown).
+ * When the platform supports IP_RECVTTL / IPV6_RECVHOPLIMIT,
+ * subsequent ccicmp_reply() calls populate ctx->ttl with the
+ * TTL / Hop Limit from the received packet.
  *
  * @param ctx     Uninitialised ccicmp_t context pointer.
  * @param domain  Address family: CC_INET4 or CC_INET6.
@@ -85,6 +90,7 @@ CCSOCKET_EXPORT bool ccicmp_echo(struct ccicmp_t *ctx, const char *addr, const c
  *
  * Call after ccicmp_echo(). In non-blocking mode, returns false
  * immediately if no reply is available (check errno for EAGAIN).
+ * Updates ctx->ttl with the TTL / Hop Limit from the received packet.
  *
  * @param ctx   Initialised ccicmp_t context.
  * @param data  Optional buffer to receive the reply payload (may be NULL

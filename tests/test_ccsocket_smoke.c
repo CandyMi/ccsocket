@@ -60,5 +60,46 @@ int main(void)
     assert(ccsocket_get_version("127.0.0.1")   == CC_INET4);
     assert(ccsocket_get_version(NULL)           == CC_FAMILY_INVALID);
 
-    return 0;
+    /* — New msg flag enum value checks — */
+  assert(CC_MSG_NOFLAG    == 0);
+  assert(CC_MSG_PEEK      == 1);
+  assert(CC_MSG_WAITALL   == 2);
+  assert(CC_MSG_DONTWAIT  == 4);
+  assert(CC_MSG_NOSIGNAL  == 8);
+  assert(CC_MSG_MORE      == 16);
+  assert(CC_MSG_OOB       == 32);
+
+  assert(CC_MSG_RET_TRUNC  == 1);
+  assert(CC_MSG_RET_CTRUNC == 2);
+  assert(CC_MSG_RET_EOR    == 4);
+  assert(CC_MSG_RET_OOB    == 8);
+  assert(CC_MSG_RET_BCAST  == 16);
+  assert(CC_MSG_RET_MCAST  == 32);
+
+  /* — ccsocket_cmsghdr_t layout — */
+  assert(sizeof(ccsocket_cmsghdr_t) == 12);
+
+  /* — New API function pointer smoke — */
+  {
+    ccsocket_stcode_t (*fn)(ccsocket_t, ccsocket_msghdr_t *, ccsocket_msg_flags_t);
+    fn = ccsocket_recvmsg;
+    assert(fn != NULL);
+    fn = ccsocket_sendmsg;
+    assert(fn != NULL);
+    (void)fn;
+  }
+  {
+    ccsocket_stcode_t (*fn)(ccsocket_t, const void *, size_t, const char *, uint16_t, int *);
+    fn = ccsocket_sendto;
+    assert(fn != NULL);
+    (void)fn;
+  }
+  {
+    ccsocket_stcode_t (*fn)(ccsocket_t, char *, size_t, char *, uint16_t *, int *);
+    fn = ccsocket_recvfrom;
+    assert(fn != NULL);
+    (void)fn;
+  }
+
+  return 0;
 }

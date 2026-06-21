@@ -149,12 +149,27 @@ bool ccicmp_init(struct ccicmp_t *ctx, ccsocket_family_t domain)
     return false;
   ctx->id = ((intptr_t)ctx) & 0xffff;
   ctx->no = 0;
+  ctx->ttl = -1;
   /* Try SOCK_DGRAM (CC_ICMP1 = privilege-free ping socket) first.
    * Falls back to SOCK_RAW (CC_ICMP) when the platform or runtime
    * doesn't support it (e.g. Windows, or older kernels). */
   ctx->fd = ccsocket1(domain, CC_ICMP1, CC_NONBLOCK | CC_CLOEXEC);
   if (ctx->fd == INVALID_SOCKET)
     ctx->fd = ccsocket1(domain, CC_ICMP, CC_NONBLOCK | CC_CLOEXEC);
+  if (ctx->fd != INVALID_SOCKET) {
+    /* Enable TTL / Hop Limit reception via CMSG */
+    if (domain == CC_INET4) {
+#if defined(IP_RECVTTL)
+      int on = 1;
+      setsockopt(ctx->fd, IPPROTO_IP, IP_RECVTTL, (char *)&on, sizeof(on));
+#endif
+    } else {
+#if defined(IPV6_RECVHOPLIMIT)
+      int on = 1;
+      setsockopt(ctx->fd, IPPROTO_IPV6, IPV6_RECVHOPLIMIT, (char *)&on, sizeof(on));
+#endif
+    }
+  }
   return ctx->fd != INVALID_SOCKET;
 }
 
@@ -312,12 +327,48 @@ bool ccicmp_reply(struct ccicmp_t *ctx, char *data, size_t *len)
   if (af != CC_INET4 && af != CC_INET6)
     return false;
 
-  /* receive via ccsocket wrapper (no recvfrom needed) */
+  /* receive via ccsocket_recvmsg (supports TTL via CMSG) */
   uint8_t *buf = (uint8_t *)cc_alloca(CCICMP_RECV_BUFSZ);
+  uint8_t cmsg_buf[128];
+  ccsocket_iovec_t iov[1];
+  ccsocket_msghdr_t msg;
   int rsize = 0;
-  ccsocket_stcode_t state = ccsocket_recv(ctx->fd, (char *)buf, CCICMP_RECV_BUFSZ, &rsize);
+  ccsocket_stcode_t state;
+
+  ccsocket_init_iov(iov, 1);
+  ccsocket_set_iov_buf(iov, 0, buf);
+  ccsocket_set_iov_len(iov, 0, CCICMP_RECV_BUFSZ);
+
+  memset(&msg, 0, sizeof(msg));
+  msg.msg_iov = iov;
+  msg.msg_iovlen = 1;
+  msg.msg_control = cmsg_buf;
+  msg.msg_controllen = sizeof(cmsg_buf);
+
+  state = ccsocket_recvmsg(ctx->fd, &msg, CC_MSG_NOFLAG);
+  rsize = msg.msg_bytes;
   if (state != CC_OPCODE_OK || rsize <= 0)
     return false;
+
+  /* Extract TTL / Hop Limit from CMSG */
+  ctx->ttl = -1;
+  {
+    ccsocket_cmsghdr_t *cmsg;
+    for (cmsg = CC_CMSG_FIRSTHDR(cmsg_buf, msg.msg_controllen);
+         cmsg != NULL;
+         cmsg = CC_CMSG_NXTHDR(cmsg_buf, msg.msg_controllen, cmsg)) {
+      if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_TTL) {
+        ctx->ttl = *(int *)CC_CMSG_DATA(cmsg);
+        break;
+      }
+#if defined(IPV6_HOPLIMIT)
+      if (cmsg->cmsg_level == IPPROTO_IPV6 && cmsg->cmsg_type == IPV6_HOPLIMIT) {
+        ctx->ttl = *(int *)CC_CMSG_DATA(cmsg);
+        break;
+      }
+#endif
+    }
+  }
 
   /* -- SOCK_DGRAM (CC_ICMP1) on Linux ping socket:
    *    kernel strips IP + ICMP headers, delivers payload only. -- */

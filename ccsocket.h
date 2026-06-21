@@ -374,6 +374,225 @@ CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_sendv1(ccsocket_t s, ccsocket_iovec_t
  */
 CCSOCKET_EXPORT ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd);
 
+/* ========== sendmsg / recvmsg ========== */
+
+/* Flags for ccsocket_recvmsg / ccsocket_sendmsg */
+typedef enum {
+#define CC_MSG_NOFLAG    CC_MSG_NOFLAG
+  CC_MSG_NOFLAG    = 0,
+#define CC_MSG_PEEK      CC_MSG_PEEK
+  CC_MSG_PEEK      = (1 << 0),  /* recv: peek without consuming */
+#define CC_MSG_WAITALL   CC_MSG_WAITALL
+  CC_MSG_WAITALL   = (1 << 1),  /* recv: block until full request satisfied */
+#define CC_MSG_DONTWAIT  CC_MSG_DONTWAIT
+  CC_MSG_DONTWAIT  = (1 << 2),  /* send/recv: non-blocking for this call only */
+#define CC_MSG_NOSIGNAL  CC_MSG_NOSIGNAL
+  CC_MSG_NOSIGNAL  = (1 << 3),  /* send: suppress SIGPIPE (auto-added on POSIX) */
+#define CC_MSG_MORE      CC_MSG_MORE
+  CC_MSG_MORE      = (1 << 4),  /* send: more data coming (TCP_CORK hint) */
+#define CC_MSG_OOB       CC_MSG_OOB
+  CC_MSG_OOB       = (1 << 5),  /* send/recv: out-of-band data */
+} ccsocket_msg_flags_t;
+
+/* Return flags written to msg_flags by ccsocket_recvmsg */
+typedef enum {
+#define CC_MSG_RET_TRUNC   CC_MSG_RET_TRUNC
+  CC_MSG_RET_TRUNC   = (1 << 0),  /* data truncated (UDP packet > buffer) */
+#define CC_MSG_RET_CTRUNC  CC_MSG_RET_CTRUNC
+  CC_MSG_RET_CTRUNC  = (1 << 1),  /* control data truncated */
+#define CC_MSG_RET_EOR     CC_MSG_RET_EOR
+  CC_MSG_RET_EOR     = (1 << 2),  /* end of record */
+#define CC_MSG_RET_OOB     CC_MSG_RET_OOB
+  CC_MSG_RET_OOB     = (1 << 3),  /* out-of-band data received */
+#define CC_MSG_RET_BCAST   CC_MSG_RET_BCAST
+  CC_MSG_RET_BCAST   = (1 << 4),  /* broadcast packet */
+#define CC_MSG_RET_MCAST   CC_MSG_RET_MCAST
+  CC_MSG_RET_MCAST   = (1 << 5),  /* multicast packet */
+} ccsocket_msg_ret_flags_t;
+
+/**
+ * @brief Cross-platform ancillary message header (CMSG).
+ *
+ * Layout-compatible with both POSIX struct cmsghdr and Windows WSACMSGHDR.
+ * Fields match exactly: cmsg_len is 32-bit, cmsg_level and cmsg_type are int.
+ * Use the CC_CMSG_* macros to walk the control buffer.
+ *
+ * @see CC_CMSG_FIRSTHDR
+ * @see CC_CMSG_NXTHDR
+ * @see CC_CMSG_DATA
+ */
+typedef struct ccsocket_cmsghdr {
+    uint32_t cmsg_len;    /* data length including header */
+    int      cmsg_level;  /* protocol level (SOL_SOCKET, IPPROTO_IP, ...) */
+    int      cmsg_type;   /* message type identifier */
+    /* followed by aligned payload data */
+} ccsocket_cmsghdr_t;
+
+#if _WIN32
+  #define CC_CMSG_ALIGN(len)  (((len) + sizeof(DWORD) - 1) & ~(sizeof(DWORD) - 1))
+#else
+  #define CC_CMSG_ALIGN(len)  (((len) + sizeof(size_t) - 1) & ~(sizeof(size_t) - 1))
+#endif
+
+/**
+ * @def CC_CMSG_FIRSTHDR
+ * @brief Return a pointer to the first ccsocket_cmsghdr_t in a control buffer.
+ * @param ctl      Pointer to the control buffer (msg_control).
+ * @param ctl_len  Length of the control buffer (msg_controllen).
+ */
+#define CC_CMSG_FIRSTHDR(ctl, ctl_len) \
+    ((ctl) && (size_t)(ctl_len) >= sizeof(ccsocket_cmsghdr_t) \
+        ? (ccsocket_cmsghdr_t *)(ctl) \
+        : (ccsocket_cmsghdr_t *)0)
+
+/**
+ * @def CC_CMSG_NXTHDR
+ * @brief Return a pointer to the next ccsocket_cmsghdr_t in a control buffer.
+ * @param ctl      Pointer to the control buffer (msg_control).
+ * @param ctl_len  Length of the control buffer (msg_controllen).
+ * @param cmsg     Pointer to the current ccsocket_cmsghdr_t.
+ */
+#define CC_CMSG_NXTHDR(ctl, ctl_len, cmsg) \
+    (!(cmsg) \
+     ? (ccsocket_cmsghdr_t *)0 \
+     : ((char *)(cmsg) + CC_CMSG_ALIGN((cmsg)->cmsg_len) \
+        >= (char *)(ctl) + (size_t)(ctl_len)) \
+       ? (ccsocket_cmsghdr_t *)0 \
+       : (ccsocket_cmsghdr_t *)(((char *)(cmsg) + CC_CMSG_ALIGN((cmsg)->cmsg_len))))
+
+/**
+ * @def CC_CMSG_DATA
+ * @brief Return a pointer to the payload data following a ccsocket_cmsghdr_t.
+ * @param cmsg  Pointer to the ccsocket_cmsghdr_t.
+ */
+#define CC_CMSG_DATA(cmsg) \
+    ((unsigned char *)(cmsg) + CC_CMSG_ALIGN(sizeof(ccsocket_cmsghdr_t)))
+
+/**
+ * @def CC_CMSG_SPACE
+ * @brief Total bytes needed for a cmsghdr with a given payload length (includes alignment).
+ * @param len  Payload length.
+ */
+#define CC_CMSG_SPACE(len) \
+    (CC_CMSG_ALIGN(sizeof(ccsocket_cmsghdr_t) + (len)))
+
+/**
+ * @def CC_CMSG_LEN
+ * @brief Total cmsg_len value for a cmsghdr with a given payload length.
+ * @param len  Payload length.
+ */
+#define CC_CMSG_LEN(len) \
+    (CC_CMSG_ALIGN(sizeof(ccsocket_cmsghdr_t)) + (len))
+
+/**
+ * @brief Message header for ccsocket_recvmsg / ccsocket_sendmsg.
+ *
+ * Designed as a cross-platform abstraction over POSIX struct msghdr
+ * and Windows WSAMSG.
+ *
+ * Fields msg_iov/msg_iovlen mirror struct iovec/WSABUF.
+ * Fields msg_name/msg_port work like sendto/recvfrom:
+ *   - recvmsg: output (source address)
+ *   - sendmsg: input  (destination address, set before call)
+ * Field msg_control(msg_controllen provide access to ancillary data (CMSG).
+ * Walk the control buffer with CC_CMSG_FIRSTHDR / CC_CMSG_NXTHDR.
+ */
+typedef struct ccsocket_msghdr {
+    ccsocket_iovec_t     *msg_iov;         /* [in] scatter/gather buffer array */
+    int                   msg_iovlen;      /* [in] number of iovec entries */
+    char                  msg_name[65];    /* [in/out] send:dst addr / recv:src addr */
+    uint16_t              msg_port;        /* [in/out] send:dst port / recv:src port */
+    void                 *msg_control;     /* [in/out] CMSG ancillary data buffer */
+    size_t                msg_controllen;  /* [in/out] buffer size → actual used */
+    int                   msg_flags;       /* [out] CC_MSG_RET_* bitmask (recvmsg only) */
+    int                   msg_bytes;       /* [out] actual bytes transferred */
+} ccsocket_msghdr_t;
+
+/**
+ * @brief Receive a message with full control (source address, scatter/gather,
+ *        ancillary data, and arbitrary flags).
+ *
+ * Provides direct access to the underlying recvmsg() / WSARecvMsg().
+ * Source address is populated for connectionless sockets (UDP, ICMP/DGRAM).
+ * Stream sockets (TCP) should prefer ccsocket_recv/recv1.
+ *
+ * Cross-platform flag notes:
+ *   - CC_MSG_DONTWAIT: not supported on Windows (flag is silently ignored).
+ *   - CC_MSG_MORE:     Linux only; silently ignored on other platforms.
+ *
+ * @param s      Socket handle.
+ * @param msg    Message header — see ccsocket_msghdr_t field docs.
+ * @param flags  Receive flags (CC_MSG_PEEK, CC_MSG_WAITALL, CC_MSG_DONTWAIT,
+ *               CC_MSG_OOB; may be OR'd).  Pass CC_MSG_NOFLAG for default.
+ * @return CC_OPCODE_OK on success, CC_OPCODE_WAIT if non-blocking and no data,
+ *         CC_OPCODE_ERROR on failure.
+ */
+CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_recvmsg(ccsocket_t s, ccsocket_msghdr_t *msg, ccsocket_msg_flags_t flags);
+
+/**
+ * @brief Send a message with full control (destination address, scatter/gather,
+ *        ancillary data, and arbitrary flags).
+ *
+ * Provides direct access to the underlying sendmsg() / WSASendMsg().
+ * For connected sockets (TCP), msg_name/msg_port are ignored.
+ * For connectionless sockets (UDP, ICMP/DGRAM), set msg_name/msg_port to
+ * specify the destination (sendto semantics).  Leave msg_name[0] == '\0'
+ * to skip destination (equivalent to sendv1 for connected sockets).
+ *
+ * POSIX automatically adds MSG_NOSIGNAL to suppress SIGPIPE (matching the
+ * behaviour of ccsocket_sendv1).
+ *
+ * Cross-platform flag notes:
+ *   - CC_MSG_DONTWAIT: not supported on Windows (flag is silently ignored).
+ *   - CC_MSG_NOSIGNAL: only relevant on Linux; auto-added on POSIX, ignored
+ *     on Windows (no SIGPIPE).
+ *   - CC_MSG_MORE:     Linux only; silently ignored on other platforms.
+ *
+ * @param s      Socket handle.
+ * @param msg    Message header — see ccsocket_msghdr_t field docs.
+ * @param flags  Send flags (CC_MSG_DONTWAIT, CC_MSG_NOSIGNAL, CC_MSG_MORE,
+ *               CC_MSG_OOB; may be OR'd).  Pass CC_MSG_NOFLAG for default.
+ * @return CC_OPCODE_OK on success, CC_OPCODE_WAIT if buffer full in non-blocking mode,
+ *         CC_OPCODE_ERROR on failure.
+ */
+CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_sendmsg(ccsocket_t s, ccsocket_msghdr_t *msg, ccsocket_msg_flags_t flags);
+
+/**
+ * @brief Send data to a specific destination (sendto semantics).
+ *
+ * Thin wrapper over ccsocket_sendmsg for the common single-buffer case.
+ * For connected sockets, addr may be NULL (msg_name is skipped silently).
+ *
+ * @param s      Socket handle.
+ * @param buf    Data buffer to send.
+ * @param bsize  Number of bytes to send.
+ * @param addr   Target address string (NULL for connected sockets).
+ * @param port   Target port (0 for raw/Unix sockets).
+ * @param wsize  Optional: receives the number of bytes actually written.
+ * @return CC_OPCODE_OK, CC_OPCODE_WAIT, or CC_OPCODE_ERROR.
+ */
+CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_sendto(ccsocket_t s, const void *buf, size_t bsize,
+                                                   const char *addr, uint16_t port,
+                                                   OPTIONAL int *wsize);
+
+/**
+ * @brief Receive data from a socket, capturing the source address (recvfrom semantics).
+ *
+ * Thin wrapper over ccsocket_recvmsg for the common single-buffer case.
+ * Source address and port are written when addr/port are non-NULL.
+ *
+ * @param s      Socket handle.
+ * @param buf    Buffer to receive data into.
+ * @param bsize  Capacity of the buffer.
+ * @param addr   Optional: receives the source address string (>= MAX_ADDRLEN).
+ * @param port   Optional: receives the source port.
+ * @param rsize  Optional: receives the number of bytes actually read.
+ * @return CC_OPCODE_OK, CC_OPCODE_WAIT, or CC_OPCODE_ERROR.
+ */
+CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_recvfrom(ccsocket_t s, char *buf, size_t bsize,
+                                                     OPTIONAL char *addr, OPTIONAL uint16_t *port,
+                                                     OPTIONAL int *rsize);
+
 /* ********** Below are some settings that can be used to change the behavior of `ccsocket` ********** */
 
 /**
