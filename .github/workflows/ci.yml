@@ -374,7 +374,7 @@ jobs:
       - name: C++ smoke — compile+link as C++
         run: |
           g++ -std=c++11 -I. -o /tmp/cxx_smoke \
-            -x c++ ccsocket.c ccicmp.c ccdns.c \
+            -x c++ ccsocket.c ccicmp.c ccdns.c -lws2_32 \
             -x c++ - <<'PLAINTEXT'
             #include "ccsocket.h"
             #include "ccicmp.h"
@@ -438,7 +438,7 @@ jobs:
       - name: C++ smoke — compile+link as C++
         run: |
           g++ -std=c++11 -I. -o /tmp/cxx_smoke \
-            -x c++ ccsocket.c ccicmp.c ccdns.c \
+            -x c++ ccsocket.c ccicmp.c ccdns.c -lws2_32 \
             -x c++ - <<'PLAINTEXT'
             #include "ccsocket.h"
             #include "ccicmp.h"
