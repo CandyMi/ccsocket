@@ -36,7 +36,8 @@
   #ifdef INVALID_SOCKET
     #undef INVALID_SOCKET
   #endif
-  #define INVALID_SOCKET ((ccsocket_t)(~(uintptr_t)0))
+  #define INVALID_SOCKET ((ccsocket_t)-1)
+  typedef struct ccsocket_iovec { cciovec_len_t  len; cciovec_buf_t  buf; } ccsocket_iovec_t;
 #else
   #define CCSOCKET_EXPORT __attribute__((visibility("default")))
   #ifndef INVALID_SOCKET
@@ -46,18 +47,8 @@
   typedef size_t  cciovec_len_t;
   typedef int ccsocket_t;
   typedef ccsocket_t SOCKET;
+  typedef struct ccsocket_iovec { cciovec_buf_t  buf; cciovec_len_t  len; } ccsocket_iovec_t;
 #endif
-
-typedef struct ccsocket_iovec
-{
-#if _WIN32
-  cciovec_len_t  len;
-  cciovec_buf_t  buf;
-#else
-  cciovec_buf_t  buf;
-  cciovec_len_t  len;
-#endif
-} ccsocket_iovec_t;
 
 /* init ccsocket_iovec_t */
 #define ccsocket_init_iov(iov, count)         memset((iov), 0x0, sizeof(ccsocket_iovec_t)*(count))
