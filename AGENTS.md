@@ -162,6 +162,9 @@ POSIX Sockets            WinSock2 (Windows)
 - **Socket type**: `SOCKET` (Windows) vs `int` (POSIX), unified via `ccsocket_t`.
 - **IO vectors**: Different field order on Windows (`len` first) vs POSIX (`buf` first) — always use accessor macros (`ccsocket_set_iov_len`, etc.), never direct struct access.
 - **Inline**: `CC_INLINE` macro resolves to `static inline` (C99), `static __inline` (MSVC), or `static` (C89 fallback).
+- **Include order**: System/platform headers (`<...>`) must precede project headers (`"..."`). This ensures OS socket types (`SOCKET`, `INVALID_SOCKET`) are visible before `ccsocket.h` overrides them.
+- **`INVALID_SOCKET`**: Defined as `((ccsocket_t)-1)` on both Windows and POSIX — signed type matching `ccsocket_t`, eliminating cross-platform signedness warnings.
+- **`SOCKET` type**: On POSIX, `typedef ccsocket_t SOCKET;` is provided in `ccsocket.h` for cross-platform consistency with Windows' `SOCKET` type.
 
 ### 3.7 Git Commit Conventions
 
@@ -356,7 +359,7 @@ CI is configured in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — G
 | `linux-gcc` | Ubuntu (Debian) | x86_64 | GCC | Primary Linux |
 | `linux-clang` | Ubuntu (Debian) | x86_64 | Clang | Alternate compiler |
 | `linux-32bit` | Ubuntu (Debian) | i686 | GCC `-m32` | 32-bit via multilib |
-| `centos7` | CentOS 7 (Docker) | x86_64 | GCC 4.8.5 | Legacy platform |
+| `centos7` | CentOS 7 (Docker) | x86_64 | GCC 4.8.5 | Legacy platform; uses `cmake3` 3.17 — requires `cd build && ctest3` (no `--test-dir` support) |
 | `macos-arm64` | macOS (Apple Silicon) | arm64 | AppleClang | Native ARM |
 | `windows-msvc-x64` | Windows | x64 | MSVC | Primary Windows |
 | `windows-msvc-x86` | Windows | x86 | MSVC `-A Win32` | 32-bit Windows |
@@ -475,7 +478,7 @@ The resolver supports retry and failover:
 | `SOCK_DGRAM` + `IPPROTO_ICMP` (CC_ICMP1) | Linux ≥ 3.0, macOS, FreeBSD | No root needed | **Linux**: kernel adds ICMP header (user sends payload only). **macOS/BSD**: user sends full ICMP header + checksum (kernel adds only IP header) |
 | `SOCK_RAW` + `IPPROTO_ICMP` (CC_ICMP) | All POSIX | Requires root / `CAP_NET_RAW` | User sends full IP + ICMP header + checksum |
 
-The runtime helper `ccsocket_get_protocol()` returns the OS socket type (`SOCK_DGRAM` / `SOCK_RAW` / `SOCK_STREAM`), used by `ccicmp_is_dgram()` inside echo/reply to select the correct I/O path.
+The runtime helper `ccsocket_get_protocol()` returns the library protocol enum (`CC_TCP` / `CC_UDP` / `CC_ICMP` / `CC_ICMP1`), used by `ccicmp_is_dgram()` inside echo/reply to select the correct I/O path.
 
 ### 8.7 recvmsg / sendmsg API
 
