@@ -204,7 +204,7 @@ jobs:
               yum install -y -q cmake3 gcc gcc-c++ make &&
               cmake3 -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DCMAKE_C_COMPILER=gcc &&
               cmake3 --build build --parallel &&
-              ctest3 --test-dir build --output-on-failure
+              cd build && ctest3 --output-on-failure
             "
 
       - name: C++ smoke - compile+link as C++
