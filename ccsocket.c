@@ -107,6 +107,7 @@
    * Static library users: call ccsocket_init() explicitly.
    */
   #ifdef CCSOCKET_BUILD_SHARED
+  BOOL WINAPI DllMain(HINSTANCE, DWORD, LPVOID);
   BOOL WINAPI DllMain(
     _In_ HINSTANCE hinstDLL,
     _In_ DWORD     fdwReason,

@@ -234,7 +234,7 @@ bool ccicmp_echo(struct ccicmp_t *ctx, const char *addr, const char *data, size_
     memcpy(packet + CCICMP_HEADER_LEN + CCICMP_TS_LEN, data, len);
 
   if (af == CC_INET4) {
-    uint16_t cksum = icmp_checksum_calc(packet, pktlen);
+    uint16_t cksum = icmp_checksum_calc(packet, (int)pktlen);
     packet[2] = (cksum >> 8) & 0xff;
     packet[3] = cksum & 0xff;
   } else {
