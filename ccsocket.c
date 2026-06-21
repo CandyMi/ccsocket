@@ -47,7 +47,6 @@
   #include <winsock2.h>
   #include <mstcpip.h>
   #include <ws2tcpip.h>
-  #include <mswsock.h>
   #include <Windows.h>
   #include <io.h>
   #if defined(_MSC_VER) && WDK_NTDDI_VERSION > NTDDI_WIN10_RS2
@@ -61,6 +60,48 @@
     } SOCKADDR_UN, * PSOCKADDR_UN;
   #endif
   #pragma comment(lib, "Ws2_32.lib")
+
+  /* WSARecvMsg / WSASendMsg function pointers (loaded via WSAIoctl at runtime).
+   * Avoids dependency on mswsock.h declarations which vary across compilers. */
+  typedef struct cc_WSAMSG {
+      SOCKADDR    *name;
+      INT          namelen;
+      WSABUF      *lpBuffers;
+      ULONG        dwBufferCount;
+      WSABUF       Control;
+      ULONG        dwFlags;
+  } CC_WSAMSG;
+  typedef int (WSAAPI *cc_pfn_WSARecvMsg)(SOCKET, CC_WSAMSG *, LPDWORD, LPWSAOVERLAPPED, LPWSAOVERLAPPED_COMPLETION_ROUTINE);
+  typedef int (WSAAPI *cc_pfn_WSASendMsg)(SOCKET, CC_WSAMSG *, DWORD, LPDWORD, LPWSAOVERLAPPED, LPWSAOVERLAPPED_COMPLETION_ROUTINE);
+  static cc_pfn_WSARecvMsg cc_WSARecvMsg_fn = NULL;
+  static cc_pfn_WSASendMsg cc_WSASendMsg_fn = NULL;
+  static bool cc_msg_ext_loaded = false;
+
+  static bool cc_load_msg_ext(void)
+  {
+      if (cc_msg_ext_loaded) return (cc_WSARecvMsg_fn != NULL);
+      cc_msg_ext_loaded = true;
+
+      SOCKET tmp_s = socket(AF_INET, SOCK_DGRAM, 0);
+      if (tmp_s == INVALID_SOCKET) return false;
+
+      DWORD bytes;
+      {
+          GUID guid = {0xf689d7c8, 0x6f1f, 0x436b, {0x8a, 0x53, 0xe5, 0x4f, 0xe3, 0x51, 0xc3, 0xdb}};
+          if (SOCKET_ERROR == WSAIoctl(tmp_s, SIO_GET_EXTENSION_FUNCTION_POINTER,
+              &guid, sizeof(guid), &cc_WSARecvMsg_fn, sizeof(cc_WSARecvMsg_fn), &bytes, NULL, NULL))
+              cc_WSARecvMsg_fn = NULL;
+      }
+      {
+          GUID guid = {0xa441e712, 0x754f, 0x43ca, {0x84, 0xa7, 0x0d, 0xee, 0x44, 0xcf, 0x60, 0x6d}};
+          if (SOCKET_ERROR == WSAIoctl(tmp_s, SIO_GET_EXTENSION_FUNCTION_POINTER,
+              &guid, sizeof(guid), &cc_WSASendMsg_fn, sizeof(cc_WSASendMsg_fn), &bytes, NULL, NULL))
+              cc_WSASendMsg_fn = NULL;
+      }
+
+      closesocket(tmp_s);
+      return (cc_WSARecvMsg_fn != NULL && cc_WSASendMsg_fn != NULL);
+  }
 
   /* Per-process WinSock initialisation.
    *
@@ -796,8 +837,11 @@ ccsocket_stcode_t ccsocket_recvmsg(ccsocket_t s, ccsocket_msghdr_t *msg, ccsocke
     ccsocket_init_errno();
 
 #if _WIN32
+    if (!cc_load_msg_ext())
+        return CC_OPCODE_ERROR;
+
     SOCKADDR_STORAGE sa;
-    WSAMSG hdr;
+    CC_WSAMSG hdr;
     DWORD rsz;
     int r;
     int os_flags;
@@ -806,13 +850,13 @@ ccsocket_stcode_t ccsocket_recvmsg(ccsocket_t s, ccsocket_msghdr_t *msg, ccsocke
     memset(&sa, 0, sizeof(sa));
     hdr.name = (SOCKADDR *)&sa;
     hdr.namelen = sizeof(sa);
-    hdr.lpBuffers = (LPWSABUF)msg->msg_iov;
+    hdr.lpBuffers = (WSABUF *)msg->msg_iov;
     hdr.dwBufferCount = (DWORD)msg->msg_iovlen;
+    hdr.Control.buf = (char *)msg->msg_control;
     hdr.Control.len = (ULONG)msg->msg_controllen;
-    hdr.Control.pData = msg->msg_control;
 
     os_flags = ccsocket_msg_flags_to_os(flags, true);
-    r = WSARecvMsg((SOCKET)s, &hdr, &rsz, NULL, NULL);
+    r = cc_WSARecvMsg_fn((SOCKET)s, &hdr, &rsz, NULL, NULL);
     if (r == SOCKET_ERROR) {
         if (ccsocket_is_errno(EINTR))
             return ccsocket_recvmsg(s, msg, flags);
@@ -865,18 +909,21 @@ ccsocket_stcode_t ccsocket_sendmsg(ccsocket_t s, ccsocket_msghdr_t *msg, ccsocke
     ccsocket_init_errno();
 
 #if _WIN32
+    if (!cc_load_msg_ext())
+        return CC_OPCODE_ERROR;
+
     SOCKADDR_STORAGE sa;
-    WSAMSG hdr;
+    CC_WSAMSG hdr;
     DWORD wsz;
     int r;
     int os_flags;
 
     memset(&hdr, 0, sizeof(hdr));
     memset(&sa, 0, sizeof(sa));
-    hdr.lpBuffers = (LPWSABUF)msg->msg_iov;
+    hdr.lpBuffers = (WSABUF *)msg->msg_iov;
     hdr.dwBufferCount = (DWORD)msg->msg_iovlen;
+    hdr.Control.buf = (char *)msg->msg_control;
     hdr.Control.len = (ULONG)msg->msg_controllen;
-    hdr.Control.pData = msg->msg_control;
 
     /* destination address */
     if (msg->msg_name[0]) {
@@ -887,7 +934,7 @@ ccsocket_stcode_t ccsocket_sendmsg(ccsocket_t s, ccsocket_msghdr_t *msg, ccsocke
     }
 
     os_flags = ccsocket_msg_flags_to_os(flags, false);
-    r = WSASendMsg((SOCKET)s, &hdr, (DWORD)os_flags, &wsz, NULL, NULL);
+    r = cc_WSASendMsg_fn((SOCKET)s, &hdr, (DWORD)os_flags, &wsz, NULL, NULL);
     if (r == SOCKET_ERROR) {
         if (ccsocket_is_errno(EINTR))
             return ccsocket_sendmsg(s, msg, flags);

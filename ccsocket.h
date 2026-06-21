@@ -441,7 +441,7 @@ typedef struct ccsocket_cmsghdr {
  * @param ctl_len  Length of the control buffer (msg_controllen).
  */
 #define CC_CMSG_FIRSTHDR(ctl, ctl_len) \
-    ((ctl) && (size_t)(ctl_len) >= sizeof(ccsocket_cmsghdr_t) \
+    (((void *)(ctl) != NULL && (size_t)(ctl_len) >= sizeof(ccsocket_cmsghdr_t)) \
         ? (ccsocket_cmsghdr_t *)(ctl) \
         : (ccsocket_cmsghdr_t *)0)
 
