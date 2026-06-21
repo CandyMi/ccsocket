@@ -79,6 +79,13 @@ target_compile_definitions(ccsocket_obj
     CCICMP_RECV_BUFSZ=${CCICMP_RECV_BUFSZ}
 )
 
+if(BUILD_SHARED_LIBS)
+  target_compile_definitions(ccsocket_obj PRIVATE
+    CCSOCKET_BUILD_SHARED
+    CCDNS_BUILD_SHARED
+  )
+endif()
+
 target_compile_options(ccsocket_obj PRIVATE ${CC_WARNINGS})
 
 # Symbol visibility: hide everything except CCSOCKET_EXPORT symbols.

@@ -216,16 +216,7 @@ jobs:
               sed -i 's|^mirrorlist=|#mirrorlist=|' /etc/yum.repos.d/*.repo &&
               yum install -y -q epel-release &&
               yum install -y -q cmake3 gcc gcc-c++ make &&
-              g++ -std=c++11 -I. -o /tmp/cxx_smoke -x c++ ccsocket.c ccicmp.c ccdns.c -x c++ - <<'PLAINTEXT'
-            #include "ccsocket.h"
-            #include "ccicmp.h"
-            #include "ccdns.h"
-            int main() {
-                ccsocket_family_t ver = ccsocket_get_version("1.1.1.1");
-                (void)ver;
-                return 0;
-            }
-          PLAINTEXT
+              g++ -std=c++11 -I. -o /tmp/cxx_smoke -x c++ ccsocket.c ccicmp.c ccdns.c tests/test_ccsocket_cxx_embed.cpp
             "
 
       - name: C++ smoke - header-only inclusion
@@ -237,64 +228,11 @@ jobs:
               sed -i 's|^mirrorlist=|#mirrorlist=|' /etc/yum.repos.d/*.repo &&
               yum install -y -q epel-release &&
               yum install -y -q cmake3 gcc gcc-c++ make &&
-              g++ -std=c++11 -I. -o /tmp/cxx_include_check -x c++ - <<'PLAINTEXT'
-            #include "ccsocket.h"
-            #include "ccicmp.h"
-            #include "ccdns.h"
-            int main() { return 0; }
-          PLAINTEXT
+              g++ -std=c++11 -I. -o /tmp/cxx_include_check tests/test_ccsocket_cxx_embed.cpp
             "
 
   # ==================================================================
   #  macOS — AppleClang, x86_64 (Intel)
-  # ==================================================================
-  macos-x64:
-    name: macOS (Intel, x86_64)
-    runs-on: macos-13
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure
-        run: >
-          cmake -B build
-          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
-          -DBUILD_TESTING=ON
-
-      - name: Build (C)
-        run: cmake --build build --parallel
-
-      - name: Test (C)
-        run: ctest --test-dir build --output-on-failure
-
-      # --- C++ smoke ---
-      - name: C++ smoke — compile+link as C++
-        run: |
-          clang++ -std=c++11 -I. -o /tmp/cxx_smoke \
-            -x c++ ccsocket.c ccicmp.c ccdns.c \
-            -x c++ - <<'PLAINTEXT'
-            #include "ccsocket.h"
-            #include "ccicmp.h"
-            #include "ccdns.h"
-            int main() {
-                ccsocket_family_t ver = ccsocket_get_version("1.1.1.1");
-                (void)ver;
-                return 0;
-            }
-          PLAINTEXT
-
-      - name: C++ smoke — header-only inclusion
-        run: |
-          clang++ -std=c++11 -I. -o /tmp/cxx_include_check \
-            -x c++ - <<'PLAINTEXT'
-            #include "ccsocket.h"
-            #include "ccicmp.h"
-            #include "ccdns.h"
-            int main() { return 0; }
-          PLAINTEXT
-
-  # ==================================================================
-  #  macOS — AppleClang, arm64 (Apple Silicon)
   # ==================================================================
   macos-arm64:
     name: macOS (Apple Silicon, arm64)

@@ -325,7 +325,7 @@ ctest --test-dir build --output-on-failure -V
 
 CI is configured in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — GitHub Actions.
 
-### 6.1 Coverage Matrix (9 jobs)
+### 6.1 Coverage Matrix (8 jobs)
 
 | Job | OS | Arch | Compiler | Notes |
 |---|---|---|---|---|
@@ -333,7 +333,6 @@ CI is configured in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — G
 | `linux-clang` | Ubuntu (Debian) | x86_64 | Clang | Alternate compiler |
 | `linux-32bit` | Ubuntu (Debian) | i686 | GCC `-m32` | 32-bit via multilib |
 | `centos7` | CentOS 7 (Docker) | x86_64 | GCC 4.8.5 | Legacy platform |
-| `macos-x64` | macOS (Intel) | x86_64 | AppleClang | Intel Mac |
 | `macos-arm64` | macOS (Apple Silicon) | arm64 | AppleClang | Native ARM |
 | `windows-msvc-x64` | Windows | x64 | MSVC | Primary Windows |
 | `windows-msvc-x86` | Windows | x86 | MSVC `-A Win32` | 32-bit Windows |

@@ -33,6 +33,9 @@
   typedef char*    cciovec_buf_t;
   typedef uint32_t cciovec_len_t;
   typedef intptr_t ccsocket_t;
+  #ifndef INVALID_SOCKET
+    #define INVALID_SOCKET (~(ccsocket_t)0)
+  #endif
 #else
   #define CCSOCKET_EXPORT __attribute__((visibility("default")))
   #ifndef INVALID_SOCKET
