@@ -111,9 +111,9 @@ void ccicmp_fill_timestamp(uint8_t *timestamp)
 #endif
 }
 
-/* Detect whether the socket is SOCK_DGRAM (CC_ICMP1) or SOCK_RAW (CC_ICMP).
+/* Detect whether the socket is CC_ICMP1 (SOCK_DGRAM) or CC_ICMP (SOCK_RAW).
  * Used to select the correct I/O semantics inside echo/reply. */
-#define ccicmp_is_dgram(fd) (ccsocket_get_protocol(fd) == SOCK_DGRAM)
+#define ccicmp_is_dgram(fd) (ccsocket_get_protocol(fd) == CC_ICMP1)
 
 /**
  * @brief `RFC793`:

@@ -832,35 +832,52 @@ ccsocket_stcode_t ccsocket_recvmsg(ccsocket_t s, ccsocket_msghdr_t *msg, ccsocke
     ccsocket_init_errno();
 
 #if _WIN32
-    SOCKADDR_STORAGE sa;
-    CC_WSAMSG hdr;
-    DWORD rsz;
-    int r;
-    int os_flags;
+    int proto = ccsocket_get_protocol(s);
+    if (proto == -1) return CC_OPCODE_ERROR;
 
-    memset(&hdr, 0, sizeof(hdr));
-    memset(&sa, 0, sizeof(sa));
-    hdr.name = (SOCKADDR *)&sa;
-    hdr.namelen = sizeof(sa);
-    hdr.lpBuffers = (WSABUF *)msg->msg_iov;
-    hdr.dwBufferCount = (DWORD)msg->msg_iovlen;
-    hdr.Control.buf = (char *)msg->msg_control;
-    hdr.Control.len = (ULONG)msg->msg_controllen;
+    if (proto == CC_TCP) {
+        /* TCP: reuse existing recv_internal (scatter/gather, no addr/CMSG) */
+        int os_flags = ccsocket_msg_flags_to_os(flags, true);
+        int rsize = 0;
+        msg->msg_name[0] = '\0';
+        msg->msg_port = 0;
+        msg->msg_controllen = 0;
+        msg->msg_flags = 0;
+        ccsocket_stcode_t r = ccsocket_recv_internal(s, msg->msg_iov, msg->msg_iovlen, &rsize, os_flags);
+        if (r == CC_OPCODE_OK) msg->msg_bytes = rsize;
+        return r;
+    } else {
+        /* DGRAM/RAW: WSARecvMsg (address + CMSG) */
+        SOCKADDR_STORAGE sa;
+        CC_WSAMSG hdr;
+        DWORD rsz;
+        int r;
+        int os_flags;
 
-    os_flags = ccsocket_msg_flags_to_os(flags, true);
-    r = cc_WSARecvMsg_fn((SOCKET)s, &hdr, &rsz, NULL, NULL);
-    if (r == SOCKET_ERROR) {
-        if (ccsocket_is_errno(EINTR))
-            return ccsocket_recvmsg(s, msg, flags);
-        if (ccsocket_is_errno(EWOULDBLOCK))
-            return CC_OPCODE_WAIT;
-        return CC_OPCODE_ERROR;
+        memset(&hdr, 0, sizeof(hdr));
+        memset(&sa, 0, sizeof(sa));
+        hdr.name = (SOCKADDR *)&sa;
+        hdr.namelen = sizeof(sa);
+        hdr.lpBuffers = (WSABUF *)msg->msg_iov;
+        hdr.dwBufferCount = (DWORD)msg->msg_iovlen;
+        hdr.Control.buf = (char *)msg->msg_control;
+        hdr.Control.len = (ULONG)msg->msg_controllen;
+
+        os_flags = ccsocket_msg_flags_to_os(flags, true);
+        r = cc_WSARecvMsg_fn((SOCKET)s, &hdr, &rsz, NULL, NULL);
+        if (r == SOCKET_ERROR) {
+            if (ccsocket_is_errno(EINTR))
+                return ccsocket_recvmsg(s, msg, flags);
+            if (ccsocket_is_errno(EWOULDBLOCK))
+                return CC_OPCODE_WAIT;
+            return CC_OPCODE_ERROR;
+        }
+
+        ccsocket2addr((const struct sockaddr_storage *)&sa, msg->msg_name, &msg->msg_port);
+        msg->msg_flags = ccsocket_ret_flags_from_os((int)hdr.dwFlags);
+        msg->msg_controllen = (size_t)hdr.Control.len;
+        msg->msg_bytes = (int)rsz;
     }
-
-    ccsocket2addr((const struct sockaddr_storage *)&sa, msg->msg_name, &msg->msg_port);
-    msg->msg_flags = ccsocket_ret_flags_from_os((int)hdr.dwFlags);
-    msg->msg_controllen = (size_t)hdr.Control.len;
-    msg->msg_bytes = (int)rsz;
 #else
     struct sockaddr_storage sa;
     struct msghdr hdr;
@@ -901,38 +918,51 @@ ccsocket_stcode_t ccsocket_sendmsg(ccsocket_t s, ccsocket_msghdr_t *msg, ccsocke
     ccsocket_init_errno();
 
 #if _WIN32
-    SOCKADDR_STORAGE sa;
-    CC_WSAMSG hdr;
-    DWORD wsz;
-    int r;
-    int os_flags;
+    int proto = ccsocket_get_protocol(s);
+    if (proto == -1) return CC_OPCODE_ERROR;
 
-    memset(&hdr, 0, sizeof(hdr));
-    memset(&sa, 0, sizeof(sa));
-    hdr.lpBuffers = (WSABUF *)msg->msg_iov;
-    hdr.dwBufferCount = (DWORD)msg->msg_iovlen;
-    hdr.Control.buf = (char *)msg->msg_control;
-    hdr.Control.len = (ULONG)msg->msg_controllen;
+    if (proto == CC_TCP) {
+        /* TCP: reuse existing sendv1 (scatter/gather, no addr/CMSG) */
+        int wsize = 0;
+        int os_flags = ccsocket_msg_flags_to_os(flags, false);
+        ccsocket_stcode_t r = ccsocket_sendv1(s, msg->msg_iov, msg->msg_iovlen, &wsize, os_flags);
+        if (r == CC_OPCODE_OK) msg->msg_bytes = wsize;
+        return r;
+    } else {
+        /* DGRAM/RAW: WSASendMsg (address + CMSG) */
+        SOCKADDR_STORAGE sa;
+        CC_WSAMSG hdr;
+        DWORD wsz;
+        int r;
+        int os_flags;
 
-    /* destination address */
-    if (msg->msg_name[0]) {
-        if (!ccsocket_wrap_ip_and_port(s, (struct sockaddr_storage *)&sa, msg->msg_name, msg->msg_port))
+        memset(&hdr, 0, sizeof(hdr));
+        memset(&sa, 0, sizeof(sa));
+        hdr.lpBuffers = (WSABUF *)msg->msg_iov;
+        hdr.dwBufferCount = (DWORD)msg->msg_iovlen;
+        hdr.Control.buf = (char *)msg->msg_control;
+        hdr.Control.len = (ULONG)msg->msg_controllen;
+
+        /* destination address */
+        if (msg->msg_name[0]) {
+            if (!ccsocket_wrap_ip_and_port(s, (struct sockaddr_storage *)&sa, msg->msg_name, msg->msg_port))
+                return CC_OPCODE_ERROR;
+            hdr.name = (SOCKADDR *)&sa;
+            hdr.namelen = ccsizeof((const struct sockaddr_storage *)&sa);
+        }
+
+        os_flags = ccsocket_msg_flags_to_os(flags, false);
+        r = cc_WSASendMsg_fn((SOCKET)s, &hdr, (DWORD)os_flags, &wsz, NULL, NULL);
+        if (r == SOCKET_ERROR) {
+            if (ccsocket_is_errno(EINTR))
+                return ccsocket_sendmsg(s, msg, flags);
+            if (ccsocket_is_errno(EWOULDBLOCK))
+                return CC_OPCODE_WAIT;
             return CC_OPCODE_ERROR;
-        hdr.name = (SOCKADDR *)&sa;
-        hdr.namelen = ccsizeof((const struct sockaddr_storage *)&sa);
-    }
+        }
 
-    os_flags = ccsocket_msg_flags_to_os(flags, false);
-    r = cc_WSASendMsg_fn((SOCKET)s, &hdr, (DWORD)os_flags, &wsz, NULL, NULL);
-    if (r == SOCKET_ERROR) {
-        if (ccsocket_is_errno(EINTR))
-            return ccsocket_sendmsg(s, msg, flags);
-        if (ccsocket_is_errno(EWOULDBLOCK))
-            return CC_OPCODE_WAIT;
-        return CC_OPCODE_ERROR;
+        msg->msg_bytes = (int)wsz;
     }
-
-    msg->msg_bytes = (int)wsz;
 #else
     struct sockaddr_storage sa;
     struct msghdr hdr;

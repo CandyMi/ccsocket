@@ -631,14 +631,19 @@ CCSOCKET_EXPORT bool ccsocket_get_sockname(ccsocket_t s, char *addr, uint16_t *p
 CCSOCKET_EXPORT ccsocket_family_t ccsocket_get_family(ccsocket_t s);
 
 /**
- * @brief Get the underlying OS socket type (SOCK_STREAM, SOCK_DGRAM, SOCK_RAW, ...).
+ * @brief Get the protocol of a socket as a ccsocket_protocol_t value.
+ *
+ * Maps the OS socket type to the library's protocol enum:
+ *   SOCK_STREAM → CC_TCP
+ *   SOCK_DGRAM  → CC_UDP or CC_ICMP1 (distinguished by protocol number)
+ *   SOCK_RAW    → CC_ICMP
  *
  * Useful for runtime protocol detection, e.g. distinguishing a
- * SOCK_DGRAM (CC_ICMP1) from a SOCK_RAW (CC_ICMP) ICMP socket.
+ * CC_ICMP1 (SOCK_DGRAM) from a CC_ICMP (SOCK_RAW) ICMP socket.
  *
  * @param s  Socket handle.
- * @return The socket type (e.g. SOCK_STREAM, SOCK_DGRAM, SOCK_RAW)
- *         on success, or -1 on failure (check errno / WSAGetLastError).
+ * @return CC_TCP, CC_UDP, CC_ICMP, CC_ICMP1 on success,
+ *         or -1 on failure (check errno / WSAGetLastError).
  */
 CCSOCKET_EXPORT int ccsocket_get_protocol(ccsocket_t s);
 
