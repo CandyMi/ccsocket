@@ -345,7 +345,7 @@ CI is configured in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — G
 3. **C++ compile+link** — library `.c` files compiled as C++ (`-x c++`), verifying `extern "C"` interop
 4. **C++ header-only** — all public headers included from a pure C++ TU
 5. **Static-link smoke** — static library links a standalone executable (Linux)
-6. **Zero warnings** — `-Werror` equivalent on all compilers
+6. **Warnings** — project flags active (`-Wall -Wextra -Wshadow` on GCC/Clang, `/W4` on MSVC); MSVC C4996 deprecation warnings suppressed via `/wd4996`
 
 ### 6.3 Trigger
 

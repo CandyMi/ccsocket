@@ -3,7 +3,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![Language: C](https://img.shields.io/badge/Language-C99-blue.svg)
 [![Build](https://img.shields.io/badge/Build-CMake_3.0+-brightgreen.svg)]()
-[![Tests](https://img.shields.io/badge/Tests-10/10-passing-brightgreen.svg)]()
+[![CI](https://github.com/CandyMi/ccsocket/actions/workflows/ci.yml/badge.svg)](https://github.com/CandyMi/ccsocket/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/Tests-11/11-passing-brightgreen.svg)]()
 
 A lightweight, portable C library that provides a unified API for network and inter-process communication across POSIX (Linux, macOS, FreeBSD, Solaris, AIX) and Windows. It wraps raw system sockets behind a consistent interface — handling platform quirks so you don't have to.
 
@@ -144,7 +145,7 @@ ctest --test-dir build --output-on-failure -V
 ctest --test-dir build -R ccsocket/tcp -V
 ```
 
-### Test Suite (10 tests)
+### Test Suite (11 tests)
 
 | Test | Verifies |
 |---|---|
@@ -158,6 +159,7 @@ ctest --test-dir build -R ccsocket/tcp -V
 | `ccsocket/http` | **HTTP text protocol**: request/response with `httpc.txt` |
 | `ccicmp/ping` | **ICMP (IPv4 + IPv6)**: RFC 1071 / RFC 4443 checksum, packet layout, lifecycle |
 | `ccdns/test` | **DNS**: query encode, response decode (A/AAAA/CNAME/TXT/MX), compression ptr, TCP mode |
+| `ccsocket/cxx-embed` | **C++ embedding**: headers compile under C++, `extern "C"` symbols linkable |
 
 > ICMP lifecycle test works without root — init failure is handled gracefully. Full echo/reply needs `CAP_NET_RAW` / root.
 
@@ -177,7 +179,7 @@ ctest --test-dir build -R ccsocket/tcp -V
 ├── httpc.txt           # Sample HTTP/1.1 request (test fixture)
 ├── LICENSE             # MIT license
 ├── .gitignore          # Build artifacts
-├── tests/              # Test suite (CTest, 10 tests)
+├── tests/              # Test suite (CTest, 11 tests)
 │   ├── CMakeLists.txt
 │   ├── test_ccsocket_smoke.c
 │   ├── test_ccsocket_tcp.c
@@ -188,7 +190,8 @@ ctest --test-dir build -R ccsocket/tcp -V
 │   ├── test_ccsocket_http.c
 │   ├── test_ccicmp_smoke.c
 │   ├── test_ccicmp_ping.c
-│   └── test_ccdns.c
+│   ├── test_ccdns.c
+│   └── test_ccsocket_cxx_embed.cpp
 ├── AGENTS.md           # AI coding agent instructions
 └── README.md           # ← this file
 ```
