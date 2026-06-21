@@ -517,7 +517,23 @@ Thin wrappers (≈ 15 lines each) over `ccsocket_sendmsg` / `ccsocket_recvmsg` f
 - `ccsocket_sendto(s, buf, len, addr, port, &wsize)` — when `addr` is NULL, behaves like `ccsocket_send` (connected socket path).
 - `ccsocket_recvfrom(s, buf, len, &addr, &port, &rsize)` — `addr`/`port` may be NULL when source address is not needed.
 
-#### 8.7.5 ccicmp TTL Integration
+#### 8.7.5 Windows Implementation: WSAIoctl Function Pointer Loading
+
+`WSARecvMsg` and `WSASendMsg` are Windows extension APIs declared in `Mswsock.h`, but MinGW distributions often lack or mismatch these declarations. To maintain portability across MSVC, MinGW-w64, and Clang-CL, the library loads them at runtime via the standard `WSAIoctl` + `SIO_GET_EXTENSION_FUNCTION_POINTER` pattern ([MSDN: LPFN_WSARECVMSG](https://learn.microsoft.com/en-us/windows/win32/api/mswsock/nc-mswsock-lpfn_wsarecvmsg), [MSDN: WSASendMsg](https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-wsasendmsg)):
+
+```c
+/* Self-contained CC_WSAMSG (avoids mswsock.h) */
+typedef struct cc_WSAMSG { /* layout matches WSAMSG */ } CC_WSAMSG;
+typedef int (WSAAPI *cc_pfn_WSARecvMsg)(SOCKET, CC_WSAMSG *, ...);
+
+/* Loaded once in ccsocket_init() */
+GUID guid = {0xf689d7c8, 0x6f1f, 0x436b, ...};  /* WSAID_WSARECVMSG */
+WSAIoctl(s, SIO_GET_EXTENSION_FUNCTION_POINTER, &guid, ..., &fn, ...);
+```
+
+The loading happens during `ccsocket_init()`, immediately after `WSAStartup`. Zero runtime overhead on subsequent calls — function pointers are cached in file-scope statics. If the loading fails (e.g. pre-Vista system), `ccsocket_init()` returns `false`.
+
+#### 8.7.6 ccicmp TTL Integration
 
 `ccicmp_t` now includes an `int ttl` field. On platforms supporting `IP_RECVTTL` / `IPV6_RECVHOPLIMIT`, `ccicmp_init()` enables the option and `ccicmp_reply()` extracts the TTL/Hop Limit from CMSG data using `CC_CMSG_*` macros. When TTL is unavailable or `ccicmp_reply()` hasn't been called, `ttl` is `-1`.
 

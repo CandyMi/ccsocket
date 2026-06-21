@@ -75,13 +75,8 @@
   typedef int (WSAAPI *cc_pfn_WSASendMsg)(SOCKET, CC_WSAMSG *, DWORD, LPDWORD, LPWSAOVERLAPPED, LPWSAOVERLAPPED_COMPLETION_ROUTINE);
   static cc_pfn_WSARecvMsg cc_WSARecvMsg_fn = NULL;
   static cc_pfn_WSASendMsg cc_WSASendMsg_fn = NULL;
-  static bool cc_msg_ext_loaded = false;
-
   static bool cc_load_msg_ext(void)
   {
-      if (cc_msg_ext_loaded) return (cc_WSARecvMsg_fn != NULL);
-      cc_msg_ext_loaded = true;
-
       SOCKET tmp_s = socket(AF_INET, SOCK_DGRAM, 0);
       if (tmp_s == INVALID_SOCKET) return false;
 
@@ -186,7 +181,7 @@
 CCSOCKET_EXPORT bool ccsocket_init(void)
 {
 #if _WIN32
-  return ccsocket_wsa_init_once();
+  return ccsocket_wsa_init_once() && cc_load_msg_ext();
 #else
   return true;
 #endif
@@ -837,9 +832,6 @@ ccsocket_stcode_t ccsocket_recvmsg(ccsocket_t s, ccsocket_msghdr_t *msg, ccsocke
     ccsocket_init_errno();
 
 #if _WIN32
-    if (!cc_load_msg_ext())
-        return CC_OPCODE_ERROR;
-
     SOCKADDR_STORAGE sa;
     CC_WSAMSG hdr;
     DWORD rsz;
@@ -909,9 +901,6 @@ ccsocket_stcode_t ccsocket_sendmsg(ccsocket_t s, ccsocket_msghdr_t *msg, ccsocke
     ccsocket_init_errno();
 
 #if _WIN32
-    if (!cc_load_msg_ext())
-        return CC_OPCODE_ERROR;
-
     SOCKADDR_STORAGE sa;
     CC_WSAMSG hdr;
     DWORD wsz;
