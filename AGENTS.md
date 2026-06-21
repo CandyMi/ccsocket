@@ -261,7 +261,29 @@ When `BUILD_SHARED_LIBS=ON` on Windows, the build will also define `CCSOCKET_BUI
 
 | CMake Target | Sources | Link Dependencies | Alias |
 |---|---|---|---|
-| `ccsocket` | `ccsocket.h/.c`, `ccicmp.h/.c`, `ccdns.h/.c` | `ws2_32` (Windows) | `ccsocket::ccsocket` |
+| `ccsocket_obj` | `ccsocket.h/.c`, `ccicmp.h/.c`, `ccdns.h/.c` | `ws2_32` (Windows) | — |
+| `ccsocket_shared` | links `ccsocket_obj` | — | — |
+| `ccsocket_static` | links `ccsocket_obj` | — | — |
+| `ccsocket` (INTERFACE) | — | `ccsocket_shared` or `ccsocket_static` | `ccsocket::ccsocket` |
+
+### 4.6 Install
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+cmake --install build --prefix /usr/local
+```
+
+Installs:
+
+| Path | Content |
+|---|---|
+| `include/ccsocket.h` `include/ccicmp.h` `include/ccdns.h` | Public headers |
+| `lib/libccsocket.so` / `.dylib` / `.lib` | Shared library |
+| `lib/libccsocket.a` | Static library |
+| `lib/cmake/ccsocket/ccsocketConfig.cmake` | CMake package config |
+
+Consumers use `find_package(ccsocket)` + `target_link_libraries(myapp ccsocket::ccsocket)`.
 
 ### 4.5 Compile-Time Configuration Macros
 

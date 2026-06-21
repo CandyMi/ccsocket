@@ -141,6 +141,28 @@ else()
 endif()
 add_library(ccsocket::ccsocket ALIAS ccsocket)
 
+# -- Install ------------------------------------------------------------------
+include(GNUInstallDirs)
+
+install(TARGETS ccsocket_obj ccsocket_shared ccsocket_static
+  EXPORT  ccsocket-targets
+  RUNTIME COMPONENT ccsocket_Runtime   DESTINATION ${CMAKE_INSTALL_BINDIR}
+  LIBRARY COMPONENT ccsocket_Library   DESTINATION ${CMAKE_INSTALL_LIBDIR}
+  ARCHIVE COMPONENT ccsocket_StaticLib DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+
+install(FILES ${CCSOCKET_HEADERS}
+  COMPONENT ccsocket_Development
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install(EXPORT ccsocket-targets
+  FILE            ccsocketConfig.cmake
+  NAMESPACE       ccsocket::
+  DESTINATION     ${CMAKE_INSTALL_LIBDIR}/cmake/ccsocket
+  COMPONENT       ccsocket_Development
+)
+
 # -- Tests --------------------------------------------------------------------
 if(BUILD_TESTING)
   enable_testing()
