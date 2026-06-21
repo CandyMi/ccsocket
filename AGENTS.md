@@ -180,8 +180,12 @@ Use bullet points for multi-line details.
 | `feat` | New feature or public API addition |
 | `fix` | Bug fix |
 | `refactor` | Code restructuring with no behavior change |
+| `ci` | GitHub Actions, CI workflow |
 | `docs` | Documentation only (AGENTS.md, README.md, Doxygen) |
-| `build` | CMake, build system, CI |
+| `build` | CMake, build system |
+| `test` | Test additions or fixes |
+| `perf` | Performance improvement |
+| `chore` | Maintenance, minor cleanup |
 | `test` | Test additions or fixes |
 | `perf` | Performance improvement |
 | `chore` | Maintenance, minor cleanup |
@@ -267,6 +271,8 @@ When `BUILD_SHARED_LIBS=ON` on Windows, the build will also define `CCSOCKET_BUI
 | `NDEBUG` | *(unset)* | ccsocket | Disables debug `fprintf` tracing |
 | `CCSOCKET_BUILD_SHARED` | *(auto)* | ccsocket | Set during shared library build to select dllexport |
 | `CCSOCKET_SHARED` | *(auto)* | ccsocket | Set for shared library consumers to select dllimport |
+| `CCDNS_BUILD_SHARED` | *(auto)* | ccdns | Set during shared library build to select dllexport for ccdns symbols |
+| `CCDNS_SHARED` | *(auto)* | ccdns | Set for shared library consumers to select dllimport for ccdns symbols |
 
 ---
 
@@ -293,7 +299,7 @@ Test infrastructure is live via CTest. Test sources live in [`tests/`](tests/).
 ### 5.2 Test Conventions
 
 - **Location**: `tests/` directory at project root
-- **Naming**: `test_<module>_<scenario>.c` (e.g., `test_ccsocket_tcp_connect.c`)
+- **Naming**: `test_<module>_<scenario>.c` (e.g., `test_ccsocket_tcp.c`) or `test_<module>_<scenario>.cpp` for C++ tests
 - **Framework**: Plain `assert()` + CTest — no external test framework dependency
 - **Adding a new test**: (1) create `tests/test_<module>_<scenario>.c`, (2) add `add_executable` / `add_test` in `tests/CMakeLists.txt`, (3) rebuild and run `ctest`
 
@@ -335,7 +341,7 @@ CI is configured in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — G
 
 ### 6.2 What Each Job Verifies
 
-1. **C build** — shared + static library compiles with `-Werror` / `/WX`
+1. **C build** — shared + static library compiles with project warning flags (`-Wall -Wextra -Wshadow` etc. on GCC/Clang, `/W4` on MSVC)
 2. **CTest** — all 11 tests pass via `ctest --output-on-failure`
 3. **C++ compile+link** — library `.c` files compiled as C++ (`-x c++`), verifying `extern "C"` interop
 4. **C++ header-only** — all public headers included from a pure C++ TU
@@ -351,7 +357,7 @@ CI is configured in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — G
 
 ## 7. Agent Task Constraints
 
-### 6.1 Mandatory Pre-Check
+### 7.1 Mandatory Pre-Check
 
 **Before any edit, the agent MUST read this `AGENTS.md` file and verify compliance with all applicable sections.** If the proposed change conflicts with any convention or architectural invariant documented here, the agent **MUST NOT proceed automatically**. Instead, it must:
 
@@ -359,7 +365,7 @@ CI is configured in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — G
 2. Present an interactive choice (`ask_choice`) asking the user to approve, reject, or redirect.
 3. Proceed only after receiving explicit user approval.
 
-### 6.2 Conflict Examples That Require a Choice
+### 7.2 Conflict Examples That Require a Choice
 
 - Adding a C++-only feature to a header that breaks C89 compatibility.
 - Introducing a new external dependency when none currently exists.
@@ -367,13 +373,13 @@ CI is configured in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — G
 - Adding heap allocation to a hot path that currently uses stack-only allocation.
 - Removing or modifying a public API function without updating its Doxygen comment.
 
-### 6.3 Documentation Coherence
+### 7.3 Documentation Coherence
 
-- **Every public API change** (add, remove, or modify a `CC*_EXPORT` function or a public type/enum/macro) **must** be documented via Doxygen in the source header (`.h`).
+- **Every public API change** (add, remove, or modify a `CCSOCKET_EXPORT` / `CCDNS_EXPORT` function or a public type/enum/macro) **must** be documented via Doxygen in the source header (`.h`).
 - Changes that affect platform behavior (e.g., a new `#ifdef` branch for a new OS) must be described in the Doxygen comment of the affected function(s).
 - Internal (non-exported) changes do not require header documentation changes, but should be described in the commit message.
 
-### 6.4 Update Currency
+### 7.4 Update Currency
 
 **All targeted modifications must update this `AGENTS.md` file to reflect the current state.** Specifically:
 
@@ -384,6 +390,7 @@ CI is configured in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — G
 | New language convention decided | §3 Language & Coding Conventions |
 | New compile-time macro added | §4.5 Compile-Time Configuration Macros |
 | Test suite added or reorganized | §5 Testing |
+| CI job added or reorganized | §6 CI Pipeline |
 | New public module created | §2.1 Module Dependency |
 | License change | §1.1 Identity + LICENSE |
 
@@ -458,6 +465,7 @@ The runtime helper `ccsocket_get_protocol()` returns the OS socket type (`SOCK_D
 | Add a new DNS feature | (1) Add to `ccdns.h` (Doxygen), (2) implement in `ccdns.c`, (3) export via `CCDNS_EXPORT`, (4) update `AGENTS.md` §2 and §5 |
 | Port to a new OS | (1) Add `#if`/`#elif`/`#else` blocks in `ccsocket.c`, (2) update CC_INLINE / socket types if needed, (3) test via compile, (4) update platform matrix in Doxygen comments and §8.3 here |
 | Add a new ICMP feature | (1) Add to `ccicmp.h` (Doxygen), (2) implement in `ccicmp.c`, (3) add compile-time macro to §4.3 if configurable, (4) rebuild — ccicmp is compiled as part of ccsocket |
+| Add a CI job | (1) Add entry to `.github/workflows/ci.yml` matrix, (2) update §6.1 Coverage Matrix, (3) verify CTest passes on target platform |
 
 ### 9.2 File Modification Permission Levels
 
