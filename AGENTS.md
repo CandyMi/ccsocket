@@ -22,7 +22,9 @@
 
 `libccsocket` provides a unified, portable C API for network and inter-process communication across POSIX (Linux, macOS, FreeBSD, Solaris, AIX) and Windows. It wraps raw system sockets (`socket`, `connect`, `send`, `recv`, `accept`, etc.) behind a consistent interface, handling platform quirks (socketpair emulation on Windows, IPv6 ICMP pseudo-header checksums, `sendfile` fallback paths) transparently.
 
-`ccicmp` is a thin ICMP echo ("ping") library built on top of `libccsocket`. It supports both IPv4 and IPv6, timestamp-based RTT measurement, and configurable payloads.
+`ccicmp` is a thin ICMP echo ("ping") library built on top of `libccsocket`. It supports both IPv4 and IPv6, timestamp-based RTT measurement, configurable payloads, and TTL extraction.
+
+`ccdns` is a DNS wire-format client (RFC 1035) built on top of `libccsocket`. It supports A/AAAA/CNAME/TXT/MX queries, EDNS, TCP mode, and DNS-over-UDP.
 
 ---
 
