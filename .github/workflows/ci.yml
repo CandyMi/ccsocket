@@ -228,7 +228,7 @@ jobs:
               sed -i 's|^mirrorlist=|#mirrorlist=|' /etc/yum.repos.d/*.repo &&
               yum install -y -q epel-release &&
               yum install -y -q cmake3 gcc gcc-c++ make &&
-              g++ -std=c++11 -I. -o /tmp/cxx_include_check tests/test_ccsocket_cxx_embed.cpp
+              g++ -std=c++11 -I. -c -o /tmp/cxx_include_check.o tests/test_ccsocket_cxx_embed.cpp
             "
 
   # ==================================================================
@@ -299,7 +299,9 @@ jobs:
         run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
 
       - name: Test (C)
-        run: ctest --test-dir build --output-on-failure -C ${{ env.BUILD_TYPE }}
+        run: |
+          $env:Path = "$PWD\build\${{ env.BUILD_TYPE }};$env:Path"
+          ctest --test-dir build --output-on-failure -C ${{ env.BUILD_TYPE }}
 
       # C++ compatibility verified by Linux + macOS smoke tests above
 
@@ -324,7 +326,9 @@ jobs:
         run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
 
       - name: Test (C)
-        run: ctest --test-dir build --output-on-failure -C ${{ env.BUILD_TYPE }}
+        run: |
+          $env:Path = "$PWD\build\${{ env.BUILD_TYPE }};$env:Path"
+          ctest --test-dir build --output-on-failure -C ${{ env.BUILD_TYPE }}
 
       # C++ compatibility verified by Linux + macOS smoke tests above
 
@@ -362,7 +366,9 @@ jobs:
         run: cmake --build build --parallel
 
       - name: Test (C)
-        run: ctest --test-dir build --output-on-failure
+        run: |
+          export PATH="$PWD/build:$PATH"
+          ctest --test-dir build --output-on-failure
 
       # --- C++ smoke ---
       - name: C++ smoke — compile+link as C++
@@ -424,7 +430,9 @@ jobs:
         run: cmake --build build --parallel
 
       - name: Test (C)
-        run: ctest --test-dir build --output-on-failure
+        run: |
+          export PATH="$PWD/build:$PATH"
+          ctest --test-dir build --output-on-failure
 
       # --- C++ smoke ---
       - name: C++ smoke — compile+link as C++
