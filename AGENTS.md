@@ -16,7 +16,7 @@
 | **License** | MIT — see [LICENSE](LICENSE) |
 | **Language** | C (C99 build standard) |
 | **Status** | Active development |
-| **Repository** | *(private / self-hosted)* |
+| **Repository** | [CandyMi/ccsocket](https://github.com/CandyMi/ccsocket) |
 
 ### 1.2 Purpose
 
@@ -325,7 +325,7 @@ ctest --test-dir build --output-on-failure -V
 
 CI is configured in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — GitHub Actions.
 
-### 6.1 Coverage Matrix (8 jobs)
+### 6.1 Coverage Matrix (9 jobs)
 
 | Job | OS | Arch | Compiler | Notes |
 |---|---|---|---|---|
@@ -337,15 +337,16 @@ CI is configured in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — G
 | `windows-msvc-x64` | Windows | x64 | MSVC | Primary Windows |
 | `windows-msvc-x86` | Windows | x86 | MSVC `-A Win32` | 32-bit Windows |
 | `windows-mingw64` | Windows (MinGW) | x64 | MinGW-w64 (gcc) | MinGW toolchain |
+| `windows-mingw32` | Windows (MinGW) | i686 | MinGW-w64 (gcc) | 32-bit MinGW |
 
-### 6.2 What Each Job Verifies
+### 6.2 What the Pipeline Verifies
 
-1. **C build** — shared + static library compiles with project warning flags (`-Wall -Wextra -Wshadow` etc. on GCC/Clang, `/W4` on MSVC)
-2. **CTest** — all 11 tests pass via `ctest --output-on-failure`
-3. **C++ compile+link** — library `.c` files compiled as C++ (`-x c++`), verifying `extern "C"` interop
-4. **C++ header-only** — all public headers included from a pure C++ TU
-5. **Static-link smoke** — static library links a standalone executable (Linux)
-6. **Warnings** — project flags active (`-Wall -Wextra -Wshadow` on GCC/Clang, `/W4` on MSVC); MSVC C4996 deprecation warnings suppressed via `/wd4996`
+- **C build** — shared + static library compiles with project warning flags (`-Wall -Wextra -Wshadow` etc. on GCC/Clang, `/W4` on MSVC)
+- **CTest** — all 11 tests pass via `ctest --output-on-failure`
+- **C++ compile+link** — library `.c` files compiled as C++ (`-x c++`), verifying `extern "C"` interop (POSIX + MinGW jobs; MSVC relies on the CMake CXX test)
+- **C++ header-only** — all public headers included from a pure C++ TU (POSIX + MinGW jobs)
+- **Static-link smoke** — static library links a standalone executable (Linux jobs)
+- **Warnings** — project flags active (`-Wall -Wextra -Wshadow` on GCC/Clang, `/W4` on MSVC); MSVC C4996 deprecation warnings suppressed via `/wd4996`
 
 ### 6.3 Trigger
 

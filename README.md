@@ -2,9 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![Language: C](https://img.shields.io/badge/Language-C99-blue.svg)
-[![Build](https://img.shields.io/badge/Build-CMake_3.0+-brightgreen.svg)]()
 [![CI](https://github.com/CandyMi/ccsocket/actions/workflows/ci.yml/badge.svg)](https://github.com/CandyMi/ccsocket/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/Tests-11/11-passing-brightgreen.svg)]()
 
 A lightweight, portable C library that provides a unified API for network and inter-process communication across POSIX (Linux, macOS, FreeBSD, Solaris, AIX) and Windows. It wraps raw system sockets behind a consistent interface — handling platform quirks so you don't have to.
 
@@ -192,6 +190,9 @@ ctest --test-dir build -R ccsocket/tcp -V
 │   ├── test_ccicmp_ping.c
 │   ├── test_ccdns.c
 │   └── test_ccsocket_cxx_embed.cpp
+├── .github/            # GitHub Actions CI workflows
+│   └── workflows/
+│       └── ci.yml
 ├── AGENTS.md           # AI coding agent instructions
 └── README.md           # ← this file
 ```
@@ -224,3 +225,7 @@ ctest --test-dir build -R ccsocket/tcp -V
 This project is licensed under the MIT License — see [LICENSE](LICENSE) for the full text.
 
 Copyright © 2025 [CandyMi](https://github.com/CandyMi).
+
+---
+
+> AI coding agents: see [AGENTS.md](AGENTS.md) for project conventions.
