@@ -864,6 +864,7 @@ ccsocket_stcode_t ccsocket_recvmsg(ccsocket_t s, ccsocket_msghdr_t *msg, ccsocke
         hdr.Control.len = (ULONG)msg->msg_controllen;
 
         os_flags = ccsocket_msg_flags_to_os(flags, true);
+        hdr.dwFlags = (ULONG)os_flags;
         r = cc_WSARecvMsg_fn((SOCKET)s, &hdr, &rsz, NULL, NULL);
         if (r == SOCKET_ERROR) {
             if (ccsocket_is_errno(EINTR))
