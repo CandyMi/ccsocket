@@ -1,0 +1,42 @@
+# ============================================================================
+# ccsocketConfig.cmake — libccsocket CMake package config
+#
+# Provides targets:
+#   ccsocket::ccsocket  — shared library (default, recommended)
+#   ccsocket::shared    — shared library (explicit)
+#   ccsocket::static    — static library (explicit)
+#
+# Usage:
+#   find_package(ccsocket REQUIRED)
+#   target_link_libraries(myapp ccsocket::ccsocket)
+# ============================================================================
+
+@PACKAGE_INIT@
+
+include("${CMAKE_CURRENT_LIST_DIR}/ccsocket-targets.cmake")
+
+# -- Shared library (default) ------------------------------------------------
+if(NOT TARGET ccsocket::ccsocket)
+  add_library(ccsocket::ccsocket INTERFACE IMPORTED)
+  set_target_properties(ccsocket::ccsocket PROPERTIES
+    INTERFACE_LINK_LIBRARIES "ccsocket_shared"
+  )
+endif()
+
+# -- Shared library (explicit) -----------------------------------------------
+if(NOT TARGET ccsocket::shared)
+  add_library(ccsocket::shared INTERFACE IMPORTED)
+  set_target_properties(ccsocket::shared PROPERTIES
+    INTERFACE_LINK_LIBRARIES "ccsocket_shared"
+  )
+endif()
+
+# -- Static library (explicit) -----------------------------------------------
+if(NOT TARGET ccsocket::static)
+  add_library(ccsocket::static INTERFACE IMPORTED)
+  set_target_properties(ccsocket::static PROPERTIES
+    INTERFACE_LINK_LIBRARIES "ccsocket_static"
+  )
+endif()
+
+check_required_components(ccsocket)

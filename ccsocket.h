@@ -177,6 +177,14 @@ CCSOCKET_EXPORT int ccsocket_close(ccsocket_t s);
 CCSOCKET_EXPORT bool ccsocket_init(void);
 
 /**
+ * @brief Clean up the WinSock library (WSACleanup).
+ *
+ * Should be called after all sockets are closed.
+ * On POSIX this is a no-op.  Safe to call without a matching init.
+ */
+CCSOCKET_EXPORT void ccsocket_cleanup(void);
+
+/**
  * @brief Create a pair of connected pipes backed by socket handles.
  * @fn ccsocket_pipe
  *

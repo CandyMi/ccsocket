@@ -40,6 +40,15 @@ ccsocket_test(ccicmp/ping     test_ccicmp_ping.c)
 # -- DNS client tests (encode, decode, lifecycle) ----------------------------
 ccsocket_test(ccdns/test      test_ccdns.c)
 
+# -- Family / protocol enum boundary tests -----------------------------------
+ccsocket_test(ccsocket/family  test_ccsocket_family.c)
+
+# -- IPv6 loopback tests -----------------------------------------------------
+ccsocket_test(ccsocket/ipv6    test_ccsocket_ipv6.c)
+
+# -- Error path tests (INVALID_SOCKET, NULL, invalid params) -----------------
+ccsocket_test(ccsocket/error   test_ccsocket_error.c)
+
 # -- C++ embedding test: compile + link as C++ (extern "C" interop) ---------
 enable_language(CXX)
 

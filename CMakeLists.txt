@@ -119,9 +119,16 @@ add_library(ccsocket_static STATIC)
 
 target_link_libraries(ccsocket_static PUBLIC ccsocket_obj)
 
-set_target_properties(ccsocket_static PROPERTIES
-  OUTPUT_NAME ccsocket
-)
+if(MSVC)
+  # MSVC: static .lib and DLL import .lib would collide — use distinct name
+  set_target_properties(ccsocket_static PROPERTIES
+    OUTPUT_NAME ccsocket_s
+  )
+else()
+  set_target_properties(ccsocket_static PROPERTIES
+    OUTPUT_NAME ccsocket
+  )
+endif()
 
 # -- Platform Linkage (applied to both via the object library) ----------------
 if(WIN32)
@@ -140,6 +147,8 @@ else()
   target_link_libraries(ccsocket INTERFACE ccsocket_static)
 endif()
 add_library(ccsocket::ccsocket ALIAS ccsocket)
+add_library(ccsocket::shared  ALIAS ccsocket_shared)
+add_library(ccsocket::static  ALIAS ccsocket_static)
 
 # -- Install ------------------------------------------------------------------
 include(GNUInstallDirs)
@@ -157,10 +166,20 @@ install(FILES ${CCSOCKET_HEADERS}
 )
 
 install(EXPORT ccsocket-targets
-  FILE            ccsocketConfig.cmake
-  NAMESPACE       ccsocket::
+  FILE            ccsocket-targets.cmake
   DESTINATION     ${CMAKE_INSTALL_LIBDIR}/cmake/ccsocket
   COMPONENT       ccsocket_Development
+)
+
+include(CMakePackageConfigHelpers)
+configure_package_config_file(
+  ${CMAKE_CURRENT_SOURCE_DIR}/cmake/ccsocketConfig.cmake.in
+  ${CMAKE_CURRENT_BINARY_DIR}/ccsocketConfig.cmake
+  INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ccsocket
+)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/ccsocketConfig.cmake
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/ccsocket
+  COMPONENT   ccsocket_Development
 )
 
 # -- Tests --------------------------------------------------------------------

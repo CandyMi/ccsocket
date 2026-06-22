@@ -34,11 +34,7 @@
 #include <stdbool.h>
 #include <errno.h>
 #include <assert.h>
-#ifndef NDEBUG
-  #define ccsocket_dump(msg, ...) fprintf(stdout, "[libccsocket]: " msg "\n", ##__VA_ARGS__)
-#else
-  #define ccsocket_dump(msg, ...)
-#endif
+#define ccsocket_dump(msg, ...) fprintf(stdout, "[libccsocket]: " msg "\n", ##__VA_ARGS__)
 
 #if _WIN32
   #include <sdkddkver.h>
@@ -78,20 +74,27 @@
   static bool cc_load_msg_ext(void)
   {
       SOCKET tmp_s = socket(AF_INET, SOCK_DGRAM, 0);
-      if (tmp_s == INVALID_SOCKET) return false;
+      if (tmp_s == INVALID_SOCKET) {
+          ccsocket_dump("cc_load_msg_ext: socket(AF_INET, DGRAM) failed: %lu", WSAGetLastError());
+          return false;
+      }
 
       DWORD bytes;
       {
           GUID guid = {0xf689d7c8, 0x6f1f, 0x436b, {0x8a, 0x53, 0xe5, 0x4f, 0xe3, 0x51, 0xc3, 0xdb}};
           if (SOCKET_ERROR == WSAIoctl(tmp_s, SIO_GET_EXTENSION_FUNCTION_POINTER,
-              &guid, sizeof(guid), &cc_WSARecvMsg_fn, sizeof(cc_WSARecvMsg_fn), &bytes, NULL, NULL))
+              &guid, sizeof(guid), &cc_WSARecvMsg_fn, sizeof(cc_WSARecvMsg_fn), &bytes, NULL, NULL)) {
+              ccsocket_dump("WSAIoctl(WSARecvMsg) failed: %lu", WSAGetLastError());
               cc_WSARecvMsg_fn = NULL;
+          }
       }
       {
           GUID guid = {0xa441e712, 0x754f, 0x43ca, {0x84, 0xa7, 0x0d, 0xee, 0x44, 0xcf, 0x60, 0x6d}};
           if (SOCKET_ERROR == WSAIoctl(tmp_s, SIO_GET_EXTENSION_FUNCTION_POINTER,
-              &guid, sizeof(guid), &cc_WSASendMsg_fn, sizeof(cc_WSASendMsg_fn), &bytes, NULL, NULL))
+              &guid, sizeof(guid), &cc_WSASendMsg_fn, sizeof(cc_WSASendMsg_fn), &bytes, NULL, NULL)) {
+              ccsocket_dump("WSAIoctl(WSASendMsg) failed: %lu", WSAGetLastError());
               cc_WSASendMsg_fn = NULL;
+          }
       }
 
       closesocket(tmp_s);
@@ -101,10 +104,10 @@
   /* Per-process WinSock initialisation.
    *
    * DllMain (DLL builds only):
-   *   Debug   (NDEBUG not set)  → calls WSAStartup for developer convenience.
-   *   Release (NDEBUG set)      → no WSAStartup; relies on ccsocket_init().
+   *   Debug   (NDEBUG not set)  → auto-init via ccsocket_wsa_init_once().
+   *   Release (NDEBUG set)      → no auto-init; relies on ccsocket_init().
    *
-   * Static library users: call ccsocket_init() explicitly.
+   * Static library users: call ccsocket_init() / ccsocket_cleanup() explicitly.
    */
   #ifdef CCSOCKET_BUILD_SHARED
   BOOL WINAPI DllMain(HINSTANCE, DWORD, LPVOID);
@@ -121,11 +124,7 @@
        * Per MSDN, WSAStartup in DllMain is technically unsafe (loader lock),
        * but in practice works reliably during DEBUG attachment and is the
        * simplest way to avoid "need to call init" for every dev/test run. */
-      WSADATA wsaData;
-      if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        WSACleanup();
-        return FALSE;
-      }
+      if (!ccsocket_wsa_init_once()) return FALSE;
   #endif /* !NDEBUG */
     } else if (fdwReason == DLL_PROCESS_DETACH) {
       WSACleanup();
@@ -142,14 +141,12 @@
       WSACleanup();
       return false;
     }
-  #ifndef NDEBUG
     ccsocket_dump("WSAStartup -> {Ver: %g, maxVer: %g, sockets: %d, udpMax: %d, sys: '%s', desc: '%s'}",
       (float)(HIBYTE(wsaData.wVersion) + LOBYTE(wsaData.wVersion) * 0.1),
       (float)(HIBYTE(wsaData.wHighVersion) + LOBYTE(wsaData.wHighVersion) * 0.1),
       wsaData.iMaxSockets, wsaData.iMaxUdpDg,
       wsaData.szSystemStatus, wsaData.szDescription
     );
-  #endif
     return true;
   }
   #define ccsocket_init_errno() do {errno = 0; WSASetLastError(0);}while(0)
@@ -190,9 +187,20 @@
 CCSOCKET_EXPORT bool ccsocket_init(void)
 {
 #if _WIN32
-  return ccsocket_wsa_init_once() && cc_load_msg_ext();
+  if (!ccsocket_wsa_init_once()) return false;
+  cc_load_msg_ext();  /* best-effort: extensions only needed for recvmsg/sendmsg */
+  return true;
 #else
   return true;
+#endif
+}
+
+CCSOCKET_EXPORT void ccsocket_cleanup(void)
+{
+#if _WIN32
+  WSACleanup();
+#else
+  /* no-op on POSIX */
 #endif
 }
 
