@@ -179,6 +179,10 @@
   #define ccsocket_set_errno(err) errno = err
 #endif
 
+#ifndef IOV_MAX
+#define IOV_MAX 1024
+#endif
+
 #include "ccsocket.h"
 #include "ccdns.h"
 
@@ -338,7 +342,13 @@ bool ccsocket_wrap_ip_and_port(ccsocket_t s, struct sockaddr_storage* sa, const 
     case AF_UNIX:
     {
       struct sockaddr_un* in = (struct sockaddr_un*)sa;
-      memcpy(in->sun_path, addr, strlen(addr));
+      size_t pathlen = strlen(addr);
+      if (pathlen >= sizeof(in->sun_path)) {
+          ccsocket_set_errno(EINVAL);
+          return false;
+      }
+      memcpy(in->sun_path, addr, pathlen);
+      in->sun_path[pathlen] = '\0';
       break;
     }
 #endif
@@ -835,7 +845,10 @@ int ccsocket_ret_flags_from_os(int os_flags)
 ccsocket_stcode_t ccsocket_recvmsg(ccsocket_t s, ccsocket_msghdr_t *msg, ccsocket_msg_flags_t flags)
 {
     ccsocket_init_errno();
-
+    if (msg->msg_iovlen > IOV_MAX) {
+        ccsocket_set_errno(EINVAL);
+        return CC_OPCODE_ERROR;
+    }
 #if _WIN32
     int proto = ccsocket_get_protocol(s);
     if (proto == -1) return CC_OPCODE_ERROR;
@@ -853,6 +866,10 @@ ccsocket_stcode_t ccsocket_recvmsg(ccsocket_t s, ccsocket_msghdr_t *msg, ccsocke
         return r;
     } else {
         /* DGRAM/RAW: WSARecvMsg (address + CMSG) */
+        if (!cc_WSARecvMsg_fn) {
+            ccsocket_set_errno(EOPNOTSUPP);
+            return CC_OPCODE_ERROR;
+        }
         SOCKADDR_STORAGE sa;
         CC_WSAMSG hdr;
         DWORD rsz;
@@ -922,7 +939,10 @@ ccsocket_stcode_t ccsocket_recvmsg(ccsocket_t s, ccsocket_msghdr_t *msg, ccsocke
 ccsocket_stcode_t ccsocket_sendmsg(ccsocket_t s, ccsocket_msghdr_t *msg, ccsocket_msg_flags_t flags)
 {
     ccsocket_init_errno();
-
+    if (msg->msg_iovlen > IOV_MAX) {
+        ccsocket_set_errno(EINVAL);
+        return CC_OPCODE_ERROR;
+    }
 #if _WIN32
     int proto = ccsocket_get_protocol(s);
     if (proto == -1) return CC_OPCODE_ERROR;
@@ -936,6 +956,10 @@ ccsocket_stcode_t ccsocket_sendmsg(ccsocket_t s, ccsocket_msghdr_t *msg, ccsocke
         return r;
     } else {
         /* DGRAM/RAW: WSASendMsg (address + CMSG) */
+        if (!cc_WSASendMsg_fn) {
+            ccsocket_set_errno(EOPNOTSUPP);
+            return CC_OPCODE_ERROR;
+        }
         SOCKADDR_STORAGE sa;
         CC_WSAMSG hdr;
         DWORD wsz;
