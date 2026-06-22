@@ -430,6 +430,10 @@ ccsocket_t ccsocket2(ccsocket_family_t domain, ccsocket_protocol_t proto, ccsock
       return SOCKET_ERROR;
   }
 
+  /* Unix domain sockets don't use IP protocol numbers */
+  if (domain_r == AF_UNIX)
+    flag_r = 0;
+
   bool isset = false;
   if (flags & CC_NONBLOCK) {
 #if defined(SOCK_NONBLOCK) // for nonblocking
