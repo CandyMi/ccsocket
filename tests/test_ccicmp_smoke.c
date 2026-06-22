@@ -9,6 +9,7 @@
  * Does NOT attempt actual ICMP traffic (requires root / CAP_NET_RAW).
  */
 
+#include "ccsocket.h"
 #include "ccicmp.h"
 #include <assert.h>
 #include <string.h>
@@ -22,7 +23,7 @@ int main(void)
 
     /* — Function pointer smoke — */
     /* Verify the symbols are linkable by taking their addresses at runtime. */
-    bool (*init_fn)(struct ccicmp_t *, ccsocket_family_t)    = ccicmp_init;
+    bool (*init_fn)(struct ccicmp_t *, int)    = ccicmp_init;
     void (*close_fn)(struct ccicmp_t *)                       = ccicmp_close;
     bool (*echo_fn)(struct ccicmp_t *, const char *, const char *, size_t) = ccicmp_echo;
     bool (*reply_fn)(struct ccicmp_t *, char *, size_t *)     = ccicmp_reply;

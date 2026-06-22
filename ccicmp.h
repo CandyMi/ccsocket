@@ -12,19 +12,43 @@
 #ifndef CCICMP_H
 #define CCICMP_H
 
-#include "ccsocket.h"
+#include <stdint.h>
+#include <stdbool.h>
+#include <stddef.h>
 
-typedef struct ccicmp_t
-{
-  ccsocket_t fd; // socket
-  uint16_t id;   // id
-  uint16_t no;   // seq
-  int ttl;       // TTL / Hop Limit of last reply (-1 = unknown)
-} ccicmp_t;
+/* ---- Platform socket type (self-contained, no ccsocket.h dependency) ---- */
+/* Guard: ccsocket.h may be included alongside ccicmp.h; avoid -Wpedantic
+ * "redefinition of typedef" when both define ccsocket_t identically. */
+#ifndef CCICMP_CCSOCKET_T_DEFINED
+#define CCICMP_CCSOCKET_T_DEFINED
+#if _WIN32
+  typedef intptr_t ccsocket_t;
+#else
+  typedef int ccsocket_t;
+  #ifndef CCICMP_SOCKET_DEFINED
+    #define CCICMP_SOCKET_DEFINED
+    typedef ccsocket_t SOCKET;
+  #endif
+#endif
+#endif /* CCICMP_CCSOCKET_T_DEFINED */
+
+/* ---- Export decoration (always shared, no build/consumer toggle) ---- */
+#if _WIN32
+  #define CCICMP_EXPORT __declspec(dllexport)
+#else
+  #define CCICMP_EXPORT __attribute__((visibility("default")))
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+typedef struct ccicmp_t {
+  ccsocket_t fd;   /**< Socket handle. */
+  uint16_t   id;   /**< ICMP identifier. */
+  uint16_t   no;   /**< Sequence number. */
+  int        ttl;  /**< TTL / Hop Limit of last reply (-1 = unknown). */
+} ccicmp_t;
 
 /**
  * @brief Initialise an ICMP ping context.
@@ -51,7 +75,7 @@ extern "C" {
  *
  * @return true on success, false on failure.
  */
-CCSOCKET_EXPORT bool ccicmp_init(struct ccicmp_t *ctx, ccsocket_family_t domain);
+CCICMP_EXPORT bool ccicmp_init(struct ccicmp_t *ctx, int domain);
 
 /**
  * @brief Destroy an ICMP ping context and close the underlying socket.
@@ -61,7 +85,7 @@ CCSOCKET_EXPORT bool ccicmp_init(struct ccicmp_t *ctx, ccsocket_family_t domain)
  *
  * @param ctx  ccicmp_t context to close (must not be NULL).
  */
-CCSOCKET_EXPORT void ccicmp_close(struct ccicmp_t *ctx);
+CCICMP_EXPORT void ccicmp_close(struct ccicmp_t *ctx);
 
 /**
  * @brief Send an ICMP Echo Request (ping) to a target address.
@@ -79,7 +103,7 @@ CCSOCKET_EXPORT void ccicmp_close(struct ccicmp_t *ctx);
  * @param len   Payload length in bytes, capped at CCICMP_MAX_PAYLOAD.
  * @return true on success, false on failure.
  */
-CCSOCKET_EXPORT bool ccicmp_echo(struct ccicmp_t *ctx, const char *addr, const char *data, size_t len);
+CCICMP_EXPORT bool ccicmp_echo(struct ccicmp_t *ctx, const char *addr, const char *data, size_t len);
 
 /**
  * @brief Receive a matching ICMP Echo Reply.
@@ -99,7 +123,7 @@ CCSOCKET_EXPORT bool ccicmp_echo(struct ccicmp_t *ctx, const char *addr, const c
  *              May be NULL if data is NULL.
  * @return true if a matching reply was received, false otherwise.
  */
-CCSOCKET_EXPORT bool ccicmp_reply(struct ccicmp_t *ctx, char *data, size_t *len);
+CCICMP_EXPORT bool ccicmp_reply(struct ccicmp_t *ctx, char *data, size_t *len);
 
 #ifdef __cplusplus
 }

@@ -32,7 +32,10 @@
   #endif
   typedef char*    cciovec_buf_t;
   typedef uint32_t cciovec_len_t;
-  typedef intptr_t ccsocket_t;
+  #ifndef CCICMP_CCSOCKET_T_DEFINED
+    #define CCICMP_CCSOCKET_T_DEFINED
+    typedef intptr_t ccsocket_t;
+  #endif
   #ifdef INVALID_SOCKET
     #undef INVALID_SOCKET
   #endif
@@ -45,8 +48,14 @@
   #endif
   typedef void*   cciovec_buf_t;
   typedef size_t  cciovec_len_t;
-  typedef int ccsocket_t;
-  typedef ccsocket_t SOCKET;
+  #ifndef CCICMP_CCSOCKET_T_DEFINED
+    #define CCICMP_CCSOCKET_T_DEFINED
+    typedef int ccsocket_t;
+  #endif
+  #ifndef CCICMP_SOCKET_DEFINED
+    #define CCICMP_SOCKET_DEFINED
+    typedef ccsocket_t SOCKET;
+  #endif
   typedef struct ccsocket_iovec { cciovec_buf_t  buf; cciovec_len_t  len; } ccsocket_iovec_t;
 #endif
 
@@ -626,19 +635,23 @@ CCSOCKET_EXPORT ccsocket_family_t ccsocket_get_family(ccsocket_t s);
 /**
  * @brief Get the protocol of a socket as a ccsocket_protocol_t value.
  *
- * Maps the OS socket type to the library's protocol enum:
+ * Maps the OS socket type (SO_TYPE) to the library's protocol enum:
  *   SOCK_STREAM → CC_TCP
  *   SOCK_DGRAM  → CC_UDP or CC_ICMP1 (distinguished by protocol number)
  *   SOCK_RAW    → CC_ICMP
+ *
+ * For Unix domain sockets, SO_TYPE is SOCK_STREAM or SOCK_DGRAM,
+ * so the return value is CC_TCP or CC_UDP respectively.  To check
+ * the address family, use ccsocket_get_family().
  *
  * Useful for runtime protocol detection, e.g. distinguishing a
  * CC_ICMP1 (SOCK_DGRAM) from a CC_ICMP (SOCK_RAW) ICMP socket.
  *
  * @param s  Socket handle.
  * @return CC_TCP, CC_UDP, CC_ICMP, CC_ICMP1 on success,
- *         or -1 on failure (check errno / WSAGetLastError).
+ *         or CC_PROTOCOL_INVALID on failure (check errno / WSAGetLastError).
  */
-CCSOCKET_EXPORT int ccsocket_get_protocol(ccsocket_t s);
+CCSOCKET_EXPORT ccsocket_protocol_t ccsocket_get_protocol(ccsocket_t s);
 
 /**
  * @brief Determine the address family from an address string.

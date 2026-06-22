@@ -35,6 +35,7 @@
   #endif
 #endif
 
+#include "ccsocket.h"
 #include "ccicmp.h"
 
 /* for C89/C90 with C99 inline support */
@@ -144,7 +145,7 @@ uint16_t icmp_checksum_calc(const uint8_t *buffer, int length)
   return (~checksum) & 0xffff;
 }
 
-bool ccicmp_init(struct ccicmp_t *ctx, ccsocket_family_t domain)
+bool ccicmp_init(struct ccicmp_t *ctx, int domain)
 {
   if (!ctx)
     return false;

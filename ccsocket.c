@@ -1197,18 +1197,39 @@ ccsocket_family_t ccsocket_get_family(ccsocket_t s)
   return CC_FAMILY_INVALID;
 }
 
-int ccsocket_get_protocol(ccsocket_t s)
+ccsocket_protocol_t ccsocket_get_protocol(ccsocket_t s)
 {
-  int type = -1;
+  int type;
   socklen_t optlen = sizeof(type);
 #if _WIN32
   if (getsockopt((SOCKET)s, SOL_SOCKET, SO_TYPE, (char *)&type, &optlen) != 0)
-    return -1;
+    return CC_PROTOCOL_INVALID;
 #else
   if (getsockopt((SOCKET)s, SOL_SOCKET, SO_TYPE, &type, &optlen) != 0)
-    return -1;
+    return CC_PROTOCOL_INVALID;
 #endif
-  return type;
+
+  switch (type)
+  {
+    case SOCK_STREAM: return CC_TCP;
+    case SOCK_RAW:    return CC_ICMP;
+    case SOCK_DGRAM:
+      /* SOCK_DGRAM could be CC_UDP or CC_ICMP1 — check protocol number.
+       * Win32 has no SOCK_DGRAM+IPPROTO_ICMP, so only POSIX needs this. */
+    {
+#if !defined(_WIN32) && defined(SO_PROTOCOL)
+      int proto;
+      socklen_t plen = sizeof(proto);
+      if (getsockopt((SOCKET)s, SOL_SOCKET, SO_PROTOCOL, &proto, &plen) == 0 &&
+          (proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6))
+        return CC_ICMP1;
+#endif
+      return CC_UDP;
+    }
+
+    default:
+      return CC_PROTOCOL_INVALID;
+  }
 }
 
 ccsocket_family_t ccsocket_get_version(const char *addr)

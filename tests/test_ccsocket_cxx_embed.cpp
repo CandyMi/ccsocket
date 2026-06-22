@@ -46,13 +46,13 @@ static void fptr_smoke(void)
     bool    (*sockname_fn)(ccsocket_t, char *, uint16_t *)
                                                        = ccsocket_get_sockname;
     ccsocket_family_t (*family_fn)(ccsocket_t)         = ccsocket_get_family;
-    int     (*proto_fn)(ccsocket_t)                    = ccsocket_get_protocol;
+    ccsocket_protocol_t (*proto_fn)(ccsocket_t)        = ccsocket_get_protocol;
     bool    (*nodelay_fn)(ccsocket_t, bool)            = ccsocket_set_nodelay;
     bool    (*reuseaddr_fn)(ccsocket_t, bool)          = ccsocket_set_reuseaddr;
     bool    (*nonblock_fn)(ccsocket_t, bool)           = ccsocket_set_nonblock;
     bool    (*cloexec_fn)(ccsocket_t, bool)            = ccsocket_set_cloexec;
     ccsocket_family_t (*ver_fn)(const char *)          = ccsocket_get_version;
-    bool    (*icmp_init_fn)(struct ccicmp_t *, ccsocket_family_t)
+    bool    (*icmp_init_fn)(struct ccicmp_t *, int)
                                                        = ccicmp_init;
     void    (*icmp_close_fn)(struct ccicmp_t *)        = ccicmp_close;
     bool    (*dns_init_fn)(struct ccdns_t *)           = ccdns_init;

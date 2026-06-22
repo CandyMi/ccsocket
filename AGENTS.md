@@ -1,7 +1,12 @@
 # AGENTS.md
 
-> Project-level constraints and conventions for AI coding agents working on the `libccsocket` / `ccicmp` codebase.
-> This file follows the [AGENTS.md specification](https://agents.md/).
+> constraints and conventions for AI coding agents working on the `libccsocket`  codebase.
+
+---
+
+## 0. Constraint
+
+This file follows the [AGENTS.md specification](https://agents.md/).
 
 ---
 
@@ -42,12 +47,10 @@
 ├── httpc.txt           # Sample HTTP/1.1 request payload (test fixture)
 ├── LICENSE             # MIT license text
 ├── .gitignore          # Build artifacts, IDE configs, object files
-├── .vscode/            # Editor workspace settings (not part of the library)
-│   └── settings.json
 ├── .github/            # GitHub Actions CI workflows
 │   └── workflows/
 │       └── ci.yml
-├── tests/              # Test suite — 12 tests via CTest
+├── tests/              # Test suite — tests via CTest
 │   ├── CMakeLists.txt
 │   ├── test_ccsocket_smoke.c
 │   ├── test_ccsocket_tcp.c
@@ -72,11 +75,11 @@
 │           libccsocket               │
 │  ┌────────────┐  ┌──────────────┐   │
 │  ┌────────────┐  ┌──────────────┐   │
-│  │  ccdns     │  │  ccicmp      │   │
-│  │ (DNS clnt) │  │ (ICMP ping)  │   │
-│  └─────┬──────┘  └──────┬───────┘   │
-│        │                │           │
-│        └────┬───┬───────┘           │
+│  │   ccdns    │  │    ccicmp    │   │
+│  │(DNS client)│  │ (ICMP ping)  │   │
+│  └────┬───────┘  └──────┬───────┘   │
+│       │                 │           │
+│       └─────┬───┬───────┘           │
 │             ▼   ▼                   │
 │      ┌──────────────────┐           │
 │      │  ccsocket        │           │
@@ -86,7 +89,7 @@
 │     ┌─────────┴──────────┐          │
 │     ▼                    ▼          │
 │  ccicmp / ccdns    single library   │
-│  built into same    target: ccsocket│
+│  built into same   target: ccsocket │
 │  library target                     │
 │  consuming ccsocket                 │
 │  provides all APIs                  │
@@ -98,13 +101,15 @@
 │  └──────────────────┘               │
 └─────────────────────────────────────┘
                   │
-     ┌────────────┴────────────┐
-     ▼                         ▼
-POSIX Sockets            WinSock2 (Windows)
-(socket, sendmsg, ...)   (WSASocket, WSASend, ...)
+    ┌─────────────┴─────────────┐
+    ▼                           ▼
+  POSIX Sockets            WinSock2 (Windows)
+(socket, sendmsg, ...)  (WSASocket, WSASend, ...)
 ```
 
 > **Note**: `ccicmp` is compiled as part of the `ccsocket` library target. There is no separate `ccicmp` library — consuming `ccsocket` provides both APIs.
+
+> **Note**: `ccicmp.h` is self-contained — it no longer includes `ccsocket.h`. The header `ccicmp.h` defines its own platform typedefs for `ccsocket_t` / `SOCKET` and uses `CCICMP_EXPORT` (unconditional, no `BUILD_SHARED`/`SHARED` toggle). Consumers that need the full socket API must explicitly include `ccsocket.h`.
 
 ---
 
@@ -482,6 +487,18 @@ The resolver supports retry and failover:
 
 The runtime helper `ccsocket_get_protocol()` returns the library protocol enum (`CC_TCP` / `CC_UDP` / `CC_ICMP` / `CC_ICMP1`), used by `ccicmp_is_dgram()` inside echo/reply to select the correct I/O path.
 
+`ccsocket_get_protocol()` uses `getsockopt(SO_TYPE)` and maps the result via an explicit `switch`:
+
+```
+SOCK_STREAM → CC_TCP
+SOCK_RAW    → CC_ICMP
+SOCK_DGRAM  → CC_UDP or CC_ICMP1 (distinguished by SO_PROTOCOL on Linux/FreeBSD)
+```
+
+On Windows, `SOCK_DGRAM + IPPROTO_ICMP` does not exist, so `SOCK_DGRAM` always maps to `CC_UDP`. On macOS, `SO_PROTOCOL` is unavailable, so CC_ICMP1 falls through to CC_UDP — harmless because the DGRAM ICMP code path on macOS falls through to RAW semantics anyway.
+
+To check the address family (e.g. AF_UNIX), use `ccsocket_get_family()`.
+
 ### 8.7 recvmsg / sendmsg API
 
 #### 8.7.1 Message Header (`ccsocket_msghdr_t`)
@@ -563,6 +580,37 @@ The loading happens during `ccsocket_init()`, immediately after `WSAStartup`. Ze
 #### 8.7.6 ccicmp TTL Integration
 
 `ccicmp_t` now includes an `int ttl` field. On platforms supporting `IP_RECVTTL` / `IPV6_RECVHOPLIMIT`, `ccicmp_init()` enables the option and `ccicmp_reply()` extracts the TTL/Hop Limit from CMSG data using `CC_CMSG_*` macros. When TTL is unavailable or `ccicmp_reply()` hasn't been called, `ttl` is `-1`.
+
+### 8.8 ccicmp.h Self-Contained & ccicmp_init() Signature
+
+`ccicmp.h` is a **standalone header** — it does not include `ccsocket.h`. This allows consumers to use just the ICMP API without pulling in the entire socket library.
+
+#### 8.8.1 Platform Types
+
+The header defines `ccsocket_t` per platform:
+
+| Platform | `ccsocket_t` | `SOCKET` |
+|---|---|---|
+| Windows | `intptr_t` | (from winsock2.h) |
+| POSIX | `int` | `typedef ccsocket_t SOCKET` |
+
+A guard macro `CCICMP_CCSOCKET_T_DEFINED` prevents `-Wpedantic` "redefinition of typedef" warnings when both `ccicmp.h` and `ccsocket.h` are included in the same translation unit.
+
+#### 8.8.2 Export Macro
+
+`CCICMP_EXPORT` is unconditional (no `BUILD_SHARED`/`SHARED` toggle) — always `__declspec(dllexport)` on Windows and `__attribute__((visibility("default")))` on POSIX. This matches the "always build shared" convention.
+
+#### 8.8.3 ccicmp_init() Parameter Type
+
+```c
+// Before (ccsocket.h dependency)
+bool ccicmp_init(struct ccicmp_t *ctx, ccsocket_family_t domain);
+
+// After (self-contained)
+bool ccicmp_init(struct ccicmp_t *ctx, int domain);
+```
+
+Changed from `ccsocket_family_t domain` to `int domain` to eliminate the `ccsocket.h` dependency. Callers pass `CC_INET4` (1) or `CC_INET6` (2) as before — these are `int`-compatible enum values.
 
 ---
 
