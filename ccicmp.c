@@ -155,9 +155,9 @@ bool ccicmp_init(struct ccicmp_t *ctx, int domain)
   /* Try SOCK_DGRAM (CC_ICMP1 = privilege-free ping socket) first.
    * Falls back to SOCK_RAW (CC_ICMP) when the platform or runtime
    * doesn't support it (e.g. Windows, or older kernels). */
-  ctx->fd = ccsocket1(domain, CC_ICMP1, CC_NONBLOCK | CC_CLOEXEC);
+  ctx->fd = ccsocket1((ccsocket_family_t)domain, CC_ICMP1, CC_NONBLOCK | CC_CLOEXEC);
   if (ctx->fd == INVALID_SOCKET)
-    ctx->fd = ccsocket1(domain, CC_ICMP, CC_NONBLOCK | CC_CLOEXEC);
+    ctx->fd = ccsocket1((ccsocket_family_t)domain, CC_ICMP, CC_NONBLOCK | CC_CLOEXEC);
   if (ctx->fd != INVALID_SOCKET) {
     /* Enable TTL / Hop Limit reception via CMSG */
     if (domain == CC_INET4) {
