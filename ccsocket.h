@@ -301,9 +301,18 @@ CCSOCKET_EXPORT bool ccsocket_connect(ccsocket_t s, const char *addr, uint16_t p
 /**
  * @brief Check whether a socket is connected, still connecting, or in an error state.
  *
+ * No side-effects on any socket type (no reconnect, no buffer mutation).
+ *
+ * **POSIX**: Uses `getsockopt(SO_ERROR)` + `getpeername()` — pure read-only.
+ * Avoids `poll()`/`select()` with 0-timeout, which are unreliable on macOS
+ * for TCP sockets that just completed send/recv I/O.
+ *
+ * **Windows**: Uses `connect(s, NULL, 0)` probe (KB 137973) with a
+ * retry loop (not recursion) for EINTR.
+ *
  * @param s  Socket handle.
  * @return CC_CONNECTED if connected, CC_CONNECTING if non-blocking connect in progress,
- *         CC_CONNERROR on failure.
+ *         CC_CONNERROR on failure (invalid handle, listen socket, connection refused).
  */
 CCSOCKET_EXPORT ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s);
 

@@ -164,7 +164,7 @@ ctest --test-dir build -R ccsocket/tcp -V
 | `ccsocket/ipv6` | **IPv6 loopback**: TCP + UDP over "::1" |
 | `ccsocket/error` | **Error paths**: INVALID_SOCKET, NULL params, edge cases across all APIs |
 | `ccsocket/sendfile` | **sendfile**: zero-copy file transfer via socketpair, data integrity |
-| `ccsocket/connect-state` | **Connection state**: is_connected for TCP (connected/connecting) and UDP |
+| `ccsocket/connect-state` | **Connection state**: is_connected — TCP connected→CONNECTED (strict), non-blocking connecting, INVALID_SOCKET, UDP |
 | `ccsocket/cxx-embed` | **C++ embedding**: headers compile under C++, `extern "C"` symbols linkable |
 
 > ICMP lifecycle test works without root — init failure is handled gracefully. Full echo/reply needs `CAP_NET_RAW` / root.

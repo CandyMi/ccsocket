@@ -339,7 +339,7 @@ Test infrastructure is live via CTest. Test sources live in [`tests/`](tests/).
 | `ccsocket/ipv6` | Functional | IPv6 TCP + UDP loopback over "::1": create, bind, listen, connect, send/recv |
 | `ccsocket/error` | Error path | INVALID_SOCKET for all I/O ops, options, query functions, NULL-param edge cases |
 | `ccsocket/sendfile` | Functional | sendfile zero-copy file transfer via socketpair, multi-iteration loop, data integrity |
-| `ccsocket/connect-state` | Functional | `ccsocket_is_connected` for TCP (connected/connecting), UDP, and INVALID_SOCKET |
+| `ccsocket/connect-state` | Functional | `ccsocket_is_connected`: TCP connected→CC_CONNECTED (strict), non-blocking connecting, INVALID_SOCKET, UDP (platform-flexible) |
 | `ccsocket/cxx-embed` | **C++ embedding** | All headers compile under C++, `extern "C"` symbols linkable, iovec/ICMP/DNS lifecycle smoke |
 
 ### 5.2 Test Conventions
