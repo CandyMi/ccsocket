@@ -155,7 +155,7 @@
 #else
   #include <fcntl.h>
   #include <unistd.h>
-  #include <poll.h>      /* poll(): used by ccsocket_is_connected for side-effect-free state probing */
+  #include <sys/select.h> /* select(): used by ccsocket_is_connected for side-effect-free state probing */
   #include <sys/un.h>
   #include <sys/uio.h>
   #include <netdb.h>
@@ -706,42 +706,28 @@ ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s)
     return CC_CONNERROR;
   }
 #else
-  /* POSIX: poll(POLLOUT, 0) is a side-effect-free connection probe.
-   * After confirming writability + no pending error, getpeername()
-   * distinguishes "truly connected" (has a peer) from "always writable
-   * but no peer" (listen socket, unconnected UDP, half-close).
+  /* POSIX: SO_ERROR + getpeername — pure read-only, no event polling.
    *
-   *   revents & POLLOUT  → socket is writable — then check getpeername
-   *   returns 0          → still connecting (non-blocking connect in progress)
-   *   revents & POLLHUP|POLLERR → connection failed; consult SO_ERROR */
+   * Non-blocking connect in progress → SO_ERROR=0, getpeername=ENOTCONN
+   * Connected                        → SO_ERROR=0, getpeername succeeds
+   * Connection rejected              → SO_ERROR=ECONNREFUSED
+   * Listen socket / unconnected UDP  → SO_ERROR=0, getpeername=ENOTCONN
+   *                                   (returns CONNECTING — minor edge case)
+   *
+   * Avoids poll()/select() with 0-timeout, which are unreliable on macOS
+   * for TCP sockets that just completed send/recv I/O. */
   {
-    struct pollfd pfd;
-    pfd.fd = (SOCKET)s;
-    pfd.events = POLLOUT;
-
-    int r;
-    do {
-      r = poll(&pfd, 1, 0);
-    } while (r < 0 && errno == EINTR);
-
-    if (r < 0)
-      return CC_CONNERROR;
-    if (r == 0)
-      return CC_CONNECTING;
-    if (pfd.revents & (POLLHUP | POLLERR | POLLNVAL))
-      return CC_CONNERROR;
-
     int error = 0; socklen_t len = sizeof(error);
     if (getsockopt((SOCKET)s, SOL_SOCKET, SO_ERROR, &error, &len) || error)
       return CC_CONNERROR;
 
-    /* Confirm the socket has a peer — distinguishes connected sockets
-     * from always-writable types (listen socket, unconnected UDP).
-     * On success the socket truly has a connected peer. */
     struct sockaddr_storage sa;
     socklen_t addrlen = sizeof(sa);
-    if (getpeername((SOCKET)s, (struct sockaddr*)&sa, &addrlen) < 0)
+    if (getpeername((SOCKET)s, (struct sockaddr*)&sa, &addrlen) < 0) {
+      if (errno == ENOTCONN)
+        return CC_CONNECTING;
       return CC_CONNERROR;
+    }
 
     return CC_CONNECTED;
   }
