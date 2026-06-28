@@ -39,11 +39,13 @@ This file follows the [AGENTS.md specification](https://agents.md/).
 .
 ├── CMakeLists.txt      # Root build system — CMake 3.0+, C99 standard
 ├── ccsocket.h          # Public API header — types, enums, macros, exported function declarations
-├── ccsocket.c          # Implementation — ~1540 lines, all platform backends in one translation unit
+├── ccsocket.c          # Implementation — ~1692 lines, all platform backends in one translation unit
 ├── ccicmp.h            # Public API header — ICMP context struct, function declarations
 ├── ccicmp.c            # Implementation — ~428 lines, ICMP echo/response logic (TTL via CMSG)
 ├── ccdns.h             # Public API header — DNS client context, function declarations
 ├── ccdns.c             # Implementation — ~374 lines, DNS wire-format encode/decode (RFC 1035), TCP mode (RFC 1035 §4.2.2), TXT (RFC 1035 §3.3), MX (RFC 1035 §3.3.9)
+├── cmake/              # CMake package config templates
+│   └── ccsocketConfig.cmake.in
 ├── httpc.txt           # Sample HTTP/1.1 request payload (test fixture)
 ├── LICENSE             # MIT license text
 ├── .gitignore          # Build artifacts, IDE configs, object files
@@ -63,6 +65,11 @@ This file follows the [AGENTS.md specification](https://agents.md/).
 │   ├── test_ccicmp_smoke.c
 │   ├── test_ccicmp_ping.c
 │   ├── test_ccdns.c
+│   ├── test_ccsocket_family.c
+│   ├── test_ccsocket_ipv6.c
+│   ├── test_ccsocket_error.c
+│   ├── test_ccsocket_sendfile.c
+│   ├── test_ccsocket_connect_state.c
 │   └── test_ccsocket_cxx_embed.cpp
 ├── AGENTS.md           # ← this file
 └── README.md           # Project introduction (English)
@@ -313,7 +320,7 @@ Consumers use `find_package(ccsocket)` + `target_link_libraries(myapp ccsocket::
 
 Test infrastructure is live via CTest. Test sources live in [`tests/`](tests/).
 
-### 5.1 Current Tests (12 total)
+### 5.1 Current Tests (17 total)
 
 | Test | Type | What It Verifies |
 |---|---|---|
@@ -328,6 +335,11 @@ Test infrastructure is live via CTest. Test sources live in [`tests/`](tests/).
 | `ccsocket/http` | **Combined protocol** | HTTP request/response round-trip using `httpc.txt` as template |
 | `ccicmp/ping` | **Combined (ICMP)** | IPv4/IPv6 checksum (RFC 1071 / RFC 4443), packet layout, init/close lifecycle |
 | `ccdns/test` | **DNS client** | DNS query encode, response decode (A/AAAA/CNAME/TXT/MX), compression ptr (RFC 1035 §4.1.4), TCP mode (RFC 1035 §4.2.2), lifecycle |
+| `ccsocket/family` | Functional | Family/protocol enum boundary values, `ccsocket_get_family`, `ccsocket_get_protocol` |
+| `ccsocket/ipv6` | Functional | IPv6 TCP + UDP loopback over "::1": create, bind, listen, connect, send/recv |
+| `ccsocket/error` | Error path | INVALID_SOCKET for all I/O ops, options, query functions, NULL-param edge cases |
+| `ccsocket/sendfile` | Functional | sendfile zero-copy file transfer via socketpair, multi-iteration loop, data integrity |
+| `ccsocket/connect-state` | Functional | `ccsocket_is_connected` for TCP (connected/connecting), UDP, and INVALID_SOCKET |
 | `ccsocket/cxx-embed` | **C++ embedding** | All headers compile under C++, `extern "C"` symbols linkable, iovec/ICMP/DNS lifecycle smoke |
 
 ### 5.2 Test Conventions
@@ -351,7 +363,6 @@ ctest --test-dir build --output-on-failure -V
 |---|---|
 | ICMP echo/reply round-trip | Requires `CAP_NET_RAW` / root |
 | ICMPv6 echo/reply round-trip | Same privilege requirement as IPv4 |
-| sendfile functional test | Needs a temporary file descriptor |
 
 ---
 
@@ -376,7 +387,7 @@ CI is configured in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — G
 ### 6.2 What the Pipeline Verifies
 
 - **C build** — shared + static library compiles with project warning flags (`-Wall -Wextra -Wshadow` etc. on GCC/Clang, `/W4` on MSVC)
-- **CTest** — all 11 tests pass via `ctest --output-on-failure`
+- **CTest** — all 17 tests pass via `ctest --output-on-failure`
 - **C++ compile+link** — library `.c` files compiled as C++ (`-x c++`), verifying `extern "C"` interop (POSIX + MinGW jobs; MSVC relies on the CMake CXX test)
 - **C++ header-only** — all public headers included from a pure C++ TU (POSIX + MinGW jobs)
 - **Static-link smoke** — static library links a standalone executable (Linux jobs)
@@ -474,7 +485,7 @@ The resolver supports retry and failover:
 
 - **Multi-NS**: reads up to 4 nameservers from `/etc/resolv.conf` (POSIX) or registry (Windows).
 - **Retry**: 2 rounds across all nameservers (glibc-style sequential), total up to 8 attempts.
-- **Fallback**: when no nameserver is configured, defaults to `8.8.8.8`.
+- **Fallback**: when no nameserver is configured, defaults to `1.1.1.1` (Cloudflare).
 
 ### 8.6 ICMP DGRAM vs RAW Semantics
 

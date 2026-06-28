@@ -145,7 +145,7 @@ ctest --test-dir build --output-on-failure -V
 ctest --test-dir build -R ccsocket/tcp -V
 ```
 
-### Test Suite (12 tests)
+### Test Suite (17 tests)
 
 | Test | Verifies |
 |---|---|
@@ -160,6 +160,11 @@ ctest --test-dir build -R ccsocket/tcp -V
 | `ccsocket/http` | **HTTP text protocol**: request/response with `httpc.txt` |
 | `ccicmp/ping` | **ICMP (IPv4 + IPv6)**: RFC 1071 / RFC 4443 checksum, packet layout, lifecycle |
 | `ccdns/test` | **DNS**: query encode, response decode (A/AAAA/CNAME/TXT/MX), compression ptr, TCP mode |
+| `ccsocket/family` | **Family/protocol**: enum boundary values, get_family, get_protocol |
+| `ccsocket/ipv6` | **IPv6 loopback**: TCP + UDP over "::1" |
+| `ccsocket/error` | **Error paths**: INVALID_SOCKET, NULL params, edge cases across all APIs |
+| `ccsocket/sendfile` | **sendfile**: zero-copy file transfer via socketpair, data integrity |
+| `ccsocket/connect-state` | **Connection state**: is_connected for TCP (connected/connecting) and UDP |
 | `ccsocket/cxx-embed` | **C++ embedding**: headers compile under C++, `extern "C"` symbols linkable |
 
 > ICMP lifecycle test works without root — init failure is handled gracefully. Full echo/reply needs `CAP_NET_RAW` / root.
@@ -172,9 +177,9 @@ ctest --test-dir build -R ccsocket/tcp -V
 .
 ├── CMakeLists.txt      # Build system — CMake 3.0+, C99
 ├── ccsocket.h          # Public API — types, enums, function declarations
-├── ccsocket.c          # Core socket implementation (~1058 lines)
+├── ccsocket.c          # Core socket implementation (~1692 lines)
 ├── ccicmp.h            # ICMP ping public API
-├── ccicmp.c            # ICMP echo/response implementation (~374 lines)
+├── ccicmp.c            # ICMP echo/response implementation (~428 lines)
 ├── ccdns.h             # DNS client public API
 ├── ccdns.c             # DNS client encode/decode (~374 lines)
 ├── httpc.txt           # Sample HTTP/1.1 request (test fixture)
@@ -193,10 +198,17 @@ ctest --test-dir build -R ccsocket/tcp -V
 │   ├── test_ccicmp_smoke.c
 │   ├── test_ccicmp_ping.c
 │   ├── test_ccdns.c
+│   ├── test_ccsocket_family.c
+│   ├── test_ccsocket_ipv6.c
+│   ├── test_ccsocket_error.c
+│   ├── test_ccsocket_sendfile.c
+│   ├── test_ccsocket_connect_state.c
 │   └── test_ccsocket_cxx_embed.cpp
 ├── .github/            # GitHub Actions CI workflows
 │   └── workflows/
 │       └── ci.yml
+├── cmake/              # CMake package config templates
+│   └── ccsocketConfig.cmake.in
 ├── AGENTS.md           # AI coding agent instructions
 └── README.md           # ← this file
 ```

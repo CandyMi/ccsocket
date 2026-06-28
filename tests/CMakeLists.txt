@@ -40,6 +40,12 @@ ccsocket_test(ccicmp/ping     test_ccicmp_ping.c)
 # -- DNS client tests (encode, decode, lifecycle) ----------------------------
 ccsocket_test(ccdns/test      test_ccdns.c)
 
+# -- sendfile zero-copy round-trip test ---------------------------------------
+ccsocket_test(ccsocket/sendfile  test_ccsocket_sendfile.c)
+
+# -- Connection state detection test (is_connected) --------------------------
+ccsocket_test(ccsocket/connect-state  test_ccsocket_connect_state.c)
+
 # -- Family / protocol enum boundary tests -----------------------------------
 ccsocket_test(ccsocket/family  test_ccsocket_family.c)
 

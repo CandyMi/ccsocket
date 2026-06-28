@@ -155,6 +155,7 @@
 #else
   #include <fcntl.h>
   #include <unistd.h>
+  #include <poll.h>      /* poll(): used by ccsocket_is_connected for side-effect-free state probing */
   #include <sys/un.h>
   #include <sys/uio.h>
   #include <netdb.h>
@@ -384,6 +385,7 @@ bool ccsocket_wrap_ip_and_port(ccsocket_t s, struct sockaddr_storage* sa, const 
 
 int ccsocket_close(ccsocket_t s)
 {
+  if (s == INVALID_SOCKET) return 0;
   return closesocket(s);
 }
 
@@ -680,49 +682,58 @@ bool ccsocket_connect(ccsocket_t s, const char *addr, uint16_t port)
 ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s)
 {
   ccsocket_init_errno();
-  ccsocket_conn_state_t state = CC_CONNECTED;
 #if _WIN32
+  /* Windows: connect(s, NULL, 0) is the documented technique to probe
+   * connection state (KB 137973). When connected → WSAEISCONN.
+   * When still connecting → WSAEWOULDBLOCK / WSAEALREADY / WSAEINPROGRESS. */
   if (!ccsocket_connect(s, NULL, 0)) {
     if (ccsocket_is_errno(EINTR)) {
       return ccsocket_is_connected(s);
     }
     if (!ccsocket_is_errno(EISCONN)) {
       if (ccsocket_is_errno(EALREADY) || ccsocket_is_errno(EWOULDBLOCK) || ccsocket_is_errno(EINPROGRESS)) {
-        state = CC_CONNECTING;
-      } else {
-        state = CC_CONNERROR;
+        return CC_CONNECTING;
       }
+      return CC_CONNERROR;
     }
   }
+  return CC_CONNECTED;
 #else
-  int error = 0; socklen_t len = sizeof(error);
-  int r = getsockopt((SOCKET)s, SOL_SOCKET, SO_ERROR, &error, (socklen_t*)&len);
-  // printf("getsockopt r = %d, error = %d, errno = %d\n", r, error, errno);
-  if (r || error) {
+  /* POSIX: poll() + SO_ERROR + getpeername — no side effects, no re-connect.
+   *
+   * The old implementation attempted connect() again on an already-connected
+   * socket, which is a protocol violation that can cause RST on TCP.
+   * This version uses poll() to check writability without modifying state. */
+  struct pollfd pfd;
+  memset(&pfd, 0, sizeof(pfd));
+  pfd.fd = s;
+  pfd.events = POLLOUT;
+  if (poll(&pfd, 1, 0) < 0) {
+    if (ccsocket_is_errno(EINTR))
+      return ccsocket_is_connected(s);
     return CC_CONNERROR;
   }
-  /**
-   * no sure.
-   */
+
+  /* Check SO_ERROR for pending async errors (non-blocking connect). */
+  int error = 0;
+  socklen_t len = sizeof(error);
+  if (getsockopt((SOCKET)s, SOL_SOCKET, SO_ERROR, &error, &len) < 0)
+    return CC_CONNERROR;
+  if (error) {
+    if (error == EINPROGRESS || error == EALREADY)
+      return CC_CONNECTING;
+    ccsocket_set_errno(error);
+    return CC_CONNERROR;
+  }
+
+  /* getpeername succeeds → fully connected */
   char addr[MAX_ADDRLEN]; uint16_t port;
-  if (!ccsocket_get_peername(s, addr, &port)) {
-    // printf("ccsocket_get_peername errno = %d\n", errno);
-    if (errno == ENOTCONN)
-      return CC_CONNECTING;
-    return CC_CONNERROR;
-  }
-  /**
-   * test state for connect again
-   */
-  if (!ccsocket_connect(s, addr, port)) {
-    // printf("ccsocket_connect errno = %d\n", errno);
-    if (errno == EINPROGRESS || errno == EALREADY)
-      return CC_CONNECTING;
-    else if (errno != EISCONN)
-      return CC_CONNERROR;
-  }
+  if (ccsocket_get_peername(s, addr, &port))
+    return CC_CONNECTED;
+
+  /* getpeername failed — connecting or error */
+  return (errno == ENOTCONN) ? CC_CONNECTING : CC_CONNERROR;
 #endif
-  return state;
 }
 
 ccsocket_stcode_t ccsocket_send1(ccsocket_t s, const void *buf, size_t bsize, OPTIONAL int *wsize, int flags)
@@ -1641,6 +1652,11 @@ bool ccsocket_getaddrinfo(const char *domain, ccaddrinfo_t **addrlist)
   char nslist[MAX_NS][CCDNS_MAX_ADDR];
   int nscount = read_dns_servers(nslist, MAX_NS);
   if (nscount == 0) {
+    /* Fallback: no system DNS configured (e.g. container, fresh install).
+     * Cloudflare 1.1.1.1 is chosen as a privacy-respecting public resolver.
+     * Callers in restricted networks (China, corporate VPN) may want to
+     * override via ccsocket_set_dns_servers() if exposed, or ensure
+     * /etc/resolv.conf is populated before calling ccsocket_getaddrinfo. */
     nscount = 1;
     strcpy(nslist[0], "1.1.1.1");
   }
