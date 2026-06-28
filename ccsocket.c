@@ -682,42 +682,69 @@ bool ccsocket_connect(ccsocket_t s, const char *addr, uint16_t port)
 ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s)
 {
   ccsocket_init_errno();
+
+  /* Guard: invalid handle */
+  if (s == INVALID_SOCKET)
+    return CC_CONNERROR;
+
 #if _WIN32
   /* Windows: connect(s, NULL, 0) is the documented technique to probe
    * connection state (KB 137973). When connected → WSAEISCONN.
-   * When still connecting → WSAEWOULDBLOCK / WSAEALREADY / WSAEINPROGRESS. */
-  if (!ccsocket_connect(s, NULL, 0)) {
-    if (ccsocket_is_errno(EINTR)) {
-      return ccsocket_is_connected(s);
-    }
-    if (!ccsocket_is_errno(EISCONN)) {
-      if (ccsocket_is_errno(EALREADY) || ccsocket_is_errno(EWOULDBLOCK) || ccsocket_is_errno(EINPROGRESS) || ccsocket_is_errno(ENOTCONN)) {
-        return CC_CONNECTING;
-      }
-      return CC_CONNERROR;
-    }
+   * When still connecting → WSAEWOULDBLOCK / WSAEALREADY / WSAEINPROGRESS.
+   *
+   * Loop (not recursion) handles EINTR retry without stack risk. */
+  for (;;) {
+    if (ccsocket_connect(s, NULL, 0))
+      return CC_CONNECTED;
+    if (ccsocket_is_errno(EINTR))
+      continue;
+    if (ccsocket_is_errno(EISCONN))
+      return CC_CONNECTED;
+    if (ccsocket_is_errno(EALREADY) || ccsocket_is_errno(EWOULDBLOCK) ||
+        ccsocket_is_errno(EINPROGRESS) || ccsocket_is_errno(ENOTCONN))
+      return CC_CONNECTING;
+    return CC_CONNERROR;
   }
-  return CC_CONNECTED;
 #else
-  int error = 0; socklen_t len = sizeof(error);
-  if (getsockopt((SOCKET)s, SOL_SOCKET, SO_ERROR, &error, &len) || error)
-    return CC_CONNERROR;
+  /* POSIX: poll(POLLOUT, 0) is a side-effect-free connection probe.
+   * After confirming writability + no pending error, getpeername()
+   * distinguishes "truly connected" (has a peer) from "always writable
+   * but no peer" (listen socket, unconnected UDP, half-close).
+   *
+   *   revents & POLLOUT  → socket is writable — then check getpeername
+   *   returns 0          → still connecting (non-blocking connect in progress)
+   *   revents & POLLHUP|POLLERR → connection failed; consult SO_ERROR */
+  {
+    struct pollfd pfd;
+    pfd.fd = (SOCKET)s;
+    pfd.events = POLLOUT;
 
-  char addr[MAX_ADDRLEN]; uint16_t port;
-  if (!ccsocket_get_peername(s, addr, &port)) {
-    if (errno == ENOTCONN)
-      return CC_CONNECTING;
-    return CC_CONNERROR;
-  }
+    int r;
+    do {
+      r = poll(&pfd, 1, 0);
+    } while (r < 0 && errno == EINTR);
 
-  if (!ccsocket_connect(s, addr, port)) {
-    if (errno == EINPROGRESS || errno == EALREADY)
-      return CC_CONNECTING;
-    else if (errno != EISCONN)
+    if (r < 0)
       return CC_CONNERROR;
-  }
+    if (r == 0)
+      return CC_CONNECTING;
+    if (pfd.revents & (POLLHUP | POLLERR | POLLNVAL))
+      return CC_CONNERROR;
 
-  return CC_CONNECTED;
+    int error = 0; socklen_t len = sizeof(error);
+    if (getsockopt((SOCKET)s, SOL_SOCKET, SO_ERROR, &error, &len) || error)
+      return CC_CONNERROR;
+
+    /* Confirm the socket has a peer — distinguishes connected sockets
+     * from always-writable types (listen socket, unconnected UDP).
+     * On success the socket truly has a connected peer. */
+    struct sockaddr_storage sa;
+    socklen_t addrlen = sizeof(sa);
+    if (getpeername((SOCKET)s, (struct sockaddr*)&sa, &addrlen) < 0)
+      return CC_CONNERROR;
+
+    return CC_CONNECTED;
+  }
 #endif
 }
 
