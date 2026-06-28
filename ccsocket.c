@@ -611,7 +611,7 @@ bool ccsocketpair1(ccsocket_t sv[2], ccsocket_flags_t flags)
     return false;
   }
 #if _WIN32
-  /* 本地管道 */
+  /* local pipe via TCP loopback */
   ccsocket_t srv = ccsocket1(CC_INET4, CC_TCP, CC_NOFLAG);
   if (srv == SOCKET_ERROR)
     return false;
@@ -691,7 +691,7 @@ ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s)
       return ccsocket_is_connected(s);
     }
     if (!ccsocket_is_errno(EISCONN)) {
-      if (ccsocket_is_errno(EALREADY) || ccsocket_is_errno(EWOULDBLOCK) || ccsocket_is_errno(EINPROGRESS)) {
+      if (ccsocket_is_errno(EALREADY) || ccsocket_is_errno(EWOULDBLOCK) || ccsocket_is_errno(EINPROGRESS) || ccsocket_is_errno(ENOTCONN)) {
         return CC_CONNECTING;
       }
       return CC_CONNERROR;
@@ -699,40 +699,25 @@ ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s)
   }
   return CC_CONNECTED;
 #else
-  /* POSIX: poll() + SO_ERROR + getpeername — no side effects, no re-connect.
-   *
-   * The old implementation attempted connect() again on an already-connected
-   * socket, which is a protocol violation that can cause RST on TCP.
-   * This version uses poll() to check writability without modifying state. */
-  struct pollfd pfd;
-  memset(&pfd, 0, sizeof(pfd));
-  pfd.fd = s;
-  pfd.events = POLLOUT;
-  if (poll(&pfd, 1, 0) < 0) {
-    if (ccsocket_is_errno(EINTR))
-      return ccsocket_is_connected(s);
+  int error = 0; socklen_t len = sizeof(error);
+  if (getsockopt((SOCKET)s, SOL_SOCKET, SO_ERROR, &error, &len) || error)
     return CC_CONNERROR;
-  }
 
-  /* Check SO_ERROR for pending async errors (non-blocking connect). */
-  int error = 0;
-  socklen_t len = sizeof(error);
-  if (getsockopt((SOCKET)s, SOL_SOCKET, SO_ERROR, &error, &len) < 0)
-    return CC_CONNERROR;
-  if (error) {
-    if (error == EINPROGRESS || error == EALREADY)
-      return CC_CONNECTING;
-    ccsocket_set_errno(error);
-    return CC_CONNERROR;
-  }
-
-  /* getpeername succeeds → fully connected */
   char addr[MAX_ADDRLEN]; uint16_t port;
-  if (ccsocket_get_peername(s, addr, &port))
-    return CC_CONNECTED;
+  if (!ccsocket_get_peername(s, addr, &port)) {
+    if (errno == ENOTCONN)
+      return CC_CONNECTING;
+    return CC_CONNERROR;
+  }
 
-  /* getpeername failed — connecting or error */
-  return (errno == ENOTCONN) ? CC_CONNECTING : CC_CONNERROR;
+  if (!ccsocket_connect(s, addr, port)) {
+    if (errno == EINPROGRESS || errno == EALREADY)
+      return CC_CONNECTING;
+    else if (errno != EISCONN)
+      return CC_CONNERROR;
+  }
+
+  return CC_CONNECTED;
 #endif
 }
 
@@ -1082,8 +1067,10 @@ ccsocket_stcode_t ccsocket_sendto(ccsocket_t s, const void *buf, size_t bsize,
     msg.msg_iovlen = 1;
 
     if (addr) {
-        strncpy(msg.msg_name, addr, sizeof(msg.msg_name) - 1);
-        msg.msg_name[sizeof(msg.msg_name) - 1] = '\0';
+        size_t alen = strlen(addr);
+        if (alen >= sizeof(msg.msg_name)) alen = sizeof(msg.msg_name) - 1;
+        memcpy(msg.msg_name, addr, alen);
+        msg.msg_name[alen] = '\0';
         msg.msg_port = port;
     }
 
@@ -1116,21 +1103,21 @@ ccsocket_stcode_t ccsocket_recvfrom(ccsocket_t s, char *buf, size_t bsize,
     return r;
 }
 
-/* 开启/关闭 nodelay */
+/* enable/disable nodelay (TCP_NODELAY) */
 bool ccsocket_set_nodelay(ccsocket_t s, bool on)
 {
   int Enable = on ? 1 : 0;
   return SOCKET_ERROR != setsockopt((SOCKET)s, IPPROTO_TCP, TCP_NODELAY, (char*)&Enable, sizeof(Enable));
 }
 
-/* 开启/关闭 reuse address */
+/* enable/disable SO_REUSEADDR */
 bool ccsocket_set_reuseaddr(ccsocket_t s, bool on)
 {
   int Enable = on ? 1 : 0;
   return SOCKET_ERROR != setsockopt((SOCKET)s, SOL_SOCKET, SO_REUSEADDR, (char*)&Enable, sizeof(Enable));
 }
 
-/* 开启/关闭 reuse port */
+/* enable/disable SO_REUSEPORT */
 bool ccsocket_set_reuseport(ccsocket_t s, bool on)
 {
 #if defined(SO_REUSEPORT)
@@ -1143,14 +1130,14 @@ bool ccsocket_set_reuseport(ccsocket_t s, bool on)
 #endif
 }
 
-/* 开启/关闭 keepalive */
+/* enable/disable SO_KEEPALIVE */
 bool ccsocket_set_keepalive(ccsocket_t s, bool on)
 {
   int Enable = on ? 1 : 0;
   return SOCKET_ERROR != setsockopt((SOCKET)s, SOL_SOCKET, SO_KEEPALIVE, (char*)&Enable, sizeof(Enable));
 }
 
-/* 准入的连接为发送数据, 使用延迟`Accept`方式 */
+/* Defer accept until data arrives (TCP_DEFER_ACCEPT / SO_ACCEPTFILTER) */
 bool ccsocket_enable_accept_defer(ccsocket_t s)
 {
   ccsocket_init_errno();
@@ -1198,19 +1185,19 @@ bool _ccsocket_set_timeout(ccsocket_t s, int type, int timeout)
   return SOCKET_ERROR != setsockopt((SOCKET)s, SOL_SOCKET, type, (char*)&tm, sizeof(tm));
 }
 
-/* 设置最大接收时间 */
+/* set maximum receive timeout */
 bool ccsocket_set_rcvtimeout(ccsocket_t s, int timeout)
 {
   return _ccsocket_set_timeout(s, SO_RCVTIMEO, timeout);
 }
 
-/* 设置最大发送时间 */
+/* set maximum send timeout */
 bool ccsocket_set_sndtimeout(ccsocket_t s, int timeout)
 {
   return _ccsocket_set_timeout(s, SO_SNDTIMEO, timeout);
 }
 
-/* 获取对端地址/端口 */
+/* get peer address and port (getpeername) */
 bool ccsocket_get_peername(ccsocket_t s, char *addr, uint16_t *port)
 {
   struct sockaddr_storage sa;
@@ -1221,7 +1208,7 @@ bool ccsocket_get_peername(ccsocket_t s, char *addr, uint16_t *port)
   return ccsocket2addr(&sa, addr, port);
 }
 
-/* 获取本端地址/端口 */
+/* get local address and port (getsockname) */
 bool ccsocket_get_sockname(ccsocket_t s, char *addr, uint16_t *port)
 {
   struct sockaddr_storage sa;
@@ -1310,7 +1297,7 @@ ccsocket_family_t ccsocket_get_version(const char *addr)
   if (inet_pton(AF_INET6, addr, &sa6.sin6_addr) == 1)
 #endif
     return CC_INET6;
-  /* 增加对unix domain socket的判断支持. */
+  /* also check for Unix domain sockets */
 #if !defined(_WIN32)
   struct stat st;
   if (!stat(addr, &st) && S_ISSOCK(st.st_mode))
@@ -1399,8 +1386,8 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
   if (offset == -1)
     return CC_SENDERROR;
   struct sf_parms params = {
-    .header_data = NULL, .header_length = 0,   // 无头部数据
-    .trailer_data = NULL, .trailer_length = 0, // 无尾部数据
+    .header_data = NULL, .header_length = 0,   // no header data
+    .trailer_data = NULL, .trailer_length = 0, // no trailer data
     .file_descriptor = fd, .file_offset = offset, .file_bytes = -1,
   };
   int wsize = send_file(s, &params, 0);
@@ -1412,7 +1399,7 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
   offset = offset + params.bytes_sent;
   if (offset == params.file_size)
     return CC_SENDALL;
-  // lseek(fd, size, SEEK_SET);
+  // lseek(fd, offset, SEEK_SET);
   return ccsocket_sendfile(s, fd);
 #else
 #define CC_SENDFILE_PER_LEN 1024
@@ -1441,6 +1428,17 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
   return CC_SENDALL;
 #endif
 }
+
+/* Undefine file-scope sendfile fallback macros to avoid leaking into
+ * the rest of the translation unit (DNS resolver, etc.). */
+#if _WIN32
+  #undef read
+  #undef lseek
+  #ifdef _OFF_T_DEFINED
+    #undef _OFF_T_DEFINED
+  #endif
+  #undef CC_SENDFILE_FALLBACK
+#endif
 
 /* ---- DNS resolver via ccdns + ccsocket (replaces getaddrinfo) ---------- */
 
@@ -1628,8 +1626,12 @@ bool ccsocket_getaddrinfo(const char *domain, ccaddrinfo_t **addrlist)
       *addrlist = (ccaddrinfo_t*)malloc(sizeof(ccaddrinfo_t));
       if (!*addrlist) return false;
       memset(*addrlist, 0, sizeof(ccaddrinfo_t));
-      strncpy((*addrlist)->address, domain, sizeof((*addrlist)->address) - 1);
-      (*addrlist)->address[sizeof((*addrlist)->address) - 1] = '\0';
+      {
+        size_t dlen = strlen(domain);
+        if (dlen >= sizeof((*addrlist)->address)) dlen = sizeof((*addrlist)->address) - 1;
+        memcpy((*addrlist)->address, domain, dlen);
+        (*addrlist)->address[dlen] = '\0';
+      }
       (*addrlist)->ttl = 0;
       (*addrlist)->af = af;
       return true;

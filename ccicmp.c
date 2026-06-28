@@ -70,21 +70,11 @@
 #define CCICMP_TS_LEN     8  /* timestamp payload: 8 bytes */
 
 #ifndef CCICMP_MAX_PAYLOAD
-  #define CCICMP_MAX_PAYLOAD 65500  /* safe upper bound; fits within IP_MAXPACKET */
-  #if defined(_MSC_VER)
-    #pragma message("CCICMP_MAX_PAYLOAD defaulting to 65500")
-  #elif defined(__GNUC__) || defined(__clang__)
-    #warning "CCICMP_MAX_PAYLOAD defaulting to 65500"
-  #endif
+  #define CCICMP_MAX_PAYLOAD 4096  /* safe default: fits stack-allocation without overflow */
 #endif
 
 #ifndef CCICMP_RECV_BUFSZ
-  #define CCICMP_RECV_BUFSZ 65535  /* max IP packet size */
-  #if defined(_MSC_VER)
-    #pragma message("CCICMP_RECV_BUFSZ defaulting to 65535")
-  #elif defined(__GNUC__) || defined(__clang__)
-    #warning "CCICMP_RECV_BUFSZ defaulting to 65535"
-  #endif
+  #define CCICMP_RECV_BUFSZ 4096  /* matches CCICMP_MAX_PAYLOAD; avoids stack overflow */
 #endif
 
 CC_INLINE
