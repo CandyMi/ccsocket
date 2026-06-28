@@ -10,6 +10,10 @@
  * socketpair, recv() on the other end, compare.
  */
 
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L  /* fileno(), shutdown() for C99+clang */
+#endif
+
 #include "ccsocket.h"
 #include <stdio.h>
 #include <string.h>
@@ -17,6 +21,7 @@
 #include <assert.h>
 
 #if defined(_WIN32)
+  #include <winsock2.h>   /* SD_SEND */
   #include <io.h>
   #include <fcntl.h>
   #define unlink _unlink

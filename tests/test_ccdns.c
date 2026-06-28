@@ -340,6 +340,91 @@ static void test_tcp_decode(void)
 }
 
 /* ====================================================================
+ * Tier 7b — TCP mode compression (RFC 1035 §4.1.4)
+ *
+ * Verifies that compression pointers in NAME and RDATA are correctly
+ * resolved when the TCP 2-byte length prefix shifts the DNS message
+ * relative to the buffer start.
+ *
+ * Response for www.example.com (same layout as test_compression_name,
+ * but preceded by TCP length prefix):
+ *   TCP prefix:     [bodylen]
+ *   DNS message:
+ *     Header 0-11:  ID=1, QR=1, QDCOUNT=1, ANCOUNT=2
+ *     QNAME 12-28:  3www 7example 3com 0
+ *     QTYPE/QCLASS: 0x0001 0x0001
+ *     Answer 1:     CNAME, NAME=ptr→12, RDATA=ptr→16
+ *     Answer 2:     A,     NAME=ptr→16
+ * ==================================================================== */
+
+static void test_tcp_compression_name(void)
+{
+    uint8_t body[] = {
+        /* Header */
+        0x00, 0x01, 0x81, 0x80,
+        0x00, 0x01,           /* QDCOUNT = 1 */
+        0x00, 0x02,           /* ANCOUNT = 2 */
+        0x00, 0x00, 0x00, 0x00,
+        /* Question: www.example.com */
+        0x03, 'w','w','w',
+        0x07, 'e','x','a','m','p','l','e',
+        0x03, 'c','o','m',
+        0x00,
+        0x00, 0x01,           /* QTYPE = A */
+        0x00, 0x01,           /* QCLASS = IN */
+        /* Answer 1: CNAME, NAME=ptr→12, RDATA=ptr→16 */
+        0xc0, 0x0c,           /* NAME → offset 12 = "www.example.com" */
+        0x00, 0x05,           /* TYPE = CNAME */
+        0x00, 0x01,           /* CLASS = IN */
+        0x00, 0x00, 0x00, 0x3c, /* TTL = 60 */
+        0x00, 0x02,           /* RDLENGTH = 2 */
+        0xc0, 0x10,           /* RDATA → offset 16 = "example.com" */
+        /* Answer 2: A, NAME=ptr→16 */
+        0xc0, 0x10,           /* NAME → offset 16 = "example.com" */
+        0x00, 0x01,           /* TYPE = A */
+        0x00, 0x01,           /* CLASS = IN */
+        0x00, 0x00, 0x00, 0x3c, /* TTL = 60 */
+        0x00, 0x04,           /* RDLENGTH = 4 */
+        93, 184, 216, 34
+    };
+    uint16_t bodylen = (uint16_t)sizeof(body);
+
+    /* Prepend 2-byte TCP length prefix */
+    uint8_t resp[CCDNS_MAX_MSG];
+    memset(resp, 0, sizeof(resp));
+    resp[0] = (uint8_t)(bodylen >> 8);
+    resp[1] = (uint8_t)(bodylen & 0xFF);
+    memcpy(resp + 2, body, bodylen);
+
+    struct ccdns_t ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.no = 1;
+    ctx.tcp = true;  /* TCP mode: off=2, DNS starts at resp[2] */
+
+    g_ans_cnt = 0;
+    memset(g_ans_list, 0, sizeof(g_ans_list));
+
+    int r = ccdns_decode(&ctx, resp, bodylen + 2, NULL, on_answer_list);
+    assert(r == 2);
+    assert(g_ans_cnt == 2);
+
+    /* Answer 1: CNAME */
+    assert(g_ans_list[0].type == CCDNS_CNAME);
+    assert(g_ans_list[0].cls == CCDNS_CLASS_IN);
+    assert(g_ans_list[0].ttl == 60);
+    assert(strcmp(g_ans_list[0].domain, "example.com") == 0);
+
+    /* Answer 2: A — owner name decoded via compression ptr in TCP mode */
+    assert(g_ans_list[1].type == CCDNS_A);
+    assert(g_ans_list[1].cls == CCDNS_CLASS_IN);
+    assert(g_ans_list[1].ttl == 60);
+    assert(strcmp(g_ans_list[1].domain, "example.com") == 0);
+    assert(strcmp(g_ans_list[1].ip, "93.184.216.34") == 0);
+
+    (void)r;
+}
+
+/* ====================================================================
  * Tier 8 — TXT mode encode
  * ==================================================================== */
 
@@ -593,6 +678,7 @@ int main(void)
     test_compression_name();
     test_tcp_encode();
     test_tcp_decode();
+    test_tcp_compression_name();
     test_txt_encode();
     test_txt_decode_single();
     test_txt_decode_multi();
