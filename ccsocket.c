@@ -641,6 +641,12 @@ bool ccsocketpair1(ccsocket_t sv[2], ccsocket_flags_t flags)
   }
   ccsocket_set_flags(c, flags);
   sv[0] = c, sv[1] = s;
+#if defined(_WIN32)
+  /* Windows TCP loopback: disable Nagle so small writes (e.g. 1-byte
+   * signal) are delivered immediately to the read end. */
+  ccsocket_set_nodelay(c, true);
+  ccsocket_set_nodelay(s, true);
+#endif
   /* destroy */
   ccsocket_close(srv);
 #else
