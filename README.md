@@ -19,6 +19,7 @@ Included sub-modules:
 - **Cross-platform** — Linux, macOS, FreeBSD, Solaris, AIX, Windows
 - **Zero-copy file transfer** — `sendfile()` on supported kernels, transparent fallback elsewhere
 - **Scatter/gather I/O** — `iovec`-based send/recv with platform-safe accessor macros
+- **Receive buffer query** — `ccsocket_get_nread()` returns available bytes via `FIONREAD` without consuming data
 - **Non-blocking I/O** — integrated wait-state signaling via `CC_OPCODE_WAIT`
 - **Load-balanced listeners** — `SO_REUSEPORT` / `SO_REUSEPORT_LB` for multi-process servers
 - **IPv4 + IPv6 ICMP ping** — with RFC-compliant pseudo-header checksums

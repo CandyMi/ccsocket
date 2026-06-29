@@ -623,6 +623,18 @@ CCSOCKET_EXPORT ccsocket_stcode_t ccsocket_recvfrom(ccsocket_t s, char *buf, siz
 CCSOCKET_EXPORT void ccsocket_get_error(ccsocket_t s, char buf[MAX_ERRORLEN]);
 
 /**
+ * @brief Get the number of bytes available for reading (FIONREAD).
+ *
+ * Returns the amount of data queued in the socket receive buffer
+ * without consuming it. Works on TCP, UDP, and raw sockets.
+ *
+ * @param s      Socket handle.
+ * @param nread  Output pointer for the available byte count.
+ * @return true on success, false on failure.
+ */
+CCSOCKET_EXPORT bool ccsocket_get_nread(ccsocket_t s, uint32_t *nread);
+
+/**
  * @brief Get the remote (peer) address and port of a connected socket.
  *
  * @param s     Socket handle.

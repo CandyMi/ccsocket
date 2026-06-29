@@ -155,6 +155,7 @@
 #else
   #include <fcntl.h>
   #include <unistd.h>
+  #include <sys/ioctl.h>
   #include <sys/select.h> /* select(): used by ccsocket_is_connected for side-effect-free state probing */
   #include <sys/un.h>
   #include <sys/uio.h>
@@ -1114,6 +1115,19 @@ ccsocket_stcode_t ccsocket_recvfrom(ccsocket_t s, char *buf, size_t bsize,
     if (port) *port = msg.msg_port;
     if (rsize) *rsize = msg.msg_bytes;
     return r;
+}
+
+bool ccsocket_get_nread(ccsocket_t s, uint32_t *nread)
+{
+#if _WIN32
+  u_long available = 0;
+  if (ioctlsocket((SOCKET)s, FIONREAD, &available) != 0)
+    return false;
+  *nread = (uint32_t)available;
+  return true;
+#else
+  return ioctl((SOCKET)s, FIONREAD, nread) == 0;
+#endif
 }
 
 /* enable/disable nodelay (TCP_NODELAY) */
