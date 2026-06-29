@@ -75,7 +75,7 @@
   {
       SOCKET tmp_s = socket(AF_INET, SOCK_DGRAM, 0);
       if (tmp_s == INVALID_SOCKET) {
-          ccsocket_dump("cc_load_msg_ext: socket(AF_INET, DGRAM) failed: %lu", WSAGetLastError());
+          ccsocket_dump("cc_load_msg_ext: socket(AF_INET, DGRAM) failed: %d", WSAGetLastError());
           return false;
       }
 
@@ -84,7 +84,7 @@
           GUID guid = {0xf689d7c8, 0x6f1f, 0x436b, {0x8a, 0x53, 0xe5, 0x4f, 0xe3, 0x51, 0xc3, 0xdb}};
           if (SOCKET_ERROR == WSAIoctl(tmp_s, SIO_GET_EXTENSION_FUNCTION_POINTER,
               &guid, sizeof(guid), &cc_WSARecvMsg_fn, sizeof(cc_WSARecvMsg_fn), &bytes, NULL, NULL)) {
-              ccsocket_dump("WSAIoctl(WSARecvMsg) failed: %lu", WSAGetLastError());
+              ccsocket_dump("WSAIoctl(WSARecvMsg) failed: %d", WSAGetLastError());
               cc_WSARecvMsg_fn = NULL;
           }
       }
@@ -386,7 +386,7 @@ bool ccsocket_wrap_ip_and_port(ccsocket_t s, struct sockaddr_storage* sa, const 
 
 int ccsocket_close(ccsocket_t s)
 {
-  if (s == INVALID_SOCKET) return 0;
+  if (s == (ccsocket_t)INVALID_SOCKET) return 0;
   return closesocket(s);
 }
 
@@ -464,7 +464,7 @@ ccsocket_t ccsocket2(ccsocket_family_t domain, ccsocket_protocol_t proto, ccsock
 #else
   ccsocket_t s = socket(domain_r, proto_r, flag_r);
 #endif
-  if (s == INVALID_SOCKET)
+  if (s == (ccsocket_t)INVALID_SOCKET)
     return INVALID_SOCKET;
   /**
   * not safe on `cloexec`
@@ -685,7 +685,7 @@ ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s)
   ccsocket_init_errno();
 
   /* Guard: invalid handle */
-  if (s == INVALID_SOCKET)
+  if (s == (ccsocket_t)INVALID_SOCKET)
     return CC_CONNERROR;
 
 #if _WIN32
@@ -1603,7 +1603,7 @@ static bool dns_query_one(const char *dns_server, struct ccdns_t *dns,
   ccsocket_family_t af = ccsocket_get_version(dns_server);
   if (af != CC_INET4 && af != CC_INET6) return false;
   ccsocket_t fd = ccsocket(af, CC_UDP);
-  if (fd == INVALID_SOCKET) return false;
+  if (fd == (ccsocket_t)INVALID_SOCKET) return false;
 
   ccsocket_set_rcvtimeout(fd, 5000);
   ccsocket_set_sndtimeout(fd, 3000);
