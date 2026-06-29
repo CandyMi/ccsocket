@@ -74,7 +74,7 @@
   static bool cc_load_msg_ext(void)
   {
       SOCKET tmp_s = socket(AF_INET, SOCK_DGRAM, 0);
-      if (tmp_s == (ccsocket_t)INVALID_SOCKET) {
+      if (tmp_s == INVALID_SOCKET) {
           ccsocket_dump("cc_load_msg_ext: socket(AF_INET, DGRAM) failed: %d", WSAGetLastError());
           return false;
       }
