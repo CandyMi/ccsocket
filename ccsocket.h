@@ -256,6 +256,20 @@ CCSOCKET_EXPORT ccsocket_t ccsocket2(ccsocket_family_t domain, ccsocket_protocol
 CCSOCKET_EXPORT ccsocket_t ccsocket_accept2(ccsocket_t s, OPTIONAL char *addr, OPTIONAL uint16_t *port, ccsocket_flags_t flags);
 
 /**
+ * @brief Bind a socket to a local address without listening.
+ *
+ * Separated from ccsocket_listen_internal to expose raw bind() semantics
+ * as a public API.  Useful for protocols that need a bound-but-not-listening
+ * socket (e.g. UDP, ICMP, or custom connection setup).
+ *
+ * @param s     Socket handle.
+ * @param ip    IP address string (e.g. "0.0.0.0", "::", or NULL for any).
+ * @param port  Port number (0 for Unix domain or ephemeral-port binding).
+ * @return true on success, false on failure (errno / WSAGetLastError is set).
+ */
+CCSOCKET_EXPORT bool ccsocket_bind(ccsocket_t s, const char *ip, uint16_t port);
+
+/**
  * @brief Bind a socket to an address and start listening (exclusive mode).
  *
  * Uses SO_EXCLUSIVEADDRUSE (Windows) or SO_EXCLBIND (Solaris) when available;

@@ -20,6 +20,7 @@ Included sub-modules:
 - **Zero-copy file transfer** — `sendfile()` on supported kernels, transparent fallback elsewhere
 - **Scatter/gather I/O** — `iovec`-based send/recv with platform-safe accessor macros
 - **Receive buffer query** — `ccsocket_get_nread()` returns available bytes via `FIONREAD` without consuming data
+- **Exposed raw `bind()`** — `ccsocket_bind()` separates address binding from listening, useful for UDP, ICMP, and custom protocol setups
 - **Non-blocking I/O** — integrated wait-state signaling via `CC_OPCODE_WAIT`
 - **Load-balanced listeners** — `SO_REUSEPORT` / `SO_REUSEPORT_LB` for multi-process servers
 - **IPv4 + IPv6 ICMP ping** — with RFC-compliant pseudo-header checksums
@@ -94,6 +95,49 @@ int main(void)
         printf("Received: %s\n", buf);
     }
 
+    ccsocket_close(s);
+    return 0;
+}
+```
+
+### Minimal Example: TCP Echo Server (bind + listen)
+
+```c
+#include "ccsocket.h"
+#include <stdio.h>
+
+int main(void)
+{
+    ccsocket_t s = ccsocket(CC_INET4, CC_TCP);
+    if (s == INVALID_SOCKET) return 1;
+
+    /* Bind to an address without listening (e.g. for UDP/ICMP). */
+    if (!ccsocket_bind(s, "127.0.0.1", 8080)) {
+        ccsocket_close(s);
+        return 1;
+    }
+
+    /* Now start listening (TCP-only; skip bind() for UDP/ICMP). */
+    if (!ccsocket_listen(s, NULL, 0)) {
+        ccsocket_close(s);
+        return 1;
+    }
+
+    ccsocket_t client = ccsocket_accept(s, CC_NOFLAG);
+    if (client == INVALID_SOCKET) {
+        ccsocket_close(s);
+        return 1;
+    }
+
+    char buf[256];
+    int recved;
+    ccsocket_stcode_t r = ccsocket_recv(client, buf, sizeof(buf) - 1, &recved);
+    if (r == CC_OPCODE_OK) {
+        buf[recved] = '\0';
+        ccsocket_send(client, buf, recved, NULL);
+    }
+
+    ccsocket_close(client);
     ccsocket_close(s);
     return 0;
 }

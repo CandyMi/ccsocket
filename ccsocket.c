@@ -523,23 +523,21 @@ ccsocket_t ccsocket_accept2(ccsocket_t s, OPTIONAL char *ip, OPTIONAL uint16_t *
   return c;
 }
 
-CC_INLINE
-bool ccsocket_listen_internal(ccsocket_t s, const char *ip, uint16_t port)
+bool ccsocket_bind(ccsocket_t s, const char *ip, uint16_t port)
 {
-  ccsocket_init_errno(); int r = 0;
+  ccsocket_init_errno();
   struct sockaddr_storage sa; memset(&sa, 0x0, sizeof(sa));
   if (!ccsocket_wrap_ip_and_port(s, &sa, ip, port))
     return false;
+  return 0 == bind((SOCKET)s, (const struct sockaddr *)&sa, ccsizeof(&sa));
+}
 
-  r = bind(s, (const struct sockaddr*)&sa, ccsizeof(&sa));
-  if (r < 0)
+CC_INLINE
+bool ccsocket_listen_internal(ccsocket_t s, const char *ip, uint16_t port)
+{
+  if (!ccsocket_bind(s, ip, port))
     return false;
-
-  r = listen(s, SOMAXCONN);
-  if (r < 0)
-    return false;
-
-  return true;
+  return listen(s, SOMAXCONN) == 0;
 }
 
 /* listen ccsocket */
