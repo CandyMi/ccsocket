@@ -74,7 +74,7 @@
   static bool cc_load_msg_ext(void)
   {
       SOCKET tmp_s = socket(AF_INET, SOCK_DGRAM, 0);
-      if (tmp_s == INVALID_SOCKET) {
+      if (tmp_s == (ccsocket_t)INVALID_SOCKET) {
           ccsocket_dump("cc_load_msg_ext: socket(AF_INET, DGRAM) failed: %d", WSAGetLastError());
           return false;
       }
@@ -92,7 +92,7 @@
           GUID guid = {0xa441e712, 0x754f, 0x43ca, {0x84, 0xa7, 0x0d, 0xee, 0x44, 0xcf, 0x60, 0x6d}};
           if (SOCKET_ERROR == WSAIoctl(tmp_s, SIO_GET_EXTENSION_FUNCTION_POINTER,
               &guid, sizeof(guid), &cc_WSASendMsg_fn, sizeof(cc_WSASendMsg_fn), &bytes, NULL, NULL)) {
-              ccsocket_dump("WSAIoctl(WSASendMsg) failed: %lu", WSAGetLastError());
+              ccsocket_dump("WSAIoctl(WSASendMsg) failed: %d", WSAGetLastError());
               cc_WSASendMsg_fn = NULL;
           }
       }
@@ -504,7 +504,7 @@ ccsocket_t ccsocket_accept2(ccsocket_t s, OPTIONAL char *ip, OPTIONAL uint16_t *
 #else
   c = accept(s, (struct sockaddr*)sap, sasizep);
 #endif
-  if (c == INVALID_SOCKET) {
+  if (c == (ccsocket_t)INVALID_SOCKET) {
     if (ccsocket_is_errno(EINTR))
       return ccsocket_accept1(s, ip, port, flags);
     if (ccsocket_is_errno(EWOULDBLOCK))
