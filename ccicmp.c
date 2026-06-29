@@ -193,7 +193,7 @@ bool ccicmp_echo(struct ccicmp_t *ctx, const char *addr, const char *data, size_
   /* -- SOCK_DGRAM (CC_ICMP1) on Linux ping socket:
    *    kernel constructs ICMP header + checksum, send only payload. -- */
   if (ccicmp_is_dgram(ctx->fd)) {
-#if defined(__linux__)
+#if defined(__linux__) || defined(__android__)
     size_t pktlen = CCICMP_TS_LEN + len;
     uint8_t *packet = (uint8_t *)cc_alloca(pktlen);
     memset(packet, 0, pktlen);
@@ -365,7 +365,7 @@ bool ccicmp_reply(struct ccicmp_t *ctx, char *data, size_t *len)
   /* -- SOCK_DGRAM (CC_ICMP1) on Linux ping socket:
    *    kernel strips IP + ICMP headers, delivers payload only. -- */
   if (ccicmp_is_dgram(ctx->fd)) {
-#if defined(__linux__)
+#if defined(__linux__) || defined(__android__)
     if ((size_t)rsize < CCICMP_TS_LEN)
       return false;
     size_t datalen = (size_t)rsize - CCICMP_TS_LEN;

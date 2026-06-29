@@ -17,6 +17,15 @@
 #include <string.h>
 #include <stdbool.h>
 
+#ifndef CCSOCKET_SOCK_T
+  #define CCSOCKET_SOCK_T
+  #if _WIN32
+    typedef intptr_t ccsocket_t;
+  #else
+    typedef int ccsocket_t;
+  #endif
+#endif
+
 #if _WIN32
   /* Shared library export/import:
    *   CCSOCKET_BUILD_SHARED — set by CMake when building the shared library.
@@ -30,16 +39,11 @@
   #else
     #define CCSOCKET_EXPORT
   #endif
+  #ifndef INVALID_SOCKET
+    #define INVALID_SOCKET ((ccsocket_t)(~0))
+  #endif
   typedef char*    cciovec_buf_t;
   typedef uint32_t cciovec_len_t;
-  #ifndef CCICMP_CCSOCKET_T_DEFINED
-    #define CCICMP_CCSOCKET_T_DEFINED
-    typedef intptr_t ccsocket_t;
-  #endif
-  #ifdef INVALID_SOCKET
-    #undef INVALID_SOCKET
-  #endif
-  #define INVALID_SOCKET ((ccsocket_t)-1)
   typedef struct ccsocket_iovec { cciovec_len_t  len; cciovec_buf_t  buf; } ccsocket_iovec_t;
 #else
   #define CCSOCKET_EXPORT __attribute__((visibility("default")))
@@ -48,14 +52,7 @@
   #endif
   typedef void*   cciovec_buf_t;
   typedef size_t  cciovec_len_t;
-  #ifndef CCICMP_CCSOCKET_T_DEFINED
-    #define CCICMP_CCSOCKET_T_DEFINED
-    typedef int ccsocket_t;
-  #endif
-  #ifndef CCICMP_SOCKET_DEFINED
-    #define CCICMP_SOCKET_DEFINED
-    typedef ccsocket_t SOCKET;
-  #endif
+  typedef ccsocket_t SOCKET;
   typedef struct ccsocket_iovec { cciovec_buf_t  buf; cciovec_len_t  len; } ccsocket_iovec_t;
 #endif
 

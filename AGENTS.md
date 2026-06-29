@@ -177,7 +177,7 @@ This file follows the [AGENTS.md specification](https://agents.md/).
 - **IO vectors**: Different field order on Windows (`len` first) vs POSIX (`buf` first) — always use accessor macros (`ccsocket_set_iov_len`, etc.), never direct struct access.
 - **Inline**: `CC_INLINE` macro resolves to `static inline` (C99), `static __inline` (MSVC), or `static` (C89 fallback).
 - **Include order**: System/platform headers (`<...>`) must precede project headers (`"..."`). This ensures OS socket types (`SOCKET`, `INVALID_SOCKET`) are visible before `ccsocket.h` overrides them.
-- **`INVALID_SOCKET`**: Defined as `((ccsocket_t)-1)` on both Windows and POSIX — signed type matching `ccsocket_t`, eliminating cross-platform signedness warnings.
+- **`INVALID_SOCKET`**: Defined as `((ccsocket_t)(~0))` on both Windows and POSIX — signed type matching `ccsocket_t`, eliminating cross-platform signedness warnings. Follows Windows SDK convention (`(SOCKET)(~0)` on WinSock2) and evaluates to the same bit pattern as `-1` on all target platforms.
 - **`SOCKET` type**: On POSIX, `typedef ccsocket_t SOCKET;` is provided in `ccsocket.h` for cross-platform consistency with Windows' `SOCKET` type.
 
 ### 3.7 Git Commit Conventions
@@ -605,7 +605,7 @@ The header defines `ccsocket_t` per platform:
 | Windows | `intptr_t` | (from winsock2.h) |
 | POSIX | `int` | `typedef ccsocket_t SOCKET` |
 
-A guard macro `CCICMP_CCSOCKET_T_DEFINED` prevents `-Wpedantic` "redefinition of typedef" warnings when both `ccicmp.h` and `ccsocket.h` are included in the same translation unit.
+A unified guard macro `CCSOCKET_SOCK_T` (shared with `ccsocket.h`) prevents `-Wpedantic` "redefinition of typedef" warnings when both headers are included in the same translation unit. The `ccsocket_t` typedef lives outside the platform `#if` block in both headers, and `ccicmp.h` no longer defines the `SOCKET` typedef (it was never used by the ICMP module).
 
 #### 8.8.2 Export Macro
 

@@ -19,18 +19,14 @@
 /* ---- Platform socket type (self-contained, no ccsocket.h dependency) ---- */
 /* Guard: ccsocket.h may be included alongside ccicmp.h; avoid -Wpedantic
  * "redefinition of typedef" when both define ccsocket_t identically. */
-#ifndef CCICMP_CCSOCKET_T_DEFINED
-#define CCICMP_CCSOCKET_T_DEFINED
-#if _WIN32
-  typedef intptr_t ccsocket_t;
-#else
-  typedef int ccsocket_t;
-  #ifndef CCICMP_SOCKET_DEFINED
-    #define CCICMP_SOCKET_DEFINED
-    typedef ccsocket_t SOCKET;
+#ifndef CCSOCKET_SOCK_T
+  #define CCSOCKET_SOCK_T
+  #if _WIN32
+    typedef intptr_t ccsocket_t;
+  #else
+    typedef int ccsocket_t;
   #endif
 #endif
-#endif /* CCICMP_CCSOCKET_T_DEFINED */
 
 /* ---- Export decoration (always shared, no build/consumer toggle) ---- */
 #if _WIN32
