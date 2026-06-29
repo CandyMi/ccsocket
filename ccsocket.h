@@ -39,6 +39,9 @@
   #else
     #define CCSOCKET_EXPORT
   #endif
+  #ifndef INVALID_SOCKET
+    #define INVALID_SOCKET ((ccsocket_t)(~0))
+  #endif
   typedef char*    cciovec_buf_t;
   typedef uint32_t cciovec_len_t;
   typedef struct ccsocket_iovec { cciovec_len_t  len; cciovec_buf_t  buf; } ccsocket_iovec_t;
