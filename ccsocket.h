@@ -26,6 +26,14 @@
   #endif
 #endif
 
+#ifndef INVALID_SOCKET
+  #define INVALID_SOCKET ((ccsocket_t)(~0))
+#endif
+
+#ifndef SOCKET_ERROR
+  #define SOCKET_ERROR (-1)
+#endif
+
 #if _WIN32
   /* Shared library export/import:
    *   CCSOCKET_BUILD_SHARED — set by CMake when building the shared library.
@@ -44,9 +52,6 @@
   typedef struct ccsocket_iovec { cciovec_len_t  len; cciovec_buf_t  buf; } ccsocket_iovec_t;
 #else
   #define CCSOCKET_EXPORT __attribute__((visibility("default")))
-  #ifndef INVALID_SOCKET
-    #define INVALID_SOCKET ((ccsocket_t)(~0))
-  #endif
   typedef void*   cciovec_buf_t;
   typedef size_t  cciovec_len_t;
   typedef ccsocket_t SOCKET;
