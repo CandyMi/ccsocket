@@ -533,7 +533,7 @@ bool ccsocket_bind(ccsocket_t s, const char *ip, uint16_t port)
 }
 
 /* listen ccsocket */
-bool ccsocket_listen(ccsocket_t s, const char *ip, uint16_t port)
+bool ccsocket_listen(ccsocket_t s, const char *ip, uint16_t port, int backlog)
 {
   /**
    * ensure that the socket is an exclusive listener.
@@ -555,11 +555,11 @@ bool ccsocket_listen(ccsocket_t s, const char *ip, uint16_t port)
 #endif
   if (!ccsocket_bind(s, ip, port))
     return false;
-  return 0 == listen((SOCKET)s, SOMAXCONN);
+  return 0 == listen((SOCKET)s, backlog >= 0 ? backlog : SOMAXCONN);
 }
 
 /* listen ccsocket for loadbalance (part) */
-bool ccsocket_listen1(ccsocket_t s, const char *ip, uint16_t port)
+bool ccsocket_listen1(ccsocket_t s, const char *ip, uint16_t port, int backlog)
 {
 #if defined(SO_REUSEPORT_LB)
   int Enable = 1;
@@ -580,7 +580,7 @@ bool ccsocket_listen1(ccsocket_t s, const char *ip, uint16_t port)
 #endif
   if (!ccsocket_bind(s, ip, port))
     return false;
-  return 0 == listen((SOCKET)s, SOMAXCONN);
+  return 0 == listen((SOCKET)s, backlog >= 0 ? backlog : SOMAXCONN);
 }
 
 int ccsocket_pipe(ccsocket_t sv[2])

@@ -113,7 +113,7 @@ int main(void)
     ccsocket_t s = ccsocket(CC_INET4, CC_TCP);
     if (s == INVALID_SOCKET) return 1;
 
-    if (!ccsocket_listen(s, "127.0.0.1", 8080)) {
+    if (!ccsocket_listen(s, "127.0.0.1", 8080, -1)) {
         ccsocket_close(s);
         return 1;
     }

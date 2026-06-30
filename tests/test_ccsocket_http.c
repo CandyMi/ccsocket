@@ -43,7 +43,7 @@ int main(void)
     srv = ccsocket(CC_INET4, CC_TCP);
     assert(srv != INVALID_SOCKET);
     assert(ccsocket_set_reuseaddr(srv, true));
-    assert(ccsocket_listen(srv, "127.0.0.1", 0));
+    assert(ccsocket_listen(srv, "127.0.0.1", 0, -1));
     assert(ccsocket_get_sockname(srv, addr, &port));
     assert(port > 0);
 

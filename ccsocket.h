@@ -275,12 +275,13 @@ CCSOCKET_EXPORT bool ccsocket_bind(ccsocket_t s, const char *ip, uint16_t port);
  * Uses SO_EXCLUSIVEADDRUSE (Windows) or SO_EXCLBIND (Solaris) when available;
  * falls back to SO_REUSEADDR on other platforms.
  *
- * @param s     Socket handle (created via ccsocket/ccsocket2).
- * @param addr  IP address string (e.g. "0.0.0.0") or Unix domain path.
- * @param port  Port number (0 for Unix domain sockets).
+ * @param s        Socket handle (created via ccsocket/ccsocket2).
+ * @param addr     IP address string (e.g. "0.0.0.0") or Unix domain path.
+ * @param port     Port number (0 for Unix domain sockets).
+ * @param backlog  listen() backlog (pass -1 for SOMAXCONN, same as the old behaviour).
  * @return true on success, false on failure.
  */
-CCSOCKET_EXPORT bool ccsocket_listen(ccsocket_t s, const char *addr, uint16_t port);
+CCSOCKET_EXPORT bool ccsocket_listen(ccsocket_t s, const char *addr, uint16_t port, int backlog);
 
 /**
  * @brief Bind a socket to an address and start listening (load-balanced mode).
@@ -289,12 +290,13 @@ CCSOCKET_EXPORT bool ccsocket_listen(ccsocket_t s, const char *addr, uint16_t po
  * Supported on Linux 3.9+ (SO_REUSEPORT), FreeBSD 12+ (SO_REUSEPORT_LB),
  * DragonFlyBSD 3.6+, Solaris 11.4+, and AIX 7.2.5.0+.
  *
- * @param s     Socket handle.
- * @param addr  IP address string.
- * @param port  Port number.
+ * @param s        Socket handle.
+ * @param addr     IP address string.
+ * @param port     Port number.
+ * @param backlog  listen() backlog (pass -1 for SOMAXCONN, same as the old behaviour).
  * @return true on success, false on failure.
  */
-CCSOCKET_EXPORT bool ccsocket_listen1(ccsocket_t s, const char *addr, uint16_t port);
+CCSOCKET_EXPORT bool ccsocket_listen1(ccsocket_t s, const char *addr, uint16_t port, int backlog);
 
 /**
  * @brief Connect a socket to a remote address.

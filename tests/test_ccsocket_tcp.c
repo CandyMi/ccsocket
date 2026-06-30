@@ -25,7 +25,7 @@ int main(void)
     assert(srv != INVALID_SOCKET);
 
     assert(ccsocket_set_reuseaddr(srv, true));
-    assert(ccsocket_listen(srv, "127.0.0.1", 0));
+    assert(ccsocket_listen(srv, "127.0.0.1", 0, -1));
 
     /* get the assigned port */
     assert(ccsocket_get_sockname(srv, addr, &port));

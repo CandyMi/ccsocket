@@ -51,7 +51,7 @@ static void test_connected_tcp(void)
 #if !defined(_WIN32)
     fatal_assert(ccsocket_set_reuseaddr(srv, true));
 #endif
-    fatal_assert(ccsocket_listen(srv, "127.0.0.1", 0));
+    fatal_assert(ccsocket_listen(srv, "127.0.0.1", 0, -1));
     fatal_assert(ccsocket_get_sockname(srv, addr, &port));
     fatal_assert(addr[0] != '\0');
     fatal_assert(port > 0);

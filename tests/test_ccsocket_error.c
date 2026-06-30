@@ -73,7 +73,7 @@ static void test_invalid_listen_connect(void)
   uint16_t port;
 
   check("listen(INVALID_SOCKET) → false",
-        ccsocket_listen(INVALID_SOCKET, "127.0.0.1", 0) == false);
+        ccsocket_listen(INVALID_SOCKET, "127.0.0.1", 0, -1) == false);
   check("connect(INVALID_SOCKET) → false",
         ccsocket_connect(INVALID_SOCKET, "127.0.0.1", 9) == false);
   check("get_peername(INVALID_SOCKET) → false",

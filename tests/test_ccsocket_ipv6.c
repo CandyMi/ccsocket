@@ -38,7 +38,7 @@ static void test_tcp_ipv6(void)
     assert(ccsocket_get_family(srv) == CC_INET6);
 
     assert(ccsocket_set_reuseaddr(srv, true));
-    assert(ccsocket_listen(srv, "::1", 0));
+    assert(ccsocket_listen(srv, "::1", 0, -1));
 
     /* Get assigned port */
     assert(ccsocket_get_sockname(srv, addr, &port));

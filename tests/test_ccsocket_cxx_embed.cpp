@@ -39,7 +39,7 @@ static void fptr_smoke(void)
     bool    (*init_fn)(void)                            = ccsocket_init;
     bool    (*connect_fn)(ccsocket_t, const char *, uint16_t)
                                                        = ccsocket_connect;
-    bool    (*listen_fn)(ccsocket_t, const char *, uint16_t)
+    bool    (*listen_fn)(ccsocket_t, const char *, uint16_t, int)
                                                        = ccsocket_listen;
     bool    (*peername_fn)(ccsocket_t, char *, uint16_t *)
                                                        = ccsocket_get_peername;
