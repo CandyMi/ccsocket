@@ -409,7 +409,7 @@ ccsocket_t ccsocket2(ccsocket_family_t domain, ccsocket_protocol_t proto, ccsock
       break;
     case CC_FAMILY_INVALID:
     default:
-      return SOCKET_ERROR;
+      return INVALID_SOCKET;
   }
 
   int flag_r = IPPROTO_IP;
@@ -438,7 +438,7 @@ ccsocket_t ccsocket2(ccsocket_family_t domain, ccsocket_protocol_t proto, ccsock
       break;
     case CC_PROTOCOL_INVALID:
     default:
-      return SOCKET_ERROR;
+      return INVALID_SOCKET;
   }
 
   /* Unix domain sockets don't use IP protocol numbers */
@@ -608,7 +608,7 @@ bool ccsocketpair1(ccsocket_t sv[2], ccsocket_flags_t flags)
 #if _WIN32
   /* local pipe via TCP loopback */
   ccsocket_t srv = ccsocket1(CC_INET4, CC_TCP, CC_NOFLAG);
-  if (srv == SOCKET_ERROR)
+  if (srv == INVALID_SOCKET)
     return false;
   /* listen random port */
   if (!ccsocket_bind(srv, "127.0.0.1", 0)) {
@@ -627,15 +627,15 @@ bool ccsocketpair1(ccsocket_t sv[2], ccsocket_flags_t flags)
   }
   /* create socket 1 */
   ccsocket_t c = ccsocket1(CC_INET4, CC_TCP, CC_NOFLAG);
-  if (c == SOCKET_ERROR || !ccsocket_connect(c, addr, port)) {
-    if (c != SOCKET_ERROR)
+  if (c == INVALID_SOCKET || !ccsocket_connect(c, addr, port)) {
+    if (c != INVALID_SOCKET)
       ccsocket_close(c); /* failed */
     ccsocket_close(srv); /* failed */
     return false;
   }
   /* create socket 2 */
   ccsocket_t s = ccsocket_accept(srv, flags);
-  if (s == SOCKET_ERROR) {
+  if (s == INVALID_SOCKET) {
     ccsocket_close(srv); /* failed */
     ccsocket_close(c);   /* failed */
     return false;
