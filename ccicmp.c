@@ -82,7 +82,7 @@ void ccicmp_fill_timestamp(uint8_t *timestamp)
 {
 #if _WIN32
   struct _timeb tv;
-  _ftime(&tv);
+  _ftime_s(&tv);
   timestamp[0] = tv.time & 0xff;
   timestamp[1] = (tv.time >> 8) & 0xff;
   timestamp[2] = (tv.time >> 16) & 0xff;

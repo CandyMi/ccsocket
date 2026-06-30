@@ -1183,7 +1183,7 @@ Id Refs Address                Size Name
  4    1 0xffffffff8231f000     20e0 accf_data.ko
 */
 #define ACCF_NAME "dataready"
-  struct accept_filter_arg afa; memset(&afa, 0x0, sizeof(afa)); strcpy(afa.af_name, ACCF_NAME);
+  struct accept_filter_arg afa; memset(&afa, 0x0, sizeof(afa)); memcpy(afa.af_name, ACCF_NAME, sizeof(ACCF_NAME));
   if (setsockopt((SOCKET)s, SOL_SOCKET, SO_ACCEPTFILTER, &afa, sizeof(afa)) == SOCKET_ERROR)
     return false;
 #endif
@@ -1678,7 +1678,7 @@ bool ccsocket_getaddrinfo(const char *domain, ccaddrinfo_t **addrlist)
      * override via ccsocket_set_dns_servers() if exposed, or ensure
      * /etc/resolv.conf is populated before calling ccsocket_getaddrinfo. */
     nscount = 1;
-    strcpy(nslist[0], "1.1.1.1");
+    memcpy(nslist[0], "1.1.1.1", sizeof("1.1.1.1"));
   }
 
   /* --- 4. DNS lookup via ccdns + ccsocket --- */
