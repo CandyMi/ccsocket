@@ -611,7 +611,11 @@ bool ccsocketpair1(ccsocket_t sv[2], ccsocket_flags_t flags)
   if (srv == SOCKET_ERROR)
     return false;
   /* listen random port */
-  if (!ccsocket_listen_internal(srv, "127.0.0.1", 0)) {
+  if (!ccsocket_bind(srv, "127.0.0.1", 0)) {
+    ccsocket_close(srv); /* failed */
+    return false;
+  }
+  if (0 != listen((SOCKET)srv, SOMAXCONN)) {
     ccsocket_close(srv); /* failed */
     return false;
   }
