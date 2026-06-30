@@ -167,7 +167,7 @@ bool ccicmp_init(struct ccicmp_t *ctx, int domain)
 
 void ccicmp_close(struct ccicmp_t *ctx)
 {
-  assert(ctx);
+  if (!ctx) return;
   if (ctx->fd != (ccsocket_t)INVALID_SOCKET)
     ccsocket_close(ctx->fd);
   ctx->fd = INVALID_SOCKET;

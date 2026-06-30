@@ -504,18 +504,20 @@ ccsocket_t ccsocket_accept2(ccsocket_t s, OPTIONAL char *ip, OPTIONAL uint16_t *
     sap = &sa; sasizep = &sasize; sasize = ccsizeof(sap);
   }
   ccsocket_t c = INVALID_SOCKET; int flags_r = 0;
+  { int _e = 128; do {
 #if defined(SOCK_NONBLOCK) && defined(SOCK_CLOEXEC)
-  if (flags & CC_NONBLOCK)
-    flags_r |= SOCK_NONBLOCK;
-  if (flags & CC_CLOEXEC)
-    flags_r |= SOCK_CLOEXEC;
-  c = accept4(s, (struct sockaddr*)sap, sasizep, flags_r);
+    if (flags & CC_NONBLOCK)
+      flags_r |= SOCK_NONBLOCK;
+    if (flags & CC_CLOEXEC)
+      flags_r |= SOCK_CLOEXEC;
+    c = accept4(s, (struct sockaddr*)sap, sasizep, flags_r);
 #else
-  c = accept(s, (struct sockaddr*)sap, sasizep);
+    c = accept(s, (struct sockaddr*)sap, sasizep);
 #endif
+    if (c != (ccsocket_t)INVALID_SOCKET) break;
+    if (!ccsocket_is_errno(EINTR)) break;
+  } while (--_e > 0); }
   if (c == (ccsocket_t)INVALID_SOCKET) {
-    if (ccsocket_is_errno(EINTR))
-      return ccsocket_accept1(s, ip, port, flags);
     if (ccsocket_is_errno(EWOULDBLOCK))
       return 0;
     return INVALID_SOCKET;
@@ -1380,7 +1382,6 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
 {
   ccsocket_init_errno();
 #if defined(__APPLE__) || defined(__FreeBSD__) || defined(__DragonFlyBSD__)
-  off_t wsize = 0;
   off_t offset = lseek(fd, 0, SEEK_CUR);
   if (offset == -1)
     return CC_SENDERROR;
@@ -1388,26 +1389,24 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
   if (eof == -1)
     return CC_SENDERROR;
   lseek(fd, offset, SEEK_SET);
-  #if defined(__APPLE__)
-  int r; { int _e = 128; do {
-    r = sendfile(fd, (SOCKET)s, offset, &wsize, NULL, 0);
-    if (r != SOCKET_ERROR) break;
-    if (!ccsocket_is_errno(EINTR)) break;
-  } while (--_e > 0); }
-  #else
-  int r; { int _e = 128; do {
-    r = sendfile(fd, (SOCKET)s, offset, 0, NULL, &wsize, 0);
-    if (r != SOCKET_ERROR) break;
-    if (!ccsocket_is_errno(EINTR)) break;
-  } while (--_e > 0); }
-  #endif
-  if (r == SOCKET_ERROR) {
-    return ccsocket_is_errno(EWOULDBLOCK) ? CC_SENDWAIT : CC_SENDERROR;
-  }
-  lseek(fd, offset + wsize, SEEK_SET);
-  if ((offset + wsize) == eof)
-    return CC_SENDALL;
-  return ccsocket_sendfile(s, fd);
+  do {
+    off_t wsize = 0; int r;
+    { int _e = 128; do {
+    #if defined(__APPLE__)
+      r = sendfile(fd, (SOCKET)s, offset, &wsize, NULL, 0);
+    #else
+      r = sendfile(fd, (SOCKET)s, offset, 0, NULL, &wsize, 0);
+    #endif
+      if (r != SOCKET_ERROR) break;
+      if (!ccsocket_is_errno(EINTR)) break;
+    } while (--_e > 0); }
+    if (r == SOCKET_ERROR) {
+      return ccsocket_is_errno(EWOULDBLOCK) ? CC_SENDWAIT : CC_SENDERROR;
+    }
+    lseek(fd, offset + wsize, SEEK_SET);
+    offset += wsize;
+  } while (offset < eof);
+  return CC_SENDALL;
 #elif defined(__linux__) || defined(__sun__)
   off_t offset = lseek(fd, 0, SEEK_CUR);
   if (offset == -1)
@@ -1416,40 +1415,38 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
   if (eof == -1)
     return CC_SENDERROR;
   lseek(fd, offset, SEEK_SET);
-  off_t wsize; { int _e = 128; do {
-    wsize = sendfile(s, fd, &offset, eof - offset);
-    if (wsize != SOCKET_ERROR) break;
-    if (!ccsocket_is_errno(EINTR)) break;
-  } while (--_e > 0); }
-  if (wsize == SOCKET_ERROR) {
-    return ccsocket_is_errno(EWOULDBLOCK) ? CC_SENDWAIT : CC_SENDERROR;
-  }
-  if (offset == eof)
-    return CC_SENDALL;
-  lseek(fd, offset, SEEK_SET);
-  return ccsocket_sendfile(s, fd);
+  do {
+    off_t wsize; { int _e = 128; do {
+      wsize = sendfile(s, fd, &offset, eof - offset);
+      if (wsize != SOCKET_ERROR) break;
+      if (!ccsocket_is_errno(EINTR)) break;
+    } while (--_e > 0); }
+    if (wsize == SOCKET_ERROR) {
+      return ccsocket_is_errno(EWOULDBLOCK) ? CC_SENDWAIT : CC_SENDERROR;
+    }
+  } while (offset < eof);
+  return CC_SENDALL;
 #elif _AIX
   off_t offset = lseek(fd, 0, SEEK_CUR);
   if (offset == -1)
     return CC_SENDERROR;
-  struct sf_parms params = {
-    .header_data = NULL, .header_length = 0,   // no header data
-    .trailer_data = NULL, .trailer_length = 0, // no trailer data
-    .file_descriptor = fd, .file_offset = offset, .file_bytes = -1,
-  };
-  int wsize; { int _e = 128; do {
-    wsize = send_file(s, &params, 0);
-    if (wsize != SOCKET_ERROR) break;
-    if (!ccsocket_is_errno(EINTR)) break;
-  } while (--_e > 0); }
-  if (wsize == SOCKET_ERROR) {
-    return ccsocket_is_errno(EWOULDBLOCK) ? CC_SENDWAIT : CC_SENDERROR;
-  }
-  offset = offset + params.bytes_sent;
-  if (offset == params.file_size)
-    return CC_SENDALL;
-  // lseek(fd, offset, SEEK_SET);
-  return ccsocket_sendfile(s, fd);
+  do {
+    struct sf_parms params = {
+      .header_data = NULL, .header_length = 0,   // no header data
+      .trailer_data = NULL, .trailer_length = 0, // no trailer data
+      .file_descriptor = fd, .file_offset = offset, .file_bytes = -1,
+    };
+    int wsize; { int _e = 128; do {
+      wsize = send_file(s, &params, 0);
+      if (wsize != SOCKET_ERROR) break;
+      if (!ccsocket_is_errno(EINTR)) break;
+    } while (--_e > 0); }
+    if (wsize == SOCKET_ERROR) {
+      return ccsocket_is_errno(EWOULDBLOCK) ? CC_SENDWAIT : CC_SENDERROR;
+    }
+    offset = offset + params.bytes_sent;
+  } while (offset < params.file_size);
+  return CC_SENDALL;
 #else
 #define CC_SENDFILE_PER_LEN 1024
   int wsize;
@@ -1469,7 +1466,7 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
     if (ccsocket_send(s, buffer, rsize, &wsize) != CC_OPCODE_OK) {
       lseek(fd, offset, SEEK_SET);
       if (ccsocket_is_errno(EINTR))
-        return ccsocket_sendfile(s, fd);
+        continue;
       return ccsocket_is_errno(EWOULDBLOCK) ? CC_SENDWAIT : CC_SENDERROR;
     }
     offset += wsize;
@@ -1704,12 +1701,12 @@ bool ccsocket_getaddrinfo(const char *domain, ccaddrinfo_t **addrlist)
   int nscount = read_dns_servers(nslist, MAX_NS);
   if (nscount == 0) {
     /* Fallback: no system DNS configured (e.g. container, fresh install).
-     * Cloudflare 1.1.1.1 is chosen as a privacy-respecting public resolver.
-     * Callers in restricted networks (China, corporate VPN) may want to
-     * override via ccsocket_set_dns_servers() if exposed, or ensure
-     * /etc/resolv.conf is populated before calling ccsocket_getaddrinfo. */
+     * Override at compile time via -DCCSOCKET_DNS_SERVER="8.8.8.8". */
+#ifndef CCSOCKET_DNS_SERVER
+  #define CCSOCKET_DNS_SERVER "1.1.1.1"
+#endif
     nscount = 1;
-    memcpy(nslist[0], "1.1.1.1", sizeof("1.1.1.1"));
+    memcpy(nslist[0], CCSOCKET_DNS_SERVER, sizeof(CCSOCKET_DNS_SERVER));
   }
 
   /* --- 4. DNS lookup via ccdns + ccsocket --- */
