@@ -248,7 +248,7 @@ ctest --test-dir build -R ccsocket/tcp -V
 .
 ├── CMakeLists.txt      # Build system — CMake 3.0+, C99
 ├── ccsocket.h          # Public API — types, enums, function declarations
-├── ccsocket.c          # Core socket implementation (~1692 lines)
+├── ccsocket.c          # Core socket implementation (~1747 lines)
 ├── ccicmp.h            # ICMP ping public API
 ├── ccicmp.c            # ICMP echo/response implementation (~428 lines)
 ├── ccdns.h             # DNS client public API
@@ -256,7 +256,7 @@ ctest --test-dir build -R ccsocket/tcp -V
 ├── httpc.txt           # Sample HTTP/1.1 request (test fixture)
 ├── LICENSE             # MIT license
 ├── .gitignore          # Build artifacts
-├── tests/              # Test suite (CTest, 12 tests)
+├── tests/              # Test suite (CTest, 17 tests)
 │   ├── CMakeLists.txt
 │   ├── test_ccsocket_smoke.c
 │   ├── test_ccsocket_tcp.c

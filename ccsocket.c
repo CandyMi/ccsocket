@@ -190,7 +190,11 @@ CCSOCKET_EXPORT bool ccsocket_init(void)
 {
 #if _WIN32
   if (!ccsocket_wsa_init_once()) return false;
-  cc_load_msg_ext();  /* best-effort: extensions only needed for recvmsg/sendmsg */
+  {
+    static long msg_once = 0;
+    if (_InterlockedCompareExchange(&msg_once, 1, 0) == 0)
+      cc_load_msg_ext();  /* best-effort: extensions only needed for recvmsg/sendmsg */
+  }
   return true;
 #else
   return true;
@@ -257,23 +261,28 @@ bool ccsocket2addr(const struct sockaddr_storage* sa, char *addr, uint16_t *port
     case AF_UNIX:
     {
       const struct sockaddr_un* in = (const struct sockaddr_un*)sa;
-      size_t _pathlen = strlen(in->sun_path);
+      size_t _pathlen = strnlen(in->sun_path, sizeof(in->sun_path));
+      if (_pathlen >= sizeof(in->sun_path)) _pathlen = sizeof(in->sun_path) - 1;
       memcpy(addr, in->sun_path, _pathlen);
       addr[_pathlen] = '\0';
       *port = 0;
       break;
     }
-      // return false;
 #endif
     case AF_INET:
     case AF_INET6:
     {
 #if _WIN32
-      DWORD len = MAX_ADDRLEN; WSAAddressToString((struct sockaddr*)sa, ccsizeof(sa), NULL, addr, &len);
+      DWORD len = MAX_ADDRLEN;
+      if (WSAAddressToString((struct sockaddr*)sa, ccsizeof(sa), NULL, addr, &len) != 0) {
+        addr[0] = '\0';
+      }
 #else
-      sa->ss_family == AF_INET ? 
+      if ((sa->ss_family == AF_INET ?
           inet_ntop(AF_INET, &(((struct sockaddr_in*)sa)->sin_addr), addr, MAX_ADDRLEN) :
-          inet_ntop(AF_INET6, &(((struct sockaddr_in6*)sa)->sin6_addr), addr, MAX_ADDRLEN) ;
+          inet_ntop(AF_INET6, &(((struct sockaddr_in6*)sa)->sin6_addr), addr, MAX_ADDRLEN)) == NULL) {
+        addr[0] = '\0';
+      }
 #endif
       *port = sa->ss_family == AF_INET ?
           ntohs(((struct sockaddr_in*)sa)->sin_port) :
@@ -586,7 +595,7 @@ bool ccsocket_listen1(ccsocket_t s, const char *ip, uint16_t port, int backlog)
 int ccsocket_pipe(ccsocket_t sv[2])
 {
   bool ok = ccsocketpair(sv, CC_NOFLAG);
-  if (!ok) return SOCKET_ERROR;
+  if (!ok) return INVALID_SOCKET;
 #if _WIN32
   shutdown(sv[0], SD_SEND);
   shutdown(sv[1], SD_RECEIVE);
@@ -685,7 +694,7 @@ ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s)
    * When still connecting → WSAEWOULDBLOCK / WSAEALREADY / WSAEINPROGRESS.
    *
    * Loop (not recursion) handles EINTR retry without stack risk. */
-  for (;;) {
+  for (int _e = 128; _e > 0; _e--) {
     if (ccsocket_connect(s, NULL, 0))
       return CC_CONNECTED;
     if (ccsocket_is_errno(EINTR))
@@ -697,6 +706,7 @@ ccsocket_conn_state_t ccsocket_is_connected(ccsocket_t s)
       return CC_CONNECTING;
     return CC_CONNERROR;
   }
+  return CC_CONNERROR;  /* EINTR exceeded retry limit */
 #else
   /* POSIX: SO_ERROR + getpeername — pure read-only, no event polling.
    *
@@ -736,21 +746,24 @@ ccsocket_stcode_t ccsocket_send1(ccsocket_t s, const void *buf, size_t bsize, OP
 ccsocket_stcode_t ccsocket_sendv1(ccsocket_t s, ccsocket_iovec_t *iov, int iovcnt, OPTIONAL int *wsize, int flags)
 {
   int w = 0; int wsz = 0;
+  int _eintr = 128;
   ccsocket_init_errno();
+  do {
 #if _WIN32
-  w = WSASend((SOCKET)s, (LPWSABUF)iov, iovcnt, (LPDWORD)&wsz, 0, NULL, NULL);
+    w = WSASend((SOCKET)s, (LPWSABUF)iov, iovcnt, (LPDWORD)&wsz, 0, NULL, NULL);
 #else
 #if defined(MSG_NOSIGNAL)
-  flags |= MSG_NOSIGNAL;
+    flags |= MSG_NOSIGNAL;
 #endif
-  struct msghdr msg; memset(&msg, 0x0, sizeof(msg));
-  msg.msg_iov = (struct iovec *)iov; msg.msg_iovlen = iovcnt;
-  w = sendmsg(s, &msg, flags);
-  if (w > 0) wsz = w;
+    struct msghdr msg; memset(&msg, 0x0, sizeof(msg));
+    msg.msg_iov = (struct iovec *)iov; msg.msg_iovlen = iovcnt;
+    w = sendmsg(s, &msg, flags);
+    if (w > 0) wsz = w;
 #endif
+    if (w != SOCKET_ERROR) break;
+    if (!ccsocket_is_errno(EINTR)) break;
+  } while (--_eintr > 0);
   if (w == SOCKET_ERROR) {
-    if (ccsocket_is_errno(EINTR))
-      return ccsocket_sendv1(s, iov, iovcnt, wsize, flags);
     if (ccsocket_is_errno(EWOULDBLOCK))
       return CC_OPCODE_WAIT;
     return CC_OPCODE_ERROR;
@@ -763,31 +776,31 @@ CC_INLINE
 ccsocket_stcode_t ccsocket_recv_internal(ccsocket_t s, ccsocket_iovec_t *iov, int iovcnt, OPTIONAL int *rsize, int flags)
 {
   int r = 0;
+  int _eintr = 128;
+  do {
 #if _WIN32
-  DWORD rsz = 0;
-  r = WSARecv(s, (LPWSABUF)iov, iovcnt, (LPDWORD)&rsz, (LPDWORD)&flags, NULL, NULL);
+    DWORD rsz = 0;
+    r = WSARecv(s, (LPWSABUF)iov, iovcnt, (LPDWORD)&rsz, (LPDWORD)&flags, NULL, NULL);
 #else
-  int rsz = 0;
-  struct msghdr msg; memset(&msg, 0x0, sizeof(msg));
-  msg.msg_iov = (struct iovec *)iov; msg.msg_iovlen = iovcnt;
-  r = recvmsg(s, &msg, flags);
-  if (r > 0) rsz = r;
-  if (r == 0) {
-    r = SOCKET_ERROR;
-    ccsocket_set_errno(ENOTCONN);
-  }
+    int rsz = 0;
+    struct msghdr msg; memset(&msg, 0x0, sizeof(msg));
+    msg.msg_iov = (struct iovec *)iov; msg.msg_iovlen = iovcnt;
+    r = recvmsg(s, &msg, flags);
+    if (r > 0) rsz = r;
+    if (r == 0) {
+      r = SOCKET_ERROR;
+      ccsocket_set_errno(ENOTCONN);
+    }
 #endif
-  if (r == SOCKET_ERROR) {
-    // char buffer[255]; ccsocket_get_error(s, buffer); 
-    // ccsocket_dump("errno = %d, err = '%s'.", errno, buffer);
-    if (ccsocket_is_errno(EINTR))
-      return ccsocket_recv_internal(s, iov, iovcnt, rsize, flags);
-    if (ccsocket_is_errno(EWOULDBLOCK))
-      return CC_OPCODE_WAIT;
-    return CC_OPCODE_ERROR;
-  }
-  if (rsize) *rsize = (int)rsz;
-  return CC_OPCODE_OK;
+    if (r != SOCKET_ERROR) {
+      if (rsize) *rsize = (int)rsz;
+      return CC_OPCODE_OK;
+    }
+    if (!ccsocket_is_errno(EINTR)) break;
+  } while (--_eintr > 0);
+  if (ccsocket_is_errno(EWOULDBLOCK))
+    return CC_OPCODE_WAIT;
+  return CC_OPCODE_ERROR;
 }
 
 /* recv for iov copy */
@@ -909,10 +922,12 @@ ccsocket_stcode_t ccsocket_recvmsg(ccsocket_t s, ccsocket_msghdr_t *msg, ccsocke
 
         os_flags = ccsocket_msg_flags_to_os(flags, true);
         hdr.dwFlags = (ULONG)os_flags;
-        r = cc_WSARecvMsg_fn((SOCKET)s, &hdr, &rsz, NULL, NULL);
+        { int _e = 128; do {
+            r = cc_WSARecvMsg_fn((SOCKET)s, &hdr, &rsz, NULL, NULL);
+            if (r != SOCKET_ERROR) break;
+            if (!ccsocket_is_errno(EINTR)) break;
+        } while (--_e > 0); }
         if (r == SOCKET_ERROR) {
-            if (ccsocket_is_errno(EINTR))
-                return ccsocket_recvmsg(s, msg, flags);
             if (ccsocket_is_errno(EWOULDBLOCK))
                 return CC_OPCODE_WAIT;
             return CC_OPCODE_ERROR;
@@ -939,10 +954,12 @@ ccsocket_stcode_t ccsocket_recvmsg(ccsocket_t s, ccsocket_msghdr_t *msg, ccsocke
     hdr.msg_controllen = msg->msg_controllen;
 
     os_flags = ccsocket_msg_flags_to_os(flags, true);
-    r = (int)recvmsg((SOCKET)s, &hdr, os_flags);
+    { int _e = 128; do {
+        r = (int)recvmsg((SOCKET)s, &hdr, os_flags);
+        if (r != -1) break;
+        if (!ccsocket_is_errno(EINTR)) break;
+    } while (--_e > 0); }
     if (r == -1) {
-        if (ccsocket_is_errno(EINTR))
-            return ccsocket_recvmsg(s, msg, flags);
         if (ccsocket_is_errno(EWOULDBLOCK))
             return CC_OPCODE_WAIT;
         return CC_OPCODE_ERROR;
@@ -1004,10 +1021,12 @@ ccsocket_stcode_t ccsocket_sendmsg(ccsocket_t s, ccsocket_msghdr_t *msg, ccsocke
         }
 
         os_flags = ccsocket_msg_flags_to_os(flags, false);
-        r = cc_WSASendMsg_fn((SOCKET)s, &hdr, (DWORD)os_flags, &wsz, NULL, NULL);
+        { int _e = 128; do {
+            r = cc_WSASendMsg_fn((SOCKET)s, &hdr, (DWORD)os_flags, &wsz, NULL, NULL);
+            if (r != SOCKET_ERROR) break;
+            if (!ccsocket_is_errno(EINTR)) break;
+        } while (--_e > 0); }
         if (r == SOCKET_ERROR) {
-            if (ccsocket_is_errno(EINTR))
-                return ccsocket_sendmsg(s, msg, flags);
             if (ccsocket_is_errno(EWOULDBLOCK))
                 return CC_OPCODE_WAIT;
             return CC_OPCODE_ERROR;
@@ -1040,10 +1059,12 @@ ccsocket_stcode_t ccsocket_sendmsg(ccsocket_t s, ccsocket_msghdr_t *msg, ccsocke
 #if defined(MSG_NOSIGNAL)
     os_flags |= MSG_NOSIGNAL;
 #endif
-    w = (int)sendmsg((SOCKET)s, &hdr, os_flags);
+    { int _e = 128; do {
+        w = (int)sendmsg((SOCKET)s, &hdr, os_flags);
+        if (w != -1) break;
+        if (!ccsocket_is_errno(EINTR)) break;
+    } while (--_e > 0); }
     if (w == -1) {
-        if (ccsocket_is_errno(EINTR))
-            return ccsocket_sendmsg(s, msg, flags);
         if (ccsocket_is_errno(EWOULDBLOCK))
             return CC_OPCODE_WAIT;
         return CC_OPCODE_ERROR;
@@ -1368,13 +1389,19 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
     return CC_SENDERROR;
   lseek(fd, offset, SEEK_SET);
   #if defined(__APPLE__)
-  int r = sendfile(fd, (SOCKET)s, offset, &wsize, NULL, 0);
+  int r; { int _e = 128; do {
+    r = sendfile(fd, (SOCKET)s, offset, &wsize, NULL, 0);
+    if (r != SOCKET_ERROR) break;
+    if (!ccsocket_is_errno(EINTR)) break;
+  } while (--_e > 0); }
   #else
-  int r = sendfile(fd, (SOCKET)s, offset, 0, NULL, &wsize, 0);
+  int r; { int _e = 128; do {
+    r = sendfile(fd, (SOCKET)s, offset, 0, NULL, &wsize, 0);
+    if (r != SOCKET_ERROR) break;
+    if (!ccsocket_is_errno(EINTR)) break;
+  } while (--_e > 0); }
   #endif
   if (r == SOCKET_ERROR) {
-    if (ccsocket_is_errno(EINTR))
-      return ccsocket_sendfile(s, fd);
     return ccsocket_is_errno(EWOULDBLOCK) ? CC_SENDWAIT : CC_SENDERROR;
   }
   lseek(fd, offset + wsize, SEEK_SET);
@@ -1389,10 +1416,12 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
   if (eof == -1)
     return CC_SENDERROR;
   lseek(fd, offset, SEEK_SET);
-  off_t wsize = sendfile(s, fd, &offset, eof - offset);
+  off_t wsize; { int _e = 128; do {
+    wsize = sendfile(s, fd, &offset, eof - offset);
+    if (wsize != SOCKET_ERROR) break;
+    if (!ccsocket_is_errno(EINTR)) break;
+  } while (--_e > 0); }
   if (wsize == SOCKET_ERROR) {
-    if (ccsocket_is_errno(EINTR))
-      return ccsocket_sendfile(s, fd);
     return ccsocket_is_errno(EWOULDBLOCK) ? CC_SENDWAIT : CC_SENDERROR;
   }
   if (offset == eof)
@@ -1408,10 +1437,12 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
     .trailer_data = NULL, .trailer_length = 0, // no trailer data
     .file_descriptor = fd, .file_offset = offset, .file_bytes = -1,
   };
-  int wsize = send_file(s, &params, 0);
+  int wsize; { int _e = 128; do {
+    wsize = send_file(s, &params, 0);
+    if (wsize != SOCKET_ERROR) break;
+    if (!ccsocket_is_errno(EINTR)) break;
+  } while (--_e > 0); }
   if (wsize == SOCKET_ERROR) {
-    if (ccsocket_is_errno(EINTR))
-      return ccsocket_sendfile(s, fd);
     return ccsocket_is_errno(EWOULDBLOCK) ? CC_SENDWAIT : CC_SENDERROR;
   }
   offset = offset + params.bytes_sent;

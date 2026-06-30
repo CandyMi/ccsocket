@@ -39,7 +39,7 @@ This file follows the [AGENTS.md specification](https://agents.md/).
 .
 ├── CMakeLists.txt      # Root build system — CMake 3.0+, C99 standard
 ├── ccsocket.h          # Public API header — types, enums, macros, exported function declarations
-├── ccsocket.c          # Implementation — ~1692 lines, all platform backends in one translation unit
+├── ccsocket.c          # Implementation — ~1747 lines, all platform backends in one translation unit
 ├── ccicmp.h            # Public API header — ICMP context struct, function declarations
 ├── ccicmp.c            # Implementation — ~428 lines, ICMP echo/response logic (TTL via CMSG)
 ├── ccdns.h             # Public API header — DNS client context, function declarations
