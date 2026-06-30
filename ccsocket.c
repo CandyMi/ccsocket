@@ -532,14 +532,6 @@ bool ccsocket_bind(ccsocket_t s, const char *ip, uint16_t port)
   return 0 == bind((SOCKET)s, (const struct sockaddr *)&sa, ccsizeof(&sa));
 }
 
-CC_INLINE
-bool ccsocket_listen_internal(ccsocket_t s, const char *ip, uint16_t port)
-{
-  if (!ccsocket_bind(s, ip, port))
-    return false;
-  return listen(s, SOMAXCONN) == 0;
-}
-
 /* listen ccsocket */
 bool ccsocket_listen(ccsocket_t s, const char *ip, uint16_t port)
 {
@@ -561,7 +553,9 @@ bool ccsocket_listen(ccsocket_t s, const char *ip, uint16_t port)
   if (!ccsocket_set_reuseaddr((SOCKET)s, true))
     return false;
 #endif
-  return ccsocket_listen_internal(s, ip, port);
+  if (!ccsocket_bind(s, ip, port))
+    return false;
+  return 0 == listen((SOCKET)s, SOMAXCONN);
 }
 
 /* listen ccsocket for loadbalance (part) */
@@ -584,7 +578,9 @@ bool ccsocket_listen1(ccsocket_t s, const char *ip, uint16_t port)
     return false;
   }
 #endif
-  return ccsocket_listen_internal(s, ip, port);
+  if (!ccsocket_bind(s, ip, port))
+    return false;
+  return 0 == listen((SOCKET)s, SOMAXCONN);
 }
 
 int ccsocket_pipe(ccsocket_t sv[2])

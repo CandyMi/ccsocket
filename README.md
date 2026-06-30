@@ -100,7 +100,9 @@ int main(void)
 }
 ```
 
-### Minimal Example: TCP Echo Server (bind + listen)
+### Minimal Example: TCP Echo Server
+
+`ccsocket_listen()` handles both bind and listen in one call:
 
 ```c
 #include "ccsocket.h"
@@ -111,14 +113,7 @@ int main(void)
     ccsocket_t s = ccsocket(CC_INET4, CC_TCP);
     if (s == INVALID_SOCKET) return 1;
 
-    /* Bind to an address without listening (e.g. for UDP/ICMP). */
-    if (!ccsocket_bind(s, "127.0.0.1", 8080)) {
-        ccsocket_close(s);
-        return 1;
-    }
-
-    /* Now start listening (TCP-only; skip bind() for UDP/ICMP). */
-    if (!ccsocket_listen(s, NULL, 0)) {
+    if (!ccsocket_listen(s, "127.0.0.1", 8080)) {
         ccsocket_close(s);
         return 1;
     }
@@ -138,6 +133,37 @@ int main(void)
     }
 
     ccsocket_close(client);
+    ccsocket_close(s);
+    return 0;
+}
+```
+
+### Minimal Example: UDP Listener (bind-only)
+
+For UDP or ICMP, use `ccsocket_bind()` directly — no listen needed:
+
+```c
+#include "ccsocket.h"
+#include <stdio.h>
+
+int main(void)
+{
+    ccsocket_t s = ccsocket(CC_INET4, CC_UDP);
+    if (s == INVALID_SOCKET) return 1;
+
+    if (!ccsocket_bind(s, "127.0.0.1", 8080)) {
+        ccsocket_close(s);
+        return 1;
+    }
+
+    char buf[256];
+    int recved;
+    ccsocket_stcode_t r = ccsocket_recvfrom(s, buf, sizeof(buf) - 1, NULL, NULL, &recved);
+    if (r == CC_OPCODE_OK) {
+        buf[recved] = '\0';
+        printf("Received: %s\n", buf);
+    }
+
     ccsocket_close(s);
     return 0;
 }
