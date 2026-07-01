@@ -30,7 +30,7 @@
   #include <netinet/ip_icmp.h>
   #include <netinet/icmp6.h>
   #define cc_alloca __builtin_alloca   /* GCC/Clang builtin, no header needed */
-  #if defined(__FreeBSD__) || defined(__APPLE__)
+  #if defined(__FreeBSD__) || (defined(__APPLE__) && defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__))
     #include <netinet/icmp_var.h>
   #endif
 #endif
