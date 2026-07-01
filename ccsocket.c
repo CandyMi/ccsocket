@@ -316,13 +316,13 @@ int _ccsocket_set_flags(ccsocket_t s, ccsocket_flags_t flags, bool on)
     int cur = fcntl(s, F_GETFD);
     if (cur == -1) return r;
     r = fcntl(s, F_SETFD, on ? (cur | FD_CLOEXEC) : (cur & ~FD_CLOEXEC));
-    if (r) return r;
+    if (r) return SOCKET_ERROR;
   }
   if (flags & CC_NONBLOCK) {
     int cur = fcntl(s, F_GETFL);
     if (cur == -1) return r;
     r = fcntl(s, F_SETFL, on ? (cur | O_NONBLOCK) : (cur & ~O_NONBLOCK));
-    if (r) return r;
+    if (r) return SOCKET_ERROR;
   }
 #endif
   return r;
@@ -597,7 +597,7 @@ bool ccsocket_listen1(ccsocket_t s, const char *ip, uint16_t port, int backlog)
 int ccsocket_pipe(ccsocket_t sv[2])
 {
   bool ok = ccsocketpair(sv, CC_NOFLAG);
-  if (!ok) return INVALID_SOCKET;
+  if (!ok) return SOCKET_ERROR;
 #if _WIN32
   shutdown(sv[0], SD_SEND);
   shutdown(sv[1], SD_RECEIVE);
