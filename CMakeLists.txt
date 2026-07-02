@@ -54,14 +54,14 @@ endif()
 
 # -- Sources ------------------------------------------------------------------
 set(CCSOCKET_SOURCES
-  ccsocket.c
-  ccicmp.c
-  ccdns.c
+  src/ccsocket.c
+  src/ccicmp.c
+  src/ccdns.c
 )
 set(CCSOCKET_HEADERS
-  ccsocket.h
-  ccicmp.h
-  ccdns.h
+  include/ccsocket.h
+  include/ccicmp.h
+  include/ccdns.h
 )
 
 # -- Object library (compiled once with PIC) ----------------------------------
@@ -69,7 +69,7 @@ add_library(ccsocket_obj OBJECT ${CCSOCKET_SOURCES} ${CCSOCKET_HEADERS})
 
 target_include_directories(ccsocket_obj
   PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
 

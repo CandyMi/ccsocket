@@ -38,12 +38,14 @@ This file follows the [AGENTS.md specification](https://agents.md/).
 ```
 .
 ├── CMakeLists.txt      # Root build system — CMake 3.0+, C99 standard
-├── ccsocket.h          # Public API header — types, enums, macros, exported function declarations
-├── ccsocket.c          # Implementation — ~1747 lines, all platform backends in one translation unit
-├── ccicmp.h            # Public API header — ICMP context struct, function declarations
-├── ccicmp.c            # Implementation — ~428 lines, ICMP echo/response logic (TTL via CMSG)
-├── ccdns.h             # Public API header — DNS client context, function declarations
-├── ccdns.c             # Implementation — ~374 lines, DNS wire-format encode/decode (RFC 1035), TCP mode (RFC 1035 §4.2.2), TXT (RFC 1035 §3.3), MX (RFC 1035 §3.3.9)
+├── include/            # Public API headers
+│   ├── ccsocket.h      # Cross-platform socket API — types, enums, macros, exported functions
+│   ├── ccicmp.h        # ICMP echo (ping) — context struct, function declarations
+│   └── ccdns.h         # DNS client — context, function declarations
+├── src/                # Implementation sources
+│   ├── ccsocket.c      # ~1747 lines, all platform backends in one translation unit
+│   ├── ccicmp.c        # ~428 lines, ICMP echo/response logic (TTL via CMSG)
+│   └── ccdns.c         # ~374 lines, DNS wire-format encode/decode (RFC 1035)
 ├── cmake/              # CMake package config templates
 │   └── ccsocketConfig.cmake.in
 ├── httpc.txt           # Sample HTTP/1.1 request payload (test fixture)

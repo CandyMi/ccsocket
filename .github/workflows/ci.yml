@@ -56,8 +56,8 @@ jobs:
       # --- C++ smoke: compile library .c files as C++ ---
       - name: C++ smoke — compile+link as C++
         run: |
-          g++ -std=c++11 -I. -o /tmp/cxx_smoke \
-            -x c++ ccsocket.c ccicmp.c ccdns.c \
+          g++ -std=c++11 -I./include -o /tmp/cxx_smoke \
+            -x c++ src/ccsocket.c src/ccicmp.c src/ccdns.c \
             -x c++ - <<'PLAINTEXT'
             #include "ccsocket.h"
             #include "ccicmp.h"
@@ -72,7 +72,7 @@ jobs:
       # --- C++ smoke: header-only inclusion check ---
       - name: C++ smoke — header-only inclusion
         run: |
-          g++ -std=c++11 -I. -o /tmp/cxx_include_check \
+          g++ -std=c++11 -I./include -o /tmp/cxx_include_check \
             -x c++ - <<'PLAINTEXT'
             #include "ccsocket.h"
             #include "ccicmp.h"
@@ -106,8 +106,8 @@ jobs:
       # --- C++ smoke ---
       - name: C++ smoke — compile+link as C++
         run: |
-          clang++ -std=c++11 -I. -o /tmp/cxx_smoke \
-            -x c++ ccsocket.c ccicmp.c ccdns.c \
+          clang++ -std=c++11 -I./include -o /tmp/cxx_smoke \
+            -x c++ src/ccsocket.c src/ccicmp.c src/ccdns.c \
             -x c++ - <<'PLAINTEXT'
             #include "ccsocket.h"
             #include "ccicmp.h"
@@ -121,7 +121,7 @@ jobs:
 
       - name: C++ smoke — header-only inclusion
         run: |
-          clang++ -std=c++11 -I. -o /tmp/cxx_include_check \
+          clang++ -std=c++11 -I./include -o /tmp/cxx_include_check \
             -x c++ - <<'PLAINTEXT'
             #include "ccsocket.h"
             #include "ccicmp.h"
@@ -160,8 +160,8 @@ jobs:
       # --- C++ smoke (32-bit) ---
       - name: C++ smoke — compile+link as C++
         run: |
-          g++ -m32 -std=c++11 -I. -o /tmp/cxx_smoke \
-            -x c++ ccsocket.c ccicmp.c ccdns.c \
+          g++ -m32 -std=c++11 -I./include -o /tmp/cxx_smoke \
+            -x c++ src/ccsocket.c src/ccicmp.c src/ccdns.c \
             -x c++ - <<'PLAINTEXT'
             #include "ccsocket.h"
             #include "ccicmp.h"
@@ -175,7 +175,7 @@ jobs:
 
       - name: C++ smoke — header-only inclusion
         run: |
-          g++ -m32 -std=c++11 -I. -o /tmp/cxx_include_check \
+          g++ -m32 -std=c++11 -I./include -o /tmp/cxx_include_check \
             -x c++ - <<'PLAINTEXT'
             #include "ccsocket.h"
             #include "ccicmp.h"
@@ -216,7 +216,7 @@ jobs:
               sed -i 's|^mirrorlist=|#mirrorlist=|' /etc/yum.repos.d/*.repo &&
               yum install -y -q epel-release &&
               yum install -y -q cmake3 gcc gcc-c++ make &&
-              g++ -std=c++11 -I. -o /tmp/cxx_smoke -x c++ ccsocket.c ccicmp.c ccdns.c tests/test_ccsocket_cxx_embed.cpp
+              g++ -std=c++11 -I./include -o /tmp/cxx_smoke -x c++ src/ccsocket.c src/ccicmp.c src/ccdns.c tests/test_ccsocket_cxx_embed.cpp
             "
 
       - name: C++ smoke - header-only inclusion
@@ -228,7 +228,7 @@ jobs:
               sed -i 's|^mirrorlist=|#mirrorlist=|' /etc/yum.repos.d/*.repo &&
               yum install -y -q epel-release &&
               yum install -y -q cmake3 gcc gcc-c++ make &&
-              g++ -std=c++11 -I. -c -o /tmp/cxx_include_check.o tests/test_ccsocket_cxx_embed.cpp
+              g++ -std=c++11 -I./include -c -o /tmp/cxx_include_check.o tests/test_ccsocket_cxx_embed.cpp
             "
 
   # ==================================================================
@@ -256,8 +256,8 @@ jobs:
       # --- C++ smoke ---
       - name: C++ smoke — compile+link as C++
         run: |
-          clang++ -std=c++11 -I. -o /tmp/cxx_smoke \
-            -x c++ ccsocket.c ccicmp.c ccdns.c \
+          clang++ -std=c++11 -I./include -o /tmp/cxx_smoke \
+            -x c++ src/ccsocket.c src/ccicmp.c src/ccdns.c \
             -x c++ - <<'PLAINTEXT'
             #include "ccsocket.h"
             #include "ccicmp.h"
@@ -271,7 +271,7 @@ jobs:
 
       - name: C++ smoke — header-only inclusion
         run: |
-          clang++ -std=c++11 -I. -o /tmp/cxx_include_check \
+          clang++ -std=c++11 -I./include -o /tmp/cxx_include_check \
             -x c++ - <<'PLAINTEXT'
             #include "ccsocket.h"
             #include "ccicmp.h"
@@ -373,8 +373,8 @@ jobs:
       # --- C++ smoke ---
       - name: C++ smoke — compile+link as C++
         run: |
-          g++ -std=c++11 -I. -o /tmp/cxx_smoke \
-            -x c++ ccsocket.c ccicmp.c ccdns.c -lws2_32 \
+          g++ -std=c++11 -I./include -o /tmp/cxx_smoke \
+            -x c++ src/ccsocket.c src/ccicmp.c src/ccdns.c -lws2_32 \
             -x c++ - <<'PLAINTEXT'
             #include "ccsocket.h"
             #include "ccicmp.h"
@@ -388,7 +388,7 @@ jobs:
 
       - name: C++ smoke — header-only inclusion
         run: |
-          g++ -std=c++11 -I. -o /tmp/cxx_include_check \
+          g++ -std=c++11 -I./include -o /tmp/cxx_include_check \
             -x c++ - <<'PLAINTEXT'
             #include "ccsocket.h"
             #include "ccicmp.h"
@@ -437,8 +437,8 @@ jobs:
       # --- C++ smoke ---
       - name: C++ smoke — compile+link as C++
         run: |
-          g++ -std=c++11 -I. -o /tmp/cxx_smoke \
-            -x c++ ccsocket.c ccicmp.c ccdns.c -lws2_32 \
+          g++ -std=c++11 -I./include -o /tmp/cxx_smoke \
+            -x c++ src/ccsocket.c src/ccicmp.c src/ccdns.c -lws2_32 \
             -x c++ - <<'PLAINTEXT'
             #include "ccsocket.h"
             #include "ccicmp.h"
@@ -452,7 +452,7 @@ jobs:
 
       - name: C++ smoke — header-only inclusion
         run: |
-          g++ -std=c++11 -I. -o /tmp/cxx_include_check \
+          g++ -std=c++11 -I./include -o /tmp/cxx_include_check \
             -x c++ - <<'PLAINTEXT'
             #include "ccsocket.h"
             #include "ccicmp.h"

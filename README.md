@@ -247,15 +247,18 @@ ctest --test-dir build -R ccsocket/tcp -V
 ```
 .
 ├── CMakeLists.txt      # Build system — CMake 3.0+, C99
-├── ccsocket.h          # Public API — types, enums, function declarations
-├── ccsocket.c          # Core socket implementation (~1747 lines)
-├── ccicmp.h            # ICMP ping public API
-├── ccicmp.c            # ICMP echo/response implementation (~428 lines)
-├── ccdns.h             # DNS client public API
-├── ccdns.c             # DNS client encode/decode (~374 lines)
+├── include/            # Public API headers
+│   ├── ccsocket.h      # Cross-platform socket API
+│   ├── ccicmp.h        # ICMP echo (ping) API
+│   └── ccdns.h         # DNS client API
+├── src/                # Implementation sources
+│   ├── ccsocket.c      # Core socket implementation (~1747 lines)
+│   ├── ccicmp.c        # ICMP echo/response logic (~428 lines)
+│   └── ccdns.c         # DNS encode/decode (~374 lines)
 ├── httpc.txt           # Sample HTTP/1.1 request (test fixture)
 ├── LICENSE             # MIT license
 ├── .gitignore          # Build artifacts
+├── Doxyfile.in         # Doxygen config template
 ├── tests/              # Test suite (CTest, 17 tests)
 │   ├── CMakeLists.txt
 │   ├── test_ccsocket_smoke.c
