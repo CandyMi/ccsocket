@@ -29,7 +29,7 @@ This file follows the [AGENTS.md specification](https://agents.md/).
 
 `ccicmp` is a thin ICMP echo ("ping") library built on top of `libccsocket`. It supports both IPv4 and IPv6, timestamp-based RTT measurement, configurable payloads, and TTL extraction.
 
-`ccdns` is a DNS wire-format client (RFC 1035) built on top of `libccsocket`. It supports A/AAAA/CNAME/TXT/MX queries, EDNS, TCP mode, and DNS-over-UDP.
+`ccdns` is a DNS wire-format client (RFC 1035) built on top of `libccsocket`. It supports A/AAAA/CNAME/TXT/MX queries, EDNS (including Client Subnet, RFC 7871), TCP mode, and DNS-over-UDP.
 
 ---
 

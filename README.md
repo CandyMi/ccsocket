@@ -8,14 +8,14 @@ A lightweight, portable C library that provides a unified API for network and in
 
 Included sub-modules:
 - **ccicmp** — portable ICMP echo ("ping") library with IPv4/IPv6 support and timestamp-based RTT measurement.
-- **ccdns** — DNS wire-format client (RFC 1035) with A/AAAA/CNAME/TXT/MX queries, EDNS, and TCP mode.
+- **ccdns** — DNS wire-format client (RFC 1035) with A/AAAA/CNAME/TXT/MX queries, EDNS (including Client Subnet, RFC 7871), and TCP mode.
 
 ---
 
 ## Features
 
 - **TCP, UDP, ICMP, Unix Domain Sockets** — single API, multiple protocols
-- **DNS client (A/AAAA/TXT/MX/CNAME)** — built-in resolver with TCP mode, EDNS, multi-NS retry
+- **DNS client (A/AAAA/TXT/MX/CNAME)** — built-in resolver with TCP mode, EDNS (including Client Subnet), multi-NS retry
 - **Cross-platform** — Linux, macOS, FreeBSD, Solaris, AIX, Windows
 - **Zero-copy file transfer** — `sendfile()` on supported kernels, transparent fallback elsewhere
 - **Scatter/gather I/O** — `iovec`-based send/recv with platform-safe accessor macros
@@ -230,7 +230,7 @@ ctest --test-dir build -R ccsocket/tcp -V
 | `ccsocket/msg` | **recvmsg/sendmsg**: CMSG macros, sendto/recvfrom, TCP socketpair round-trip |
 | `ccsocket/http` | **HTTP text protocol**: request/response with `httpc.txt` |
 | `ccicmp/ping` | **ICMP (IPv4 + IPv6)**: RFC 1071 / RFC 4443 checksum, packet layout, lifecycle |
-| `ccdns/test` | **DNS**: query encode, response decode (A/AAAA/CNAME/TXT/MX), compression ptr, TCP mode |
+| `ccdns/test` | **DNS**: query encode, response decode (A/AAAA/CNAME/TXT/MX), compression ptr, TCP mode, ECS (RFC 7871) |
 | `ccsocket/family` | **Family/protocol**: enum boundary values, get_family, get_protocol |
 | `ccsocket/ipv6` | **IPv6 loopback**: TCP + UDP over "::1" |
 | `ccsocket/error` | **Error paths**: INVALID_SOCKET, NULL params, edge cases across all APIs |
