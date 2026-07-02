@@ -1326,6 +1326,12 @@ ccsocket_family_t ccsocket_get_version(const char *addr)
   family = ccsocket_get_addrbytes(addr, buf);
   if (family == CC_INET4 || family == CC_INET6)
     return family;
+  /* also check for Unix domain sockets */
+#if !defined(_WIN32)
+  struct stat st;
+  if (!stat(addr, &st) && S_ISSOCK(st.st_mode))
+    return CC_UNIX;
+#endif
   ccsocket_set_errno(EINVAL);
   return CC_FAMILY_INVALID;
 }

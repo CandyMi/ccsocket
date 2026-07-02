@@ -95,6 +95,10 @@ typedef struct ccdns_ans {
  *
  * When tcp is true, ccdns_encode() prepends a 2-byte length
  * prefix (RFC 1035 §4.2.2) and ccdns_decode() skips it.
+ *
+ * When ecs is true, ccdns_encode() embeds an EDNS Client Subnet
+ * option (RFC 7871) in the OPT pseudo-record.  The ecs_family /
+ * ecs_mask / ecs_addr fields specify the client prefix.
  */
 typedef struct ccdns_t {
     uint16_t no;           /**< Next query identifier (never 0 while active). */
@@ -203,7 +207,8 @@ CCDNS_EXPORT void ccdns_set_tcp(struct ccdns_t *ctx, bool enable);
  * @param ctx     Initialised ccdns_t context.
  * @param buf     Output buffer for the wire-format message.
  * @param buflen  Capacity of buf (recommend CCDNS_MAX_MSG when EDNS
- *                is disabled, up to 65535 with EDNS).
+ *                is disabled, up to 65535 with EDNS;
+ *                ECS may add up to 28 bytes).
  * @param domain  Query domain name (e.g. "example.com").
  * @param qtype   Query record type (CCDNS_A / CCDNS_AAAA / etc.).
  * @return The encoded message length on success, 0 on failure.
