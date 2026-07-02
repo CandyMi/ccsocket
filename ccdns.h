@@ -102,6 +102,11 @@ typedef struct ccdns_t {
     uint16_t edns_payload; /**< EDNS UDP payload size (0 = disabled). */
     uint8_t  edns_flags;   /**< EDNS flags (e.g. 0x80 for DO bit). */
     bool     tcp;          /**< TCP mode: encode/decode with 2-byte length prefix. */
+    /* EDNS Client Subnet (ECS, RFC 7871) */
+    bool     ecs;          /**< ECS enabled. */
+    uint8_t  ecs_family;   /**< Address family: 1=IPv4, 2=IPv6. */
+    uint8_t  ecs_mask;     /**< Source prefix length (0-32 v4 / 0-128 v6). */
+    uint8_t  ecs_addr[16]; /**< Prefix bytes (4 for v4, 16 for v6). */
 } ccdns_t;
 
 /* ---- Callback ------------------------------------------------------------ */
@@ -152,6 +157,27 @@ CCDNS_EXPORT void ccdns_close(struct ccdns_t *ctx);
  */
 CCDNS_EXPORT void ccdns_set_edns(struct ccdns_t *ctx,
                                      uint16_t payload, uint8_t flags);
+
+/**
+ * @brief Set EDNS Client Subnet (ECS, RFC 7871).
+ *
+ * When set, ccdns_encode() embeds an EDNS0 option (code 0x0008) in
+ * the OPT pseudo-record, signalling the authoritative server to
+ * tailor its response based on the client subnet.
+ *
+ * Call this after ccdns_init() and before ccdns_encode().
+ * Pass addr=NULL to disable ECS without affecting other EDNS settings.
+ *
+ * @param ctx   Initialised ccdns_t context.
+ * @param addr  Client address string (e.g. "1.2.3.0", "2001:db8::").
+ *              NULL or empty disables ECS.
+ * @param mask  Source prefix length (0-32 for IPv4, 0-128 for IPv6).
+ * @return true  on success.
+ *         false on parse error or invalid mask (ECS disabled).
+ */
+CCDNS_EXPORT bool ccdns_set_edns_client_subnet(struct ccdns_t *ctx,
+                                                const char *addr,
+                                                uint8_t mask);
 
 /**
  * @brief Enable or disable TCP mode (RFC 1035 §4.2.2).

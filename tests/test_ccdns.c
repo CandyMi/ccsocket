@@ -666,6 +666,309 @@ static void test_mx_decode_multi(void)
 }
 
 /* ====================================================================
+ * Tier 14 — ECS IPv4 encode (RFC 7871)
+ * ==================================================================== */
+
+static void test_ecs_encode_v4(void)
+{
+    struct ccdns_t ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    assert(ccdns_init(&ctx));
+
+    /* Enable EDNS + ECS with IPv4 /24 */
+    ccdns_set_edns(&ctx, 4096, 0);
+    assert(ccdns_set_edns_client_subnet(&ctx, "1.2.3.0", 24));
+
+    uint8_t buf[CCDNS_MAX_MSG];
+    uint16_t n = ccdns_encode(&ctx, buf, sizeof(buf), "example.com", CCDNS_A);
+    assert(n > 0);
+
+    /* ARCOUNT = 1 (OPT in additional section) */
+    assert(buf[10] == 0 && buf[11] == 1);
+
+    /* Question: 7example3com0 */
+    assert(buf[12] == 7);
+    assert(memcmp(buf + 13, "example", 7) == 0);
+    assert(buf[20] == 3);
+    assert(memcmp(buf + 21, "com", 3) == 0);
+    assert(buf[24] == 0);
+    /* QTYPE = A, QCLASS = IN */
+    assert(buf[25] == 0 && buf[26] == 1);
+    assert(buf[27] == 0 && buf[28] == 1);
+
+    /* ---- OPT pseudo-record starts at offset 29 ---- */
+    /* NAME = root */
+    assert(buf[29] == 0x00);
+    /* TYPE = OPT(41) = 0x0029 */
+    assert(buf[30] == 0x00 && buf[31] == 0x29);
+    /* CLASS = payload size 4096 = 0x1000 */
+    assert(buf[32] == 0x10 && buf[33] == 0x00);
+    /* TTL = [0, 0, flags=0, 0] */
+    assert(buf[34] == 0 && buf[35] == 0);
+    assert(buf[36] == 0 && buf[37] == 0);
+    /* RDLENGTH = 12 (ECS option: 4 header + 8 body) */
+    assert(buf[38] == 0 && buf[39] == 12);
+
+    /* ---- ECS option (RFC 7871) ---- */
+    /* OPTION-CODE = 8 */
+    assert(buf[40] == 0 && buf[41] == 8);
+    /* OPTION-LENGTH = 8 (2 fam + 1 src + 1 scope + 4 addr) */
+    assert(buf[42] == 0 && buf[43] == 8);
+    /* FAMILY = 1 (IPv4) */
+    assert(buf[44] == 0 && buf[45] == 1);
+    /* SOURCE PREFIX-LENGTH = 24 */
+    assert(buf[46] == 24);
+    /* SCOPE PREFIX-LENGTH = 0 */
+    assert(buf[47] == 0);
+    /* ADDRESS = 1.2.3.0 (3 bytes + 1 pad to even) */
+    assert(buf[48] == 1 && buf[49] == 2 && buf[50] == 3);
+    assert(buf[51] == 0);  /* pad to even boundary */
+
+    /* Total message: 12 hdr + 13 QNAME + 4 qt/qc + 11 OPT + 12 ECS = 52 */
+    assert(n == 52);
+
+    ccdns_close(&ctx);
+}
+
+/* ====================================================================
+ * Tier 15 — ECS IPv6 encode
+ * ==================================================================== */
+
+static void test_ecs_encode_v6(void)
+{
+    struct ccdns_t ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    assert(ccdns_init(&ctx));
+
+    ccdns_set_edns(&ctx, 4096, 0);
+    assert(ccdns_set_edns_client_subnet(&ctx, "2001:db8::", 32));
+
+    uint8_t buf[CCDNS_MAX_MSG];
+    uint16_t n = ccdns_encode(&ctx, buf, sizeof(buf), "example.com", CCDNS_AAAA);
+    assert(n > 0);
+
+    /* ARCOUNT = 1 */
+    assert(buf[10] == 0 && buf[11] == 1);
+
+    /* OPT at 29, skip to ECS option bytes */
+    assert(buf[38] == 0 && buf[39] == 12);   /* RDLENGTH = 12 */
+    assert(buf[40] == 0 && buf[41] == 8);    /* CODE = 8 */
+    assert(buf[42] == 0 && buf[43] == 8);    /* OPTION-LENGTH = 8 */
+    assert(buf[44] == 0 && buf[45] == 2);    /* FAMILY = 2 (IPv6) */
+    assert(buf[46] == 32);                     /* SOURCE PREFIX-LENGTH = 32 */
+    assert(buf[47] == 0);                      /* SCOPE = 0 */
+    /* ADDRESS: 2001:db8:: = 20 01 0d b8 (4 bytes, already even) */
+    assert(buf[48] == 0x20 && buf[49] == 0x01);
+    assert(buf[50] == 0x0d && buf[51] == 0xb8);
+
+    assert(n == 52);
+
+    ccdns_close(&ctx);
+}
+
+/* ====================================================================
+ * Tier 16 — ECS + TCP mode
+ * ==================================================================== */
+
+static void test_ecs_tcp(void)
+{
+    struct ccdns_t ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    assert(ccdns_init(&ctx));
+
+    ccdns_set_edns(&ctx, 4096, 0);
+    assert(ccdns_set_edns_client_subnet(&ctx, "10.0.0.0", 24));
+    ccdns_set_tcp(&ctx, true);
+
+    uint8_t buf[CCDNS_MAX_MSG];
+    uint16_t n = ccdns_encode(&ctx, buf, sizeof(buf), "example.com", CCDNS_A);
+    assert(n > 0);
+
+    /* TCP 2-byte length prefix (body = 52 as with /24) */
+    assert(buf[0] == 0 && buf[1] == 52);
+
+    /* DNS message starts at offset 2. ARCOUNT=1 at off+10, off+11 */
+    assert(buf[12] == 0 && buf[13] == 1);
+
+    /* OPT shifted +2 relative to UDP → ECS CODE at pos+11 */
+    assert(buf[42] == 0 && buf[43] == 8);    /* OPTION-CODE = 8 */
+    assert(buf[46] == 0 && buf[47] == 1);    /* FAMILY = 1 (IPv4) */
+    assert(buf[48] == 24);                     /* SOURCE PREFIX-LENGTH = 24 */
+    assert(buf[49] == 0);                      /* SCOPE = 0 */
+    assert(buf[50] == 10);                     /* ADDRESS byte 0 = 10 */
+
+    assert(n == 54);  /* 52 body + 2 TCP prefix */
+
+    ccdns_close(&ctx);
+}
+
+/* ====================================================================
+ * Tier 17 — ECS disable via NULL addr
+ * ==================================================================== */
+
+static void test_ecs_disable(void)
+{
+    struct ccdns_t ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    assert(ccdns_init(&ctx));
+
+    ccdns_set_edns(&ctx, 4096, 0);
+    assert(ccdns_set_edns_client_subnet(&ctx, "1.2.3.0", 24));
+    /* Disable with NULL */
+    assert(ccdns_set_edns_client_subnet(&ctx, NULL, 0));
+    assert(!ctx.ecs);
+
+    uint8_t buf[CCDNS_MAX_MSG];
+    uint16_t n = ccdns_encode(&ctx, buf, sizeof(buf), "example.com", CCDNS_A);
+    assert(n > 0);
+
+    /* RDLENGTH = 0 (no ECS RDATA) */
+    assert(buf[38] == 0 && buf[39] == 0);
+    assert(n == 40);  /* 12 hdr + 13 QNAME + 4 qt/qc + 11 OPT = 40 */
+
+    ccdns_close(&ctx);
+}
+
+/* ====================================================================
+ * Tier 18 — ECS IPv4 /16 (even address boundary, no pad byte)
+ * ==================================================================== */
+
+static void test_ecs_v4_even(void)
+{
+    struct ccdns_t ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    assert(ccdns_init(&ctx));
+    ccdns_set_edns(&ctx, 4096, 0);
+    assert(ccdns_set_edns_client_subnet(&ctx, "10.0.0.0", 16));
+
+    uint8_t buf[CCDNS_MAX_MSG];
+    uint16_t n = ccdns_encode(&ctx, buf, sizeof(buf), "example.com", CCDNS_A);
+    assert(n > 0);
+
+    /* /16 → pbytes=2, ppad=2 (already even), ecs_body=6, rdlen=10,
+     * OPT total=21, msg total=12+13+4+21=50 */
+    assert(buf[38] == 0 && buf[39] == 10);  /* RDLENGTH = 10 */
+    assert(buf[42] == 0 && buf[43] == 6);   /* OPTION-LENGTH = 6 */
+    assert(buf[46] == 16);                   /* mask = 16 */
+    assert(buf[48] == 10 && buf[49] == 0);   /* addr = 10.0, 2 bytes, no pad */
+    assert(n == 50);
+
+    ccdns_close(&ctx);
+}
+
+/* ====================================================================
+ * Tier 19 — ECS IPv4 /32 (full address, no truncation)
+ * ==================================================================== */
+
+static void test_ecs_v4_full(void)
+{
+    struct ccdns_t ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    assert(ccdns_init(&ctx));
+    ccdns_set_edns(&ctx, 4096, 0);
+    assert(ccdns_set_edns_client_subnet(&ctx, "203.0.113.42", 32));
+
+    uint8_t buf[CCDNS_MAX_MSG];
+    uint16_t n = ccdns_encode(&ctx, buf, sizeof(buf), "example.com", CCDNS_A);
+    assert(n > 0);
+
+    /* /32 → pbytes=4, ppad=4 (even), same sizes as /24 */
+    assert(buf[38] == 0 && buf[39] == 12);  /* RDLENGTH = 12 */
+    assert(buf[46] == 32);                   /* mask = 32 */
+    /* full address preserved, not truncated */
+    assert(buf[48] == 203 && buf[49] == 0);
+    assert(buf[50] == 113 && buf[51] == 42);
+    assert(n == 52);
+
+    ccdns_close(&ctx);
+}
+
+/* ====================================================================
+ * Tier 20 — ECS mask=0 (zero prefix bytes)
+ * ==================================================================== */
+
+static void test_ecs_mask_zero(void)
+{
+    struct ccdns_t ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    assert(ccdns_init(&ctx));
+    ccdns_set_edns(&ctx, 4096, 0);
+    assert(ccdns_set_edns_client_subnet(&ctx, "1.2.3.4", 0));
+
+    uint8_t buf[CCDNS_MAX_MSG];
+    uint16_t n = ccdns_encode(&ctx, buf, sizeof(buf), "example.com", CCDNS_A);
+    assert(n > 0);
+
+    /* mask=0 → pbytes=0, ppad=0, ecs_body=4, rdlen=8,
+     * OPT total=19, msg total=12+13+4+19=48 */
+    assert(buf[38] == 0 && buf[39] == 8);   /* RDLENGTH = 8 */
+    assert(buf[42] == 0 && buf[43] == 4);   /* OPTION-LENGTH = 4 (fam+src+scope, no addr) */
+    assert(buf[46] == 0);                    /* mask = 0 */
+    assert(n == 48);
+
+    ccdns_close(&ctx);
+}
+
+/* ====================================================================
+ * Tier 21 — ECS invalid mask / invalid address
+ * ==================================================================== */
+
+static void test_ecs_invalid(void)
+{
+    struct ccdns_t ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    assert(ccdns_init(&ctx));
+    ccdns_set_edns(&ctx, 4096, 0);
+
+    /* mask out of range */
+    assert(!ccdns_set_edns_client_subnet(&ctx, "1.2.3.0", 33));   /* IPv4 > 32 */
+    assert(!ccdns_set_edns_client_subnet(&ctx, "::1", 129));      /* IPv6 > 128 */
+
+    /* invalid address string */
+    assert(!ccdns_set_edns_client_subnet(&ctx, "not-an-ip", 24));
+    assert(!ccdns_set_edns_client_subnet(&ctx, "256.1.1.1", 24));
+
+    /* empty string disables (same as NULL) */
+    assert(ccdns_set_edns_client_subnet(&ctx, "", 0));
+    assert(!ctx.ecs);
+
+    ccdns_close(&ctx);
+}
+
+/* ====================================================================
+ * Tier 22 — ECS IPv6 loopback /64 (leading ::)
+ * ==================================================================== */
+
+static void test_ecs_v6_loopback(void)
+{
+    struct ccdns_t ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    assert(ccdns_init(&ctx));
+    ccdns_set_edns(&ctx, 4096, 0);
+    assert(ccdns_set_edns_client_subnet(&ctx, "::1", 64));
+
+    uint8_t buf[CCDNS_MAX_MSG];
+    uint16_t n = ccdns_encode(&ctx, buf, sizeof(buf), "example.com", CCDNS_AAAA);
+    assert(n > 0);
+
+    /* /64 → pbytes=8, ppad=8 (even), ecs_body=12, rdlen=16,
+     * OPT total=27, msg total=12+13+4+27=56 */
+    assert(buf[38] == 0 && buf[39] == 16);  /* RDLENGTH = 16 */
+    assert(buf[42] == 0 && buf[43] == 12);  /* OPTION-LENGTH = 12 */
+    assert(buf[44] == 0 && buf[45] == 2);   /* FAMILY = 2 (IPv6) */
+    assert(buf[46] == 64);                   /* mask = 64 */
+    /* ::1 → prefix bytes: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+     * keep=8 → first 8 bytes are all zero */
+    assert(buf[48] == 0 && buf[49] == 0);
+    assert(buf[50] == 0 && buf[51] == 0);
+    assert(buf[52] == 0 && buf[53] == 0);
+    assert(buf[54] == 0 && buf[55] == 0);
+    assert(n == 56);
+
+    ccdns_close(&ctx);
+}
+
+/* ====================================================================
  * Main
  * ==================================================================== */
 
@@ -685,5 +988,14 @@ int main(void)
     test_mx_encode();
     test_mx_decode_single();
     test_mx_decode_multi();
+    test_ecs_encode_v4();
+    test_ecs_encode_v6();
+    test_ecs_tcp();
+    test_ecs_disable();
+    test_ecs_v4_even();
+    test_ecs_v4_full();
+    test_ecs_mask_zero();
+    test_ecs_invalid();
+    test_ecs_v6_loopback();
     return 0;
 }

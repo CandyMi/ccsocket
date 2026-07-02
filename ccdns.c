@@ -18,6 +18,7 @@
   #define ccdns_snprintf snprintf
 #endif
 
+#include "ccsocket.h"
 #include "ccdns.h"
 
 /* ---- DNS Header Offsets (RFC 1035 §4.1.1) -------------------------------- */
@@ -131,6 +132,10 @@ bool ccdns_init(struct ccdns_t *ctx)
     ctx->edns_payload = 0;
     ctx->edns_flags = 0;
     ctx->tcp = false;
+    ctx->ecs = false;
+    ctx->ecs_family = 0;
+    ctx->ecs_mask = 0;
+    memset(ctx->ecs_addr, 0, sizeof(ctx->ecs_addr));
     return true;
 }
 
@@ -143,6 +148,10 @@ void ccdns_close(struct ccdns_t *ctx)
     ctx->edns_payload = 0;
     ctx->edns_flags = 0;
     ctx->tcp = false;
+    ctx->ecs = false;
+    ctx->ecs_family = 0;
+    ctx->ecs_mask = 0;
+    memset(ctx->ecs_addr, 0, sizeof(ctx->ecs_addr));
 }
 
 void ccdns_set_edns(struct ccdns_t *ctx, uint16_t payload, uint8_t flags)
@@ -156,6 +165,46 @@ void ccdns_set_tcp(struct ccdns_t *ctx, bool enable)
 {
     if (!ctx) return;
     ctx->tcp = enable;
+}
+
+bool ccdns_set_edns_client_subnet(struct ccdns_t *ctx,
+                                   const char *addr,
+                                   uint8_t mask)
+{
+    if (!ctx) return false;
+
+    /* NULL or empty — disable ECS */
+    if (!addr || !*addr) {
+        ctx->ecs = false;
+        return true;
+    }
+
+    /* Get raw address bytes via ccsocket (reuses inet_pton/WSAStringToAddress) */
+    uint8_t full[16];
+    switch (ccsocket_get_addrbytes(addr, full)) 
+    {
+        case CC_INET4:
+            if (mask > 32) return false;
+            ctx->ecs_family = 1;
+            ctx->ecs_mask = mask;
+            break;
+        case CC_INET6:
+            if (mask > 128) return false;
+            ctx->ecs_family = 2;
+            ctx->ecs_mask = mask;
+            break;
+        default:
+            return false;
+    }
+
+    {
+        uint8_t keep = (ctx->ecs_mask + 7) / 8;
+        uint8_t addrlen = ctx->ecs_family == 1 ? 4 : 16;
+        memcpy(ctx->ecs_addr, full, keep);
+        if (keep < addrlen) memset(ctx->ecs_addr + keep, 0, addrlen - keep);
+        ctx->ecs = true;
+    }
+    return true;
 }
 
 uint16_t ccdns_encode(struct ccdns_t *ctx,
@@ -203,18 +252,49 @@ uint16_t ccdns_encode(struct ccdns_t *ctx,
 
     /* ---- OPT Pseudo-Record (EDNS, RFC 6891) ---- */
     if (ctx->edns_payload > 0) {
-        buf[off + DNS_HDR_ADCNT + 1] = 1; // EDNS add count must > 0;        
+        buf[off + DNS_HDR_ADCNT]     = 0;           /* ARCOUNT high byte */
+        buf[off + DNS_HDR_ADCNT + 1] = 1;           /* ARCOUNT = 1 (OPT in additional section) */
         if (pos + 11 > buflen) return 0;
-        buf[pos]     = 0x00;                       /* NAME = root */
-        buf[pos + 1] = 0x00; buf[pos + 2] = 0x29;  /* TYPE = OPT(41) */
+        buf[pos]     = 0x00;                        /* NAME = root */
+        buf[pos + 1] = 0x00; buf[pos + 2] = 0x29;   /* TYPE = OPT(41) */
         buf[pos + 3] = (uint8_t)(ctx->edns_payload >> 8);
         buf[pos + 4] = (uint8_t)(ctx->edns_payload & 0xFF);  /* CLASS = payload size */
         buf[pos + 5] = 0;                           /* extended RCODE */
         buf[pos + 6] = 0;                           /* version = 0 */
-        buf[pos + 7] = 0;
-        buf[pos + 8] = ctx->edns_flags;             /* flags (DO bit = 0x80) */
-        buf[pos + 9] = 0;  buf[pos + 10] = 0;       /* RDLENGTH = 0 */
-        pos += 11;
+        buf[pos + 7] = ctx->edns_flags;             /* DO bit (0x80) + Z */
+        buf[pos + 8] = 0;                           /* reserved Z */
+        if (ctx->ecs) {
+            /* EDNS Client Subnet (ECS, RFC 7871) — inside OPT RDATA */
+            uint8_t pbytes = (ctx->ecs_mask + 7) / 8;        /* un-padded prefix bytes */
+            uint8_t ppad   = (pbytes + 1) & ~(uint8_t)1;     /* round up to even */
+            uint16_t ecs_body = (uint16_t)(2 + 1 + 1 + ppad); /* fam + src + scope + addr */
+            uint16_t rdlen = (uint16_t)(4 + ecs_body);       /* OPTION-CODE/LENGTH + body */
+            if (pos + 11 + rdlen > buflen) return 0;
+
+            /* RDLENGTH */
+            buf[pos + 9] = (uint8_t)(rdlen >> 8);
+            buf[pos + 10]= (uint8_t)(rdlen & 0xFF);
+            /* OPTION-CODE = 8 (ECS) */
+            buf[pos + 11]= 0;  buf[pos + 12]= 8;
+            /* OPTION-LENGTH */
+            buf[pos + 13]= (uint8_t)(ecs_body >> 8);
+            buf[pos + 14]= (uint8_t)(ecs_body & 0xFF);
+            /* FAMILY */
+            buf[pos + 15]= 0;  buf[pos + 16]= ctx->ecs_family;
+            /* SOURCE PREFIX-LENGTH */
+            buf[pos + 17]= ctx->ecs_mask;
+            /* SCOPE PREFIX-LENGTH (0 in queries) */
+            buf[pos + 18]= 0;
+            /* ADDRESS prefix bytes, zero-padded to even boundary */
+            memcpy(buf + pos + 19, ctx->ecs_addr, pbytes);
+            if (ppad > pbytes)
+                buf[pos + 19 + pbytes] = 0;
+
+            pos += 11 + rdlen;
+        } else {
+            buf[pos + 9] = 0;  buf[pos + 10] = 0;   /* RDLENGTH = 0 */
+            pos += 11;
+        }
     }
 
     /* ---- TCP length prefix (RFC 1035 §4.2.2) ---- */

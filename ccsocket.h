@@ -709,6 +709,22 @@ CCSOCKET_EXPORT ccsocket_protocol_t ccsocket_get_protocol(ccsocket_t s);
 CCSOCKET_EXPORT ccsocket_family_t ccsocket_get_version(const char *addr);
 
 /**
+ * @brief Parse an address string into raw binary address bytes.
+ *
+ * Writes the network-byte-order address to @p out (4 bytes for IPv4,
+ * 16 bytes for IPv6).  Returns the address family so the caller knows
+ * how many bytes are valid.
+ *
+ * Reuses the same platform-specific parsing (inet_pton / WSAStringToAddress)
+ * as ccsocket_get_version() but returns the bytes instead of just the family.
+ *
+ * @param addr  Address string (IPv4 or IPv6, NULL returns CC_FAMILY_INVALID).
+ * @param out   Output buffer (must be at least 16 bytes).
+ * @return CC_INET4, CC_INET6, or CC_FAMILY_INVALID on error.
+ */
+CCSOCKET_EXPORT ccsocket_family_t ccsocket_get_addrbytes(const char *addr, uint8_t out[16]);
+
+/**
  * @brief Enable deferred accept on a listening TCP socket.
  *
  * The socket will not complete the connection until data arrives.

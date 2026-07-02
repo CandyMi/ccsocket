@@ -1322,27 +1322,49 @@ ccsocket_family_t ccsocket_get_version(const char *addr)
     ccsocket_set_errno(EINVAL);
     return CC_FAMILY_INVALID;
   }
+  ccsocket_family_t family; uint8_t buf[16];
+  family = ccsocket_get_addrbytes(addr, buf);
+  if (family == CC_INET4 || family == CC_INET6)
+    return family;
+  ccsocket_set_errno(EINVAL);
+  return CC_FAMILY_INVALID;
+}
+
+ccsocket_family_t ccsocket_get_addrbytes(const char *addr, uint8_t out[16])
+{
+  if (!addr || !out) {
+    ccsocket_set_errno(EINVAL);
+    return CC_FAMILY_INVALID;
+  }
   struct sockaddr_in sa4; memset(&sa4, 0x0, sizeof(sa4));
 #if _WIN32
   socklen_t len4 = sizeof(sa4);
   if (!WSAStringToAddress((char *)addr, AF_INET, NULL, (struct sockaddr *)&sa4, &len4))
+  {
+    memcpy(out, &sa4.sin_addr, 4);
+    return CC_INET4;
+  }
 #else
   if (inet_pton(AF_INET, addr, &sa4.sin_addr) == 1)
-#endif
+  {
+    memcpy(out, &sa4.sin_addr, 4);
     return CC_INET4;
+  }
+#endif
   struct sockaddr_in6 sa6; memset(&sa6, 0x0, sizeof(sa6));
 #if _WIN32
   socklen_t len6 = sizeof(sa6);
   if (!WSAStringToAddress((char*)addr, AF_INET6, NULL, (struct sockaddr *)&sa6, &len6))
+  {
+    memcpy(out, &sa6.sin6_addr, 16);
+    return CC_INET6;
+  }
 #else
   if (inet_pton(AF_INET6, addr, &sa6.sin6_addr) == 1)
-#endif
+  {
+    memcpy(out, &sa6.sin6_addr, 16);
     return CC_INET6;
-  /* also check for Unix domain sockets */
-#if !defined(_WIN32)
-  struct stat st;
-  if (!stat(addr, &st) && S_ISSOCK(st.st_mode))
-    return CC_UNIX;
+  }
 #endif
   ccsocket_set_errno(EINVAL);
   return CC_FAMILY_INVALID;
