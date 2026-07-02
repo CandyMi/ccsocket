@@ -619,7 +619,7 @@ bool ccsocketpair1(ccsocket_t sv[2], ccsocket_flags_t flags)
 #if _WIN32
   /* local pipe via TCP loopback */
   ccsocket_t srv = ccsocket1(CC_INET4, CC_TCP, CC_NOFLAG);
-  if (srv == INVALID_SOCKET)
+  if ((SOCKET)srv == INVALID_SOCKET)
     return false;
   /* listen random port */
   if (!ccsocket_bind(srv, "127.0.0.1", 0)) {
@@ -638,15 +638,15 @@ bool ccsocketpair1(ccsocket_t sv[2], ccsocket_flags_t flags)
   }
   /* create socket 1 */
   ccsocket_t c = ccsocket1(CC_INET4, CC_TCP, CC_NOFLAG);
-  if (c == INVALID_SOCKET || !ccsocket_connect(c, addr, port)) {
-    if (c != INVALID_SOCKET)
+  if ((SOCKET)c == INVALID_SOCKET || !ccsocket_connect(c, addr, port)) {
+    if ((SOCKET)c != INVALID_SOCKET)
       ccsocket_close(c); /* failed */
     ccsocket_close(srv); /* failed */
     return false;
   }
   /* create socket 2 */
   ccsocket_t s = ccsocket_accept(srv, flags);
-  if (s == INVALID_SOCKET) {
+  if ((SOCKET)s == INVALID_SOCKET) {
     ccsocket_close(srv); /* failed */
     ccsocket_close(c);   /* failed */
     return false;
@@ -752,7 +752,7 @@ ccsocket_stcode_t ccsocket_sendv1(ccsocket_t s, ccsocket_iovec_t *iov, int iovcn
   ccsocket_init_errno();
   do {
 #if _WIN32
-    w = WSASend((SOCKET)s, (LPWSABUF)iov, iovcnt, (LPDWORD)&wsz, 0, NULL, NULL);
+    w = WSASend((SOCKET)s, (LPWSABUF)iov, iovcnt, (LPDWORD)&wsz, (DWORD)flags, NULL, NULL);
 #else
 #if defined(MSG_NOSIGNAL)
     flags |= MSG_NOSIGNAL;
