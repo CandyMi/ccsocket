@@ -9,6 +9,19 @@
 #ifndef _GNU_SOURCE
   #define _GNU_SOURCE
 #endif
+/* On Apple, enable RFC 3542 IPv6 socket options so that
+ * IPV6_RECVHOPLIMIT (setsockopt) and IPV6_HOPLIMIT (CMSG type)
+ * are available — same API naming as Linux, different values.
+ * Provide fallback values for non-Apple platforms. */
+#if defined(__APPLE__)
+  #define __APPLE_USE_RFC_3542 1
+#endif
+#ifndef IPV6_RECVHOPLIMIT
+  #define IPV6_RECVHOPLIMIT 49
+#endif
+#ifndef IPV6_HOPLIMIT
+  #define IPV6_HOPLIMIT 50
+#endif
 
 #include <assert.h>
 #include <string.h>
@@ -156,10 +169,9 @@ bool ccicmp_init(struct ccicmp_t *ctx, int domain)
       setsockopt(ctx->fd, IPPROTO_IP, IP_RECVTTL, (char *)&on, sizeof(on));
 #endif
     } else {
-#if defined(IPV6_RECVHOPLIMIT)
       int on = 1;
-      setsockopt(ctx->fd, IPPROTO_IPV6, IPV6_RECVHOPLIMIT, (char *)&on, sizeof(on));
-#endif
+      setsockopt(ctx->fd, IPPROTO_IPV6, IPV6_RECVHOPLIMIT,
+                 (char *)&on, sizeof(on));
     }
   }
   return ctx->fd != (ccsocket_t)INVALID_SOCKET;
@@ -337,6 +349,10 @@ bool ccicmp_reply(struct ccicmp_t *ctx, char *data, size_t *len)
   msg.msg_control = cmsg_buf;
   msg.msg_controllen = sizeof(cmsg_buf);
 
+retry_recv:
+  msg.msg_controllen = sizeof(cmsg_buf);
+  msg.msg_flags = 0;
+  msg.msg_bytes = 0;
   state = ccsocket_recvmsg(ctx->fd, &msg, CC_MSG_NOFLAG);
   rsize = msg.msg_bytes;
   if (state != CC_OPCODE_OK || rsize <= 0)
@@ -349,16 +365,36 @@ bool ccicmp_reply(struct ccicmp_t *ctx, char *data, size_t *len)
     for (cmsg = CC_CMSG_FIRSTHDR(cmsg_buf, msg.msg_controllen);
          cmsg != NULL;
          cmsg = CC_CMSG_NXTHDR(cmsg_buf, msg.msg_controllen, cmsg)) {
-      if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_TTL) {
-        ctx->ttl = *(int *)CC_CMSG_DATA(cmsg);
-        break;
-      }
-#if defined(IPV6_HOPLIMIT)
-      if (cmsg->cmsg_level == IPPROTO_IPV6 && cmsg->cmsg_type == IPV6_HOPLIMIT) {
-        ctx->ttl = *(int *)CC_CMSG_DATA(cmsg);
-        break;
-      }
+
+      /* Linux: cmsg_type = IP_TTL (2), data as int.
+       * Darwin (macOS/iOS): cmsg_type = IP_RECVTTL (24), data as uint8_t.
+       * TTL is inherently 8-bit (0-255); read as byte for portability. */
+      if (cmsg->cmsg_level == IPPROTO_IP &&
+          (cmsg->cmsg_type == IP_TTL || cmsg->cmsg_type == IP_RECVTTL)) {
+        /* Darwin kernel: 4-byte CMSG alignment, struct cmsghdr = 12 B,
+         * data at cmsg + 12.
+         * Linux kernel: sizeof(size_t) alignment, struct cmsghdr = 16 B,
+         * data at cmsg + 16 (CC_CMSG_DATA is correct there). */
+#if defined(__APPLE__)
+        unsigned char *raw = (unsigned char *)cmsg + sizeof(ccsocket_cmsghdr_t);
+#else
+        unsigned char *raw = (unsigned char *)CC_CMSG_DATA(cmsg);
 #endif
+        ctx->ttl = *(uint8_t *)raw;
+        break;
+      }
+      if (cmsg->cmsg_level == IPPROTO_IPV6 &&
+          cmsg->cmsg_type == IPV6_HOPLIMIT) {
+        /* Same alignment fix as IPv4 TTL above */
+#if defined(__APPLE__)
+        unsigned char *raw = (unsigned char *)cmsg + sizeof(ccsocket_cmsghdr_t);
+#else
+        unsigned char *raw = (unsigned char *)CC_CMSG_DATA(cmsg);
+#endif
+        /* Both platforms store hop limit as int (4 bytes) */
+        ctx->ttl = *(int *)raw;
+        break;
+      }
     }
   }
 
@@ -398,6 +434,11 @@ bool ccicmp_reply(struct ccicmp_t *ctx, char *data, size_t *len)
   uint8_t  type = buf[off];
   uint8_t  code = buf[off + 1];
   uint16_t id   = ntohs(*(uint16_t *)(buf + off + 4));
+
+  /* macOS DGRAM ping on loopback may receive self echo request before
+   * the reply; skip it and retry once. */
+  if (af == CC_INET6 && type == ICMP6_ECHO_REQUEST && id == ctx->id && code == 0)
+    goto retry_recv;
 
   bool match = (af == CC_INET4)
     ? (type == ICMP_ECHOREPLY && id == ctx->id && code == 0)

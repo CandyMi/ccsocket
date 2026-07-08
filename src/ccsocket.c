@@ -434,16 +434,10 @@ ccsocket_t ccsocket2(ccsocket_family_t domain, ccsocket_protocol_t proto, ccsock
       flag_r = IPPROTO_UDP;
       break;
     case CC_ICMP: case CC_ICMP1:
-      proto_r = proto == CC_ICMP ? 
+      proto_r = proto == CC_ICMP ?
             SOCK_RAW : SOCK_DGRAM;
-      flag_r = IPPROTO_ICMP;
-      /* IPv6 ICMP uses IPPROTO_ICMPV6 (58) not IPPROTO_ICMP (1) */
-      if (domain == CC_INET6) {
-#ifndef IPPROTO_ICMPV6
-        #define IPPROTO_ICMPV6 -1
-#endif
-        flag_r = IPPROTO_ICMPV6;
-      }
+      flag_r = domain == CC_INET4 ?
+            IPPROTO_ICMP : IPPROTO_ICMPV6;
       break;
     case CC_PROTOCOL_INVALID:
     default:
