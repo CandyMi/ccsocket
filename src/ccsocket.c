@@ -1425,6 +1425,8 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
     if (r == SOCKET_ERROR) {
       return ccsocket_is_errno(EWOULDBLOCK) ? CC_SENDWAIT : CC_SENDERROR;
     }
+    if (wsize <= 0)               /* file shrank under us — bail */
+      return CC_SENDERROR;
     lseek(fd, offset + wsize, SEEK_SET);
     offset += wsize;
   } while (offset < eof);
@@ -1446,6 +1448,8 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
     if (wsize == SOCKET_ERROR) {
       return ccsocket_is_errno(EWOULDBLOCK) ? CC_SENDWAIT : CC_SENDERROR;
     }
+    if (wsize <= 0)               /* file shrank under us — bail */
+      return CC_SENDERROR;
   } while (offset < eof);
   return CC_SENDALL;
 #elif _AIX
@@ -1466,6 +1470,8 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
     if (wsize == SOCKET_ERROR) {
       return ccsocket_is_errno(EWOULDBLOCK) ? CC_SENDWAIT : CC_SENDERROR;
     }
+    if (params.bytes_sent <= 0)   /* file shrank under us — bail */
+      return CC_SENDERROR;
     offset = offset + params.bytes_sent;
   } while (offset < params.file_size);
   return CC_SENDALL;
@@ -1485,13 +1491,21 @@ ccsocket_sendf_state_t ccsocket_sendfile(ccsocket_t s, int fd)
     int rsize = read(fd, buffer, bsize);
     if (rsize == SOCKET_ERROR)
       return CC_SENDERROR;
-    if (ccsocket_send(s, buffer, rsize, &wsize) != CC_OPCODE_OK) {
-      lseek(fd, offset, SEEK_SET);
-      if (ccsocket_is_errno(EINTR))
-        continue;
-      return ccsocket_is_errno(EWOULDBLOCK) ? CC_SENDWAIT : CC_SENDERROR;
+    if (rsize == 0)               /* file shrank under us — bail */
+      return CC_SENDERROR;
+    int off = 0;
+    while (off < rsize) {         /* drain the chunk until fully sent */
+      if (ccsocket_send(s, buffer + off, rsize - off, &wsize) != CC_OPCODE_OK) {
+        lseek(fd, offset + off, SEEK_SET);  /* resume at first unsent byte */
+        if (ccsocket_is_errno(EINTR))
+          continue;
+        return ccsocket_is_errno(EWOULDBLOCK) ? CC_SENDWAIT : CC_SENDERROR;
+      }
+      if (wsize <= 0)             /* zero progress — bail */
+        return CC_SENDERROR;
+      off += wsize;
     }
-    offset += wsize;
+    offset += rsize;              /* whole chunk consumed */
   }
   return CC_SENDALL;
 #endif
