@@ -26,6 +26,7 @@
 #include <assert.h>
 #include <string.h>
 #include <errno.h>
+#include <stdio.h>
 
 #if _WIN32
   #include <winsock2.h>
@@ -152,7 +153,12 @@ bool ccicmp_init(struct ccicmp_t *ctx, int domain)
 {
   if (!ctx)
     return false;
-  ctx->id = ((intptr_t)ctx) & 0xffff;
+  /* Global auto-increment id: pointer-low-bit-derived ids collide in
+   * concurrent pings (different heap regions can share low address
+   * bits), and macOS routes replies by id — a collision misattributes
+   * another request's reply as our own. */
+  static uint16_t ccicmp_auto_id = 0;
+  ctx->id = ccicmp_auto_id++;
   ctx->no = 0;
   ctx->ttl = -1;
   /* Try SOCK_DGRAM (CC_ICMP1 = privilege-free ping socket) first.
@@ -435,16 +441,16 @@ retry_recv:
   uint8_t  code = buf[off + 1];
   uint16_t id   = ntohs(*(uint16_t *)(buf + off + 4));
 
-  /* macOS DGRAM ping on loopback may receive self echo request before
-   * the reply; skip it and retry once. */
-  if (af == CC_INET6 && type == ICMP6_ECHO_REQUEST && id == ctx->id && code == 0)
-    goto retry_recv;
-
+  /* macOS DGRAM ping sockets do not filter delivery by id: replies to
+   * concurrent requests may land on this socket, and loopback can even
+   * echo our own request back (IPv6 self-echo) — on a mismatch keep
+   * reading the next packet in the queue (EAGAIN ends the scan and
+   * returns false so the caller keeps waiting). */
   bool match = (af == CC_INET4)
     ? (type == ICMP_ECHOREPLY && id == ctx->id && code == 0)
     : (type == ICMP6_ECHO_REPLY && id == ctx->id && code == 0);
   if (!match)
-    return false;
+    goto retry_recv;
 
   size_t datastart = off + CCICMP_HEADER_LEN + CCICMP_TS_LEN;
   size_t datalen  = (size_t)rsize - datastart;
