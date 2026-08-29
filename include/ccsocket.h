@@ -165,6 +165,21 @@ typedef enum {
 CCSOCKET_EXPORT int ccsocket_close(ccsocket_t s);
 
 /**
+ * @brief Disable sending and/or receiving on a socket.
+ *
+ * Thin wrapper over shutdown(2) / shutdown() (WinSock).  The `rw` value
+ * is platform-portable: 0 = receive side, 1 = send side, 2 = both
+ * (SHUT_RD/SHUT_WR/SHUT_RDWR on POSIX, SD_RECEIVE/SD_SEND/SD_BOTH on
+ * Windows — numerically identical).  Does not close the socket; it stays
+ * open and must still be released with ccsocket_close().
+ *
+ * @param s   Socket handle.
+ * @param rw  0 (receive), 1 (send), or 2 (both).
+ * @return 0 on success, SOCKET_ERROR on failure (errno / WSAGetLastError).
+ */
+CCSOCKET_EXPORT int ccsocket_shutdown(ccsocket_t s, int rw);
+
+/**
  * @brief Initialise the WinSock library (WSAStartup).
  *
  * Required when the library is linked statically or built as a

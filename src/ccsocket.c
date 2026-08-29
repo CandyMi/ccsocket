@@ -399,6 +399,12 @@ int ccsocket_close(ccsocket_t s)
   return closesocket(s);
 }
 
+int ccsocket_shutdown(ccsocket_t s, int rw)
+{
+  if (s == (ccsocket_t)INVALID_SOCKET) return SOCKET_ERROR;
+  return shutdown((SOCKET)s, rw);
+}
+
 /* create ccsocket with flags */
 ccsocket_t ccsocket2(ccsocket_family_t domain, ccsocket_protocol_t proto, ccsocket_flags_t flags)
 {
